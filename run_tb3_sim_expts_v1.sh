@@ -1,12 +1,12 @@
 bot=burger
 export TURTLEBOT3_MODEL=$bot
 echo $TURTLEBOT3_MODEL
-echo 0 | sudo tee /sys/devices/system/cpu/cpu7/online
-echo 0 | sudo tee /sys/devices/system/cpu/cpu6/online
-echo 0 | sudo tee /sys/devices/system/cpu/cpu5/online
-echo 0 | sudo tee /sys/devices/system/cpu/cpu4/online
-echo 0 | sudo tee /sys/devices/system/cpu/cpu3/online
-echo 0 | sudo tee /sys/devices/system/cpu/cpu2/online
+# echo 0 | sudo tee /sys/devices/system/cpu/cpu7/online
+# echo 0 | sudo tee /sys/devices/system/cpu/cpu6/online
+# echo 0 | sudo tee /sys/devices/system/cpu/cpu5/online
+# echo 0 | sudo tee /sys/devices/system/cpu/cpu4/online
+# echo 0 | sudo tee /sys/devices/system/cpu/cpu3/online
+# echo 0 | sudo tee /sys/devices/system/cpu/cpu2/online
 
 for scan_freq in 50 #5 10 30 70 30 40 50 70 90 #100 250 500 750 1000 #5  
 do
@@ -19,9 +19,9 @@ do
             gferr="tb3_gz_2c_R1_errlogs_$scan_freq$num_samples$run.out"
             nferr="tb3_navgn_2c_R1_errlogs_$scan_freq$num_samples$run.out"
             python vary_pub_freq.py $scan_freq $num_samples ~/catkin_ws/src/turtlebot3/turtlebot3_description/urdf turtlebot3_burger.gazebo.xacro ~/catkin_ws/src/turtlebot3/turtlebot3_navigation/param/move_base_params.yaml ~/catkin_ws/src/turtlebot3/turtlebot3_navigation/param/costmap_common_params_$bot.yaml ~/catkin_ws/src/turtlebot3/turtlebot3_navigation/param/ #src/turtlebot3/turtlebot3_navigation/param/move_base_params.yaml 
-            nohup roslaunch turtlebot3_gazebo turtlebot3_world.launch > $gfname 2> $gferr &
+            nohup roslaunch turtlebot3_world_no_gui.launch > $gfname 2> $gferr &
             sleep 2s
-            nohup roslaunch turtlebot3_navigation turtlebot3_navigation.launch map_file:=$HOME/mapFull.yaml > $nfname 2> $nferr &
+            nohup roslaunch turtlebot3_navigation_without_rviz.launch map_file:=$HOME/mapFull.yaml > $nfname 2> $nferr &
             sleep 9s
             echo "Publishing first goal"
             nohup rostopic pub /move_base_simple/goal geometry_msgs/PoseStamped "header:
@@ -91,8 +91,8 @@ pose:
                 echo "Killing_$pname"
                 kill -15 $(ps -ef | grep $pname | grep -v grep | awk '{print $2}') #| xargs kill -15
             done
-            echo "\n" >> /home/ubuntu/.ros/local_costmap_stats.txt
-            echo "\n" >> /home/ubuntu/.ros/global_costmap_stats.txt
+            echo "\n" >> $HOME/.ros/local_costmap_stats.txt
+            echo "\n" >> $HOME/.ros/global_costmap_stats.txt
         done
     done
 done

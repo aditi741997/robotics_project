@@ -28,12 +28,13 @@ if len(sys.argv) > 5:
     fname1 = sys.argv[5]
     with open(fname1, 'r') as f1:
         data2 = f1.readlines()
+    
+    _scan_freq = "scan_frequency: "+new_scan_freq+"\n"
+    data2.append(_scan_freq)
 
-    print data2[8]
-    data2[8] = "scan_frequency: "+new_scan_freq+"\n"
-
-    print data2[9]
-    data2[9] = "num_samples: "+new_num_samples+"\n"
+    _num_sample = "num_samples: "+new_num_samples+"\n"
+    data2.append(_num_sample)
+    print data2
 
     with open(fname1, 'w') as f:
         f.writelines(data2)
