@@ -23,6 +23,27 @@ do
             sleep 2s
             nohup roslaunch turtlebot3_navigation_without_rviz.launch map_file:=$HOME/mapFull.yaml > $nfname 2> $nferr &
             sleep 9s
+			echo "Publishing initial position"
+			nohup rostopic pub /intialpose /initialpose " header:
+  seq: 2
+  stamp:
+    secs: 197
+    nsecs: 663000000
+  frame_id: "map"
+pose:
+  pose:
+    position:
+      x: -1.93499934673
+      y: -0.499999761581
+      z: 0.0
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: -0.0111091174028
+      w: 0.999938291851
+  covariance: [0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.25, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.06853891945200942]
+			" &
+			sleep 9s
             echo "Publishing first goal"
             nohup rostopic pub /move_base_simple/goal geometry_msgs/PoseStamped "header:
   seq: 0
