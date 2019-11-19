@@ -10,15 +10,15 @@ echo $TURTLEBOT3_MODEL
 
 for scan_freq in 50 #5 10 30 70 30 40 50 70 90 #100 250 500 750 1000 #5  
 do
-    for num_samples in 1800 #3600 360 1800 7200 #360 1800 3600 7200 #1440 1800 3600 #360 1440 1080 1800 720 3600
+    for num_samples in 1800 3600 360 1800 7200 #360 1800 3600 7200 #1440 1800 3600 #360 1440 1080 1800 720 3600
     do
-        for run in 9 #8 10 1 2 3 4 5 6 7
+        for run in 9 8 10 1 2 3 4 5 6 7
         do
             nfname="tb3_navgn_2c_R1_logs_$scan_freq$num_samples$run.out"
             gfname="tb3_gz_2c_R1_logs_$scan_freq$num_samples$run.out"
             gferr="tb3_gz_2c_R1_errlogs_$scan_freq$num_samples$run.out"
             nferr="tb3_navgn_2c_R1_errlogs_$scan_freq$num_samples$run.out"
-            python vary_pub_freq.py $scan_freq $num_samples ~/catkin_ws/src/turtlebot3/turtlebot3_description/urdf turtlebot3_burger.gazebo.xacro ~/catkin_ws/src/turtlebot3/turtlebot3_navigation/param/move_base_params.yaml ~/catkin_ws/src/turtlebot3/turtlebot3_navigation/param/costmap_common_params_$bot.yaml ~/catkin_ws/src/turtlebot3/turtlebot3_navigation/param/ #src/turtlebot3/turtlebot3_navigation/param/move_base_params.yaml 
+			python vary_pub_freq.py $scan_freq $num_samples ~/catkin_ws/src/turtlebot3/turtlebot3_description/urdf turtlebot3_burger.gazebo.xacro ~/catkin_ws/src/turtlebot3/turtlebot3_navigation/param/move_base_params.yaml ~/catkin_ws/src/turtlebot3/turtlebot3_navigation/param/costmap_common_params_$bot.yaml ~/catkin_ws/src/turtlebot3/turtlebot3_navigation/param/ #src/turtlebot3/turtlebot3_navigation/param/move_base_params.yaml 
             nohup roslaunch turtlebot3_world_no_gui.launch > $gfname 2> $gferr &
             sleep 2s
             nohup roslaunch turtlebot3_navigation_without_rviz.launch map_file:=$HOME/mapFull.yaml > $nfname 2> $nferr &
@@ -63,11 +63,15 @@ pose:
             sleep 5s
             python measure.py 20 firstgoal $scan_freq $num_samples $nfname 1 149 'yes' '_2c_R1'
             sleep 2s
-            ps -ef | grep move_base_simple | grep -v grep | awk '{print $2}' | xargs kill
+			# grep -v grep to exlucde process used to grep
+			# awk command extracts the pid which is the second term; awk '{print $0}' will return the entire string from stdin. 
+			# xargs : prepare and execute command with argument from stdin
+            # ps -ef | grep move_base_simple | grep -v grep | awk '{print $2}' | xargs kill
             i="0"
             while [ $i -lt 1 ]
             do
-                i=`grep "REACHED" $nfname | wc -l`
+				# polling for goal reached information
+                i=`grep "REACHED" $nfname | wc -l` # Aditi's modification
                 echo $i
                 sleep 1s
             done
@@ -106,7 +110,7 @@ pose:
                 fi
             done
             echo "Killing all procs now!"
-            for pname in move_base_simple move_base rosout rosmaster gzserver amcl map_server robot_state_publisher gazebo navigation
+            for pname in move_base_simple move_base rosout rosmaster gzserver amcl map_server robot_state_publisher gazebo navigation roscore
             do
                 echo "Killing_$pname"
                 kill -15 $(ps -ef | grep $pname | grep -v grep | awk '{print $2}') #| xargs kill -15

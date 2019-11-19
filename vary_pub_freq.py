@@ -10,7 +10,7 @@ f = fpath + '/' + fname
 with open(f, 'r') as fi:
     data = fi.readlines()
 
-print data[106]
+# print data[106]
 # Changing base scan publish frequency
 new_scan_freq = sys.argv[1]
 data[106] = "      <update_rate>"+new_scan_freq+"</update_rate>\n"
@@ -30,10 +30,10 @@ if len(sys.argv) > 5:
         data2 = f1.readlines()
     
     _scan_freq = "scan_frequency: "+new_scan_freq+"\n"
-    data2.append(_scan_freq)
+    data2[8]=_scan_freq
 
     _num_sample = "num_samples: "+new_num_samples+"\n"
-    data2.append(_num_sample)
+    data2[9]=_num_sample
     print data2
 
     with open(fname1, 'w') as f:
