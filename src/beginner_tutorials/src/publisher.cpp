@@ -13,61 +13,8 @@
     return ans.append(len - ans.length(), ' ');
 } */
 
-void sieve(int64_t limit)
-{
-    int64_t segment_size = (int64_t) std::sqrt(limit);
-    int64_t count = (limit < 2) ? 0 : 1;
 
-    int64_t i = 3;
-    int64_t n = 3;
-    int64_t s = 3;
-
-    std::vector<char> sieve(segment_size);
-    std::vector<char> is_prime(segment_size + 1, true);
-    std::vector<int64_t> primes;
-    std::vector<int64_t> multiples;
-
-    for (int64_t low = 0; low <= limit; low += segment_size)
-    {
-        std::fill(sieve.begin(), sieve.end(), true);
-
-        //current segment : low - high
-        int64_t high = low + segment_size - 1;
-        high = std::min(high, limit);
-
-        // simple sieve
-        for (; i*i < high; i += 2)
-            if (is_prime[i])
-                for (int64_t j = i*i; j <= segment_size; j += i)
-                    is_prime[j] = false;
-
-        // initialize sieving primes for segmented sieve
-        for (; s * s <= high; s += 2)
-        {
-            if (is_prime[s])
-            {
-                primes.push_back(s);
-                multiples.push_back(s * s - low);
-            }
-        }
-
-        for (std::size_t i = 0; i < primes.size(); i++)
-        {
-            int64_t j = multiples[i];
-            for (int64_t k = primes[i] * 2; j < segment_size; j += k)
-                sieve[j] = false;
-            multiples[i] = j - segment_size;
-        }
-
-        for (; n <= high; n += 2)
-            if (sieve[n - low]) // n is a prime
-                count++;
-    }
-
-    std::cout << count << " primes found!" << std::endl;
-}
-
-void calc_primes(int64_t limit)
+int calc_primes(int64_t limit)
 {
     int i, num = 1, primes = 0;
 
@@ -82,12 +29,13 @@ void calc_primes(int64_t limit)
             primes++;
         num++;
     }
+    return num;
 }
 
-void execute(int64_t limit)
+int execute(int64_t limit)
 {
     // sieve(100);
-    calc_primes(limit);
+    return calc_primes(limit);
 }
 
 int main (int argc, char **argv)
@@ -162,23 +110,29 @@ int main (int argc, char **argv)
         
         // TODO : Add a fixed time compute here!!
         ros::Time c1_start = ros::Time::now();
-        execute(limit);
-	    ros::Time c1_end = ros::Time::now();
+
+	ROS_INFO("Starting calc primes");        
+	int ans = execute(limit);
+	ROS_INFO("Ended calc primes, Ans : %i", ans);
+	
+	ros::Time c1_end = ros::Time::now();
         double x = (c1_end - c1_start).toSec();
         total_c1 += x; 
-	    c1_arr.push_back(x);
+	c1_arr.push_back(x);
 
         // std_msgs::String msg;
         // chatter_pub.publish(msg);
-        chatter_pub.publish(hdr);
+        ROS_INFO("About to publish");
+	chatter_pub.publish(hdr);
         ros::spinOnce();
 
+	ROS_INFO("About to sleep");
         loop_rate.sleep();
         i += 1;
     }
     ROS_INFO("Total msgs sent %i, msg size %i, avg c1 : %f", i, msg_size, total_c1/i);
     std::sort(c1_arr.begin(), c1_arr.end());
-    ROS_INFO("Mean_Median pub_c1 : median : %f, 99p : %f", c1_arr[c1_arr.size()/2], c1_arr[(99*(c1_arr.size()))/100]);
+    ROS_INFO("Mean_Median pub_c1 : median : %f, 99p : %f, mean : %f", c1_arr[c1_arr.size()/2], c1_arr[(99*(c1_arr.size()))/100], total_c1/i);
     // ROS_INFO(" %f %f %f", sent_times[0], sent_times[num_msgs/2], sent_times[num_msgs -1]);
     if (ros::ok())
     {

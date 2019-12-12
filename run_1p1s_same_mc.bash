@@ -1,6 +1,6 @@
 #!/bin/bash
 #source /opt/ros/melodic/setup.bash
-catkin_make
+catkin_make -DCMAKE_BUILD_TYPE=Release
 source devel/setup.bash
 
 echo 0 | sudo tee /sys/devices/system/cpu/cpu7/online
@@ -22,7 +22,7 @@ do
         do
             for sub_heavy in 1 #0
             do
-                for rate in 5 #10 20 25 30 35 40 50 60 #90 110 130 150 170 190 200 #1 10 50 100 250 500 750 1000 #1 10 1250 1500
+                for rate in 25 30 35 50 #5 10 20 25 30 35 40 50 60 80 90 100 150 #90 110 130 150 170 190 200 #1 10 50 100 250 500 750 1000 #1 10 1250 1500
                 do
                     #1P1S UDS SAME M/C:
                     #gnome-terminal -x sh -c "rosrun test_rosuds listener_uds $msg_sz $pub_q $rate 100 $sub_q 1"
@@ -44,14 +44,13 @@ do
                         echo "SUBSCRIBER : $msg_sz $pub_q $rate $num_msg $sub_q $trans_type $sub_heavy"
                     #     #gnome-terminal -x sh -c "rosrun nw_experiments listener $msg_sz $pub_q $rate 100 $sub_q $trans_type 1"
                         # update the limit for sieve
-                        fname="Tlistener_p_$p$pub_q$rate$msg_sz.out"
-                        fname_err="Tlistener_p_$p$pub_q$rate$msg_sz.err"
+                        fname="listener_$p$rate$msg_sz.out"
+                        fname_err="listener_$p$rate$msg_sz.err"
                         echo $fname
-                        nohup rosrun beginner_tutorials subscriber $msg_sz $pub_q $rate $(($num_msg-1)) $sub_q $trans_type 1 $sub_heavy 15000 > $fname 2> $fname_err & #taskset 2 #nice --1 for priority more than pub. 
+                        nohup rosrun beginner_tutorials subscriber $msg_sz $pub_q $rate $(($num_msg-1)) $sub_q $trans_type 1 $sub_heavy 10000 > $fname 2> $fname_err & #taskset 2 #nice --1 for priority more than pub. 
                         #nohup python measure.py $t $msg_sz $pub_q $sub_q $sub_heavy $rate $trans_type 0 &
-                        rosrun beginner_tutorials publisher $msg_sz $pub_q $rate $num_msg 7000 #taskset 0x00000001 
-                        rosnode kill -a
-                        sleep 5s
+                        rosrun beginner_tutorials publisher $msg_sz $pub_q $rate $num_msg 10000 #taskset 0x00000001 
+                        sleep 2s
                     done
 
                     #1P1S SAME M/C UDP: Tried this because UDP isn't working when listener node name is changed

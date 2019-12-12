@@ -56,62 +56,6 @@ int percentile = 99;
 int64_t limit;
 bool stop_thread = false;
 
-
-
-void sieve(int64_t limit)
-{
-    int64_t segment_size = (int64_t) std::sqrt(limit);
-    int64_t count = (limit < 2) ? 0 : 1;
-
-    int64_t i = 3;
-    int64_t n = 3;
-    int64_t s = 3;
-
-    std::vector<char> sieve(segment_size);
-    std::vector<char> is_prime(segment_size + 1, true);
-    std::vector<int64_t> primes;
-    std::vector<int64_t> multiples;
-
-    for (int64_t low = 0; low <= limit; low += segment_size)
-    {
-        std::fill(sieve.begin(), sieve.end(), true);
-
-        //current segment : low - high
-        int64_t high = low + segment_size - 1;
-        high = std::min(high, limit);
-
-        // simple sieve
-        for (; i*i < high; i += 2)
-            if (is_prime[i])
-                for (int64_t j = i*i; j <= segment_size; j += i)
-                    is_prime[j] = false;
-
-        // initialize sieving primes for segmented sieve
-        for (; s * s <= high; s += 2)
-        {
-            if (is_prime[s])
-            {
-                primes.push_back(s);
-                multiples.push_back(s * s - low);
-            }
-        }
-
-        for (std::size_t i = 0; i < primes.size(); i++)
-        {
-            int64_t j = multiples[i];
-            for (int64_t k = primes[i] * 2; j < segment_size; j += k)
-                sieve[j] = false;
-            multiples[i] = j - segment_size;
-        }
-
-        for (; n <= high; n += 2)
-            if (sieve[n - low]) // n is a prime
-                count++;
-    }
-
-    std::cout << count << " primes found!" << std::endl;
-}
-
 void calc_primes(int64_t limit)
 {
     int i, num = 1, primes = 0;
@@ -229,14 +173,16 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
         double mean_dt_sum = sum_dt_sum/(dt_sum.size());
 
         std::sort(heavy_times.begin(), heavy_times.end());
+	double perc_heavy = heavy_times[index];
+	double median_heavy = heavy_times[heavy_times.size()/2];
 
         // used_ram /= msg_count;std::to_string(sub_id) + 
         avg_heavy_time /= msg_count;
 
         ROS_INFO("Boo");
         std::ofstream outfile;
-        outfile.open("1p1s_2cpu_unpinned_subL_dec4.txt", std::ios_base::app);
-        outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", " << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", " << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << avg_heavy_time << ", " << "lost_msgs, " << (msg->seq + 1 - msg_count) << ", " << (msg->seq + 1) << ", c1n_latency, " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", " << avg_heavy_time << ", \n"; 
+        outfile.open("1p1s_2cpu_unpinned_subL_dec8.txt", std::ios_base::app);
+        outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", " << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", " << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << avg_heavy_time << ", " << "lost_msgs, " << (msg->seq + 1 - msg_count) << ", " << (msg->seq + 1) << ", c1n_latency, " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", c2, " << perc_heavy << ", " << median_heavy << ", " << avg_heavy_time << ", \n"; 
         // outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << sum_latency << ", " << percentile_lat << ", " << std_dev << ", " << sum_recv_delta << ", " << median_recv_delta << ", " << avg_heavy_time  << ", " << msg_count << ", " << last_recv_msg << ", \n";
 
         if (write_lat)
@@ -256,18 +202,6 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
     }
 }
 
-void thread_func(int64_t limit)
-{
-    std::cout << "Starting thread_func" << std::endl;
-    int loop_count = 0;
-
-    while (!stop_thread)
-    {
-        loop_count += 1;
-        std::cout << loop_count << " RUNS" << std::endl;
-    }
-
-}
 
 int main (int argc, char **argv)
 {
@@ -292,8 +226,6 @@ int main (int argc, char **argv)
     // ros::init(argc, argv, "listener");
     ros::NodeHandle n;
 
-    // std::cout << "queue len : " << sub_queue_len << msg_size << pub_queue_len << ros_rate << num_msgs << transport_type << sub_id;
-
     /* ros::TransportHints transport_type_ros;
     switch (transport_type)
     {
@@ -315,7 +247,7 @@ int main (int argc, char **argv)
     // std::thread t1(thread_func, limit);
 
     ros::Subscriber sub = n.subscribe("chatter", sub_queue_len, chatterCallBack);
-    std::cout << "chatter subscribed";
+    std::cout << "chatter subscribed, about to call spin \n";
     ros::spin();
 
     stop_thread = true;
