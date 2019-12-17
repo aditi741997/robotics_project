@@ -97,7 +97,6 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
 
     if (do_heavy)
     {
-        ROS_INFO("Starting heavy");
         ros::Time heavy_start = ros::Time::now();
         // Single heavy function :
         // sieve(limit);
@@ -109,7 +108,6 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
         // t1.join();
         // t2.join();
 
-        ROS_INFO("Ending heavy");
         avg_heavy_time += (ros::Time::now() - heavy_start).toSec();
         heavy_times.push_back((ros::Time::now() - heavy_start).toSec());
     }
@@ -120,18 +118,21 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
     double delay = (to - msg->stamp).toSec();
     total_delay.push_back(delay);
     sum_total_delay += delay;
-    dt += delay;
 
-    if (last_sub_output != 0.0)
+    if (msg_count >= 2)
     {
         double op_del = (to).toSec() - last_sub_output;
         op_delta.push_back(op_del);
         sum_op_delta += op_del;
-        dt += op_del;
 
         // dt is the d+1/t for this cycle. Add to array, sum value.
-        sum_dt_sum += dt;
-        dt_sum.push_back(dt);
+        // dt += op_del + delay;
+        // sum_dt_sum += dt;
+        // dt_sum.push_back(dt);
+
+	dt = op_del + total_delay[total_delay.size() - 2];
+	sum_dt_sum += dt;
+	dt_sum.push_back(dt);
     }
     last_sub_output = to.toSec();
 
@@ -179,9 +180,8 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
         // used_ram /= msg_count;std::to_string(sub_id) + 
         avg_heavy_time /= msg_count;
 
-        ROS_INFO("Boo");
         std::ofstream outfile;
-        outfile.open("1p1s_2cpu_unpinned_subL_dec8.txt", std::ios_base::app);
+        outfile.open("1p1s_2cpu_pinned_subL_dec17.txt", std::ios_base::app);
         outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", " << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", " << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << avg_heavy_time << ", " << "lost_msgs, " << (msg->seq + 1 - msg_count) << ", " << (msg->seq + 1) << ", c1n_latency, " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", c2, " << perc_heavy << ", " << median_heavy << ", " << avg_heavy_time << ", \n"; 
         // outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << sum_latency << ", " << percentile_lat << ", " << std_dev << ", " << sum_recv_delta << ", " << median_recv_delta << ", " << avg_heavy_time  << ", " << msg_count << ", " << last_recv_msg << ", \n";
 
@@ -245,8 +245,9 @@ int main (int argc, char **argv)
 
     // creating a thread
     // std::thread t1(thread_func, limit);
+    
 
-    ros::Subscriber sub = n.subscribe("chatter", sub_queue_len, chatterCallBack);
+    ros::Subscriber sub = n.subscribe("chatter", sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay());
     std::cout << "chatter subscribed, about to call spin \n";
     ros::spin();
 

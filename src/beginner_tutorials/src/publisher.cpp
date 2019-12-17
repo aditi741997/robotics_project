@@ -14,7 +14,7 @@
 } */
 
 
-int calc_primes(int64_t limit)
+void calc_primes(int64_t limit)
 {
     int i, num = 1, primes = 0;
 
@@ -29,13 +29,14 @@ int calc_primes(int64_t limit)
             primes++;
         num++;
     }
-    return num;
+    ROS_INFO("FOUND %i primes", primes);
 }
 
-int execute(int64_t limit)
+void execute(int64_t limit)
 {
     // sieve(100);
-    return calc_primes(limit);
+    ROS_INFO("Limit : %i", limit);
+    calc_primes(limit);
 }
 
 int main (int argc, char **argv)
@@ -111,9 +112,8 @@ int main (int argc, char **argv)
         // TODO : Add a fixed time compute here!!
         ros::Time c1_start = ros::Time::now();
 
-	ROS_INFO("Starting calc primes");        
-	int ans = execute(limit);
-	ROS_INFO("Ended calc primes, Ans : %i", ans);
+	execute(limit);
+	// ROS_INFO("Ended calc primes, Ans : %i", ans);
 	
 	ros::Time c1_end = ros::Time::now();
         double x = (c1_end - c1_start).toSec();
@@ -122,11 +122,9 @@ int main (int argc, char **argv)
 
         // std_msgs::String msg;
         // chatter_pub.publish(msg);
-        ROS_INFO("About to publish");
 	chatter_pub.publish(hdr);
         ros::spinOnce();
 
-	ROS_INFO("About to sleep");
         loop_rate.sleep();
         i += 1;
     }
