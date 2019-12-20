@@ -35,7 +35,6 @@ void calc_primes(int64_t limit)
 void execute(int64_t limit)
 {
     // sieve(100);
-    ROS_INFO("Limit : %i", limit);
     calc_primes(limit);
 }
 
@@ -87,7 +86,7 @@ int main (int argc, char **argv)
         ROS_INFO("Waiting for subscribers to connect");
         ros::Duration(0.1).sleep();
     }
-    ros::Duration(0.9).sleep();
+    ros::Duration(1.5).sleep();
     // Code to check ros::Time format :
     //ros::Time x = ros::Time::now();
     // ROS_INFO("%f %f %f", x.sec, x.nsec, x.toSec());
@@ -130,7 +129,7 @@ int main (int argc, char **argv)
     }
     ROS_INFO("Total msgs sent %i, msg size %i, avg c1 : %f", i, msg_size, total_c1/i);
     std::sort(c1_arr.begin(), c1_arr.end());
-    ROS_INFO("Mean_Median pub_c1 : median : %f, 99p : %f, mean : %f", c1_arr[c1_arr.size()/2], c1_arr[(99*(c1_arr.size()))/100], total_c1/i);
+    ROS_INFO("Mean_Median pub_c1 : median : %f, 99p : %f, mean : %f, freq : %i, ", c1_arr[c1_arr.size()/2], c1_arr[(99*(c1_arr.size()))/100], total_c1/i, ros_rate);
     // ROS_INFO(" %f %f %f", sent_times[0], sent_times[num_msgs/2], sent_times[num_msgs -1]);
     if (ros::ok())
     {

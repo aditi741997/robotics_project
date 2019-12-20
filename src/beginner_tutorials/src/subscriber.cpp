@@ -136,7 +136,6 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
     }
     last_sub_output = to.toSec();
 
-    ROS_INFO("Measuring tput : lso : %f, dt : %f, delay : %f", last_sub_output, dt, delay);
 
     if (msg->seq >= ((num_msgs*98)/100))
     {
@@ -181,7 +180,7 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
         avg_heavy_time /= msg_count;
 
         std::ofstream outfile;
-        outfile.open("1p1s_2cpu_pinned_subL_dec17.txt", std::ios_base::app);
+        outfile.open("1p1s_1cpu_dec20.txt", std::ios_base::app);
         outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", " << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", " << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << avg_heavy_time << ", " << "lost_msgs, " << (msg->seq + 1 - msg_count) << ", " << (msg->seq + 1) << ", c1n_latency, " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", c2, " << perc_heavy << ", " << median_heavy << ", " << avg_heavy_time << ", \n"; 
         // outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << sum_latency << ", " << percentile_lat << ", " << std_dev << ", " << sum_recv_delta << ", " << median_recv_delta << ", " << avg_heavy_time  << ", " << msg_count << ", " << last_recv_msg << ", \n";
 
