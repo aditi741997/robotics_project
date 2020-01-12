@@ -2,6 +2,7 @@
 #include "std_msgs/String.h"
 #include "std_msgs/Header.h"
 #include <fstream>
+#include <sstream>
 #include <cmath>
 #include <sys/sysinfo.h>
 #include <vector>
@@ -55,6 +56,13 @@ int percentile = 99;
 
 int64_t limit;
 bool stop_thread = false;
+
+bool to_publish = false;
+std::string expt;
+std::string node_name;
+std::string publish_topic = "";
+ros::Publisher chatter_pub;
+std_msgs::Header hdr;
 
 void calc_primes(int64_t limit)
 {
@@ -136,6 +144,12 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
     }
     last_sub_output = to.toSec();
 
+    if (to_publish)
+    {
+	hdr.seq = msg->seq;
+	hdr.stamp = msg->stamp;
+	chatter_pub.publish(hdr);
+    }
 
     if (msg->seq >= ((num_msgs*98)/100))
     {
@@ -180,7 +194,7 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
         avg_heavy_time /= msg_count;
 
         std::ofstream outfile;
-        outfile.open("1p1s_1cpu_dec20.txt", std::ios_base::app);
+        outfile.open((expt + "_" + node_name + "_dec25.txt").c_str(), std::ios_base::app);
         outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", " << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", " << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << avg_heavy_time << ", " << "lost_msgs, " << (msg->seq + 1 - msg_count) << ", " << (msg->seq + 1) << ", c1n_latency, " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", c2, " << perc_heavy << ", " << median_heavy << ", " << avg_heavy_time << ", \n"; 
         // outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << sum_latency << ", " << percentile_lat << ", " << std_dev << ", " << sum_recv_delta << ", " << median_recv_delta << ", " << avg_heavy_time  << ", " << msg_count << ", " << last_recv_msg << ", \n";
 
@@ -204,7 +218,7 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
 
 int main (int argc, char **argv)
 {
-    if (argc != 10)
+    if (argc < 13)
     {
         std::cout << "Not enough inputs. Need msg size, pub queue len, ros rate, num msgs, sub queue len, transport type (0 tcp, 1 tcpNoDelay, 2 udp), sub id, do heavy, limit for sieve";
         return 0;
@@ -220,10 +234,39 @@ int main (int argc, char **argv)
     do_heavy = atoi(argv[8]);
 
     limit = atoi(argv[9]);
+    node_name = argv[10];
 
-    ros::init(argc, argv, "listener");
-    // ros::init(argc, argv, "listener");
+    ROS_INFO("Init node %s, sub_topic %s, expt %s", node_name, argv[11], argv[12]);
+    ros::init(argc, argv, node_name);
     ros::NodeHandle n;
+    
+    std::string sub_topic = argv[11];
+    expt = argv[12];
+
+    to_publish = atoi(argv[13]) == 1;
+    if (to_publish)
+    {
+	publish_topic = argv[14];
+	ROS_INFO("I will publish on %s", (publish_topic + "BLAH").c_str());
+	chatter_pub = n.advertise<std_msgs::Header>(publish_topic, sub_queue_len);
+
+	std::stringstream ss;
+        char* message;
+        message = new char[msg_size - 4];
+        memset(message, '0', msg_size - 4);
+        message[msg_size - 4 - 1] = '\0';
+        ss << message;
+
+	hdr.frame_id = ss.str();
+
+	while (0 == chatter_pub.getNumSubscribers())
+	{
+            ROS_INFO("Waiting for subscribers to connect");
+            ros::Duration(0.1).sleep();
+        }
+        ros::Duration(1.5).sleep();
+    }
+    // ros::init(argc, argv, "listener");
 
     /* ros::TransportHints transport_type_ros;
     switch (transport_type)
@@ -246,7 +289,7 @@ int main (int argc, char **argv)
     // std::thread t1(thread_func, limit);
     
 
-    ros::Subscriber sub = n.subscribe("chatter", sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay());
+    ros::Subscriber sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay());
     std::cout << "chatter subscribed, about to call spin \n";
     ros::spin();
 
