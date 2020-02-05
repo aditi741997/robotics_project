@@ -16,15 +16,15 @@
 
 
 void calc_primes(int64_t limit)
-{
+{   
     int i, num = 1, primes = 0;
-
-    while (num <= limit) { 
+    
+    while (num <= limit) {
         i = 2; 
         while (i <= num) { 
             if(num % i == 0)
                 break;
-            i++; 
+            i++;
         }
         if (i == num)
             primes++;
@@ -34,75 +34,10 @@ void calc_primes(int64_t limit)
 }
 
 void execute(int64_t limit)
-{
+{   
     // sieve(100);
     calc_primes(limit);
 }
-
-class NewPublisher
-{
-public:
-	NewPublisher(ros::NodeHandle *nh, int msg_sz, int qlen, int num, int64_t lim, int subc, std::string t)
-	{
-		sent_count = 0;
-		msg_size = msg_sz;
-		que_len = qlen;
-		num_msgs = num;
-		limit = lim;
-		sub_count = subc;
-		topic = t;
-
-		chatter_pub = nh->advertise<std_msgs::Header>(topic, que_len);
-		initMessage();
-	}
-
-	void checkSubscriberCount()
-	{
-		while (sub_count != chatter_pub.getNumSubscribers())
-		{
-			ROS_INFO("Waiting for subscribers to connect %i", chatter_pub.getNumSubscribers());
-			ros::Duration(0.1).sleep();
-		}
-		ros::Duration(1.5).sleep();
-	}
-
-	void publishMsg(const ros::TimerEvent& event)
-	{
-		msg.seq = sent_count;
-		msg.stamp = ros::Time::now();
-		execute(limit);
-		chatter_pub.publish(msg);
-		sent_count += 1;
-
-		if (sent_count == num_msgs)
-		{
-			ROS_INFO("All msgs published, Shutting down!");
-			ros::shutdown();
-		}
-	}
-private:
-	int msg_size;
-	int que_len;
-	int num_msgs;
-	int sent_count;
-	int64_t limit;
-	int sub_count;
-	std::string topic;
-	std_msgs::Header msg;
-	ros::Publisher chatter_pub;
-
-	void initMessage()
-	{
-		std::stringstream ss;
-		char* message;
-		message = new char[msg_size - 4];
-		memset(message, '0', msg_size - 4);
-		message[msg_size - 4 - 1] = '\0';
-		ss << message;
-		msg.frame_id = ss.str();
-		ROS_INFO("HDR msg initialized!");
-	}
-};
 
 int main (int argc, char **argv)
 {
@@ -125,18 +60,14 @@ int main (int argc, char **argv)
     ros::init(argc, argv, node_name);
 
     ros::NodeHandle n;
-    
-    NewPublisher pub (&n, msg_size, pub_queue_len, num_msgs, limit, sub_count, topic);
-    
-    // ros::Publisher chatter_pub = n.advertise<std_msgs::Header>(topic, pub_queue_len);
 
-    // ros::Rate loop_rate(ros_rate);
+    // ros::Publisher chatter_pub = n.advertise<nw_experiments::StringTime>("chatter", pub_queue_len);
+    ros::Publisher chatter_pub = n.advertise<std_msgs::Header>(topic, pub_queue_len);
+
+    ros::Rate loop_rate(ros_rate);
 
     // std_msgs::String msg;
     // nw_experiments::StringTime msgTime;
-    
-    /*
-    This is done by the NewPub constructor
     std_msgs::Header hdr;
 
     std::stringstream ss;
@@ -145,8 +76,6 @@ int main (int argc, char **argv)
     memset(message, '0', msg_size - 4);
     message[msg_size - 4 - 1] = '\0';
     ss << message;
-    hdr.frame_id = ss.str();
-    */
 
     // This showed that the method to convert to string takes almost 0.001 sec, which is of the order of our latency.
     // Hence, we can't use this.
@@ -155,31 +84,23 @@ int main (int argc, char **argv)
     // ROS_INFO("A8");
     // msgTime.data = ss.str();
 
-    /*
+    hdr.frame_id = ss.str();
+
     while (sub_count != chatter_pub.getNumSubscribers())
     {
         ROS_INFO("Waiting for subscribers to connect %i", chatter_pub.getNumSubscribers());
         ros::Duration(0.1).sleep();
     }
     ros::Duration(1.5).sleep();
-    */
-
-    pub.checkSubscriberCount();
-
-    ROS_INFO("Starting timer with duration %f", 1.0/ros_rate);
-    ros::Timer publish_timer = n.createTimer(ros::Duration(1.0/ros_rate), &NewPublisher::publishMsg, &pub);
- 
-    ros::spin();
     // Code to check ros::Time format :
     //ros::Time x = ros::Time::now();
     // ROS_INFO("%f %f %f", x.sec, x.nsec, x.toSec());
 
+    int i = 0;
 
     // if we decide to store the values in the future :
     // std::vector<double> sent_times (num_msgs);
 
-/*
-    int i = 0;
     double total_c1 = 0.0;
     std::vector<double> c1_arr;
 
@@ -194,25 +115,25 @@ int main (int argc, char **argv)
 
         hdr.seq = i;
         hdr.stamp = ros::Time::now();
-        
+
         // TODO : Add a fixed time compute here!!
         ros::Time c1_start = ros::Time::now();
 
-	execute(limit);
+        execute(limit);
 
-	ros::Time c1_end = ros::Time::now();
+        ros::Time c1_end = ros::Time::now();
                 // std_msgs::String msg;
         // chatter_pub.publish(msg);
-	chatter_pub.publish(hdr);
+        chatter_pub.publish(hdr);
 
-	double pt = (ros::Time::now() - c1_end).toSec();
-	pub_t += pt;
-	pub_times.push_back(pt);
+        double pt = (ros::Time::now() - c1_end).toSec();
+        pub_t += pt;
+        pub_times.push_back(pt);
 
-	double x = (c1_end - c1_start).toSec();
-        total_c1 += x; 
-	c1_arr.push_back(x);
-	
+        double x = (c1_end - c1_start).toSec();
+        total_c1 += x;
+        c1_arr.push_back(x);
+
         ros::spinOnce();
 
         loop_rate.sleep();
@@ -231,6 +152,5 @@ int main (int argc, char **argv)
     {
         ros::shutdown();
     }
-*/
     return 0;
 }

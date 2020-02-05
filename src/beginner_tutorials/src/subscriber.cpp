@@ -64,6 +64,9 @@ std::string publish_topic = "";
 ros::Publisher chatter_pub;
 std_msgs::Header hdr;
 
+double pub_time = 0.0;
+std::vector<double> pub_times;
+
 void calc_primes(int64_t limit)
 {
     int i, num = 1, primes = 0;
@@ -146,9 +149,13 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
 
     if (to_publish)
     {
+	ros::Time pub_start = ros::Time::now();
 	hdr.seq = msg->seq;
 	hdr.stamp = msg->stamp;
 	chatter_pub.publish(hdr);
+	double pub_t = (ros::Time::now() - pub_start).toSec();
+	pub_time += pub_t;
+	pub_times.push_back(pub_t);
     }
 
     if (msg->seq >= ((num_msgs*98)/100))
@@ -190,12 +197,22 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
 	double perc_heavy = heavy_times[index];
 	double median_heavy = heavy_times[heavy_times.size()/2];
 
+	if (to_publish)
+	{
+		std::sort(pub_times.begin(), pub_times.end());
+	}
+
         // used_ram /= msg_count;std::to_string(sub_id) + 
         avg_heavy_time /= msg_count;
 
         std::ofstream outfile;
         outfile.open((expt + "_" + node_name + "_dec25.txt").c_str(), std::ios_base::app);
-        outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", " << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", " << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << avg_heavy_time << ", " << "lost_msgs, " << (msg->seq + 1 - msg_count) << ", " << (msg->seq + 1) << ", c1n_latency, " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", c2, " << perc_heavy << ", " << median_heavy << ", " << avg_heavy_time << ", \n"; 
+        outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", " << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", " << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << avg_heavy_time << ", " << "lost_msgs, " << (msg->seq + 1 - msg_count) << ", " << (msg->seq + 1) << ", c1n_latency, " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", c2, " << perc_heavy << ", " << median_heavy << ", " << avg_heavy_time << ", ";
+	if (to_publish)
+	{
+		outfile << "pub_time, " << pub_times[index] << ", " << pub_times[pub_times.size()/2] << ", " << pub_time/msg_count << ", ";
+	}
+	outfile << "\n";
         // outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << sum_latency << ", " << percentile_lat << ", " << std_dev << ", " << sum_recv_delta << ", " << median_recv_delta << ", " << avg_heavy_time  << ", " << msg_count << ", " << last_recv_msg << ", \n";
 
         if (write_lat)
@@ -236,7 +253,7 @@ int main (int argc, char **argv)
     limit = atoi(argv[9]);
     node_name = argv[10];
 
-    ROS_INFO("Init node %s, sub_topic %s, expt %s", node_name, argv[11], argv[12]);
+    ROS_INFO("Init node %s, sub_topic %s, expt %s", node_name.c_str(), argv[11], argv[12]);
     ros::init(argc, argv, node_name);
     ros::NodeHandle n;
     
