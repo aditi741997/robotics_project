@@ -3,14 +3,10 @@ import os
 import matplotlib.pyplot as plt
 import math
 
-# farr = [10, 20, 40, 60, 80, 100, 120, 150, 175, 200]
-# farr = [10, 70, 80, 85, 90, 95, 100, 200]
-# farr = [10, 30, 50, 70, 100, 150, 175, 200]
-# farr = [10, 30, 50, 60, 65, 70, 85, 100, 160, 200]
+farr = [10, 30, 40, 50, 70, 90, 140]
+# farr = [10, 30, 40, 50, 60, 70, 90, 110, 140]
 
-farr = [10, 70]
-
-pre = sys.argv[2]
+pre = ''
 
 def read_actual_metric_file(fname):
     # m1 is human.y div by 3*2*t.oz*t.ow/(2*t.ow*t.ow - 1)
@@ -51,112 +47,138 @@ def read_actual_metric_file(fname):
 
 # read_actual_metric_file("2c_max5_new_perf_1008.out")
 
-ind = {}
-for i in range(len(farr)):
-    ind[farr[i]] = i
+def cmps(x):
+    return x[0]
 
-opt_freq = int(sys.argv[3])
-rel_perf_tail_improv_wrt_low_freq = []
-abs_perf_tail_improv_wrt_low_freq = []
-rel_perf_med_improv_wrt_low_freq = []
-abs_perf_med_improv_wrt_low_freq = []
+if __name__ == '__main__':
+    pre = sys.argv[2]
 
-dist = 8.0
-human_speed_arr = [dist/24, dist/20, dist/16, dist/12, dist/8, dist/4, dist/3, dist/2]
+    ind = {}
+    for i in range(len(farr)):
+        ind[farr[i]] = i
 
-for t in [24, 20, 16, 12, 8, 4, 3, 2]:
-    perc_m = [0.0 for x in farr]
-    med_m = [0.0 for x in farr]
-    mean_m = [0.0 for x in farr]
+    opt_freq = int(sys.argv[3])
+    rel_perf_tail_improv_wrt_low_freq = []
+    abs_perf_tail_improv_wrt_low_freq = []
+    rel_perf_med_improv_wrt_low_freq = []
+    abs_perf_med_improv_wrt_low_freq = []
 
-    perc_rxn = [0.0 for x in farr]
-    med_rxn = [0.0 for x in farr]
-    mean_rxn = [0.0 for x in farr]
-    
-    new_farr = [0.0 for x in farr]
+    dist = 8.0
+    # human_speed_arr = [dist/24, dist/20, dist/16, dist/12, dist/8, dist/4, dist/3, dist/2]
 
-    with open(sys.argv[1], 'r') as af:
-        afl = af.readlines()
-        for l in afl:
-            ls = l.split(' ')
-            freq = int(ls[0])
-            if int(ls[1]) == t and freq in farr:
-                new_farr[ind[freq]] = float(ls[-1][:-1])
+    for t in [8]:
+        perc_m = [0.0 for x in farr]
+        med_m = [0.0 for x in farr]
+        mean_m = [0.0 for x in farr]
 
-    # Measuring from gz model states :
-    # m2 : if tb3 pointing towards (x,y1) and human at (x,y2) then y1/y2
-    # m1 : tb3_theta - human_theta absolute (diff in radians of orientation)
-    perc_m1 = [0.0 for x in farr]
-    med_m1 = [0.0 for x in farr]
-    mean_m1 = [0.0 for x in farr]
-
-    perc_m2 = [0.0 for x in farr]
-    med_m2 = [0.0 for x in farr]
-    mean_m2 = [0.0 for x in farr]    
-
-    for f in farr:
-        # read tracker log to find metric vals.
-        with open(pre + '_new_tracker_node_' + str(f) + str(t) + '.out', 'r') as fil:
-            for l in fil.readlines():
-                larr = l.split(' ')
-                if "perf_metric" in l:
-                    mean_m[ind[f]] = float(larr[7][:-1])
-                    med_m[ind[f]] = float(larr[8][:-1])
-                    perc_m[ind[f]] = float(larr[9][:-1])
-                elif "rxn_time" in l:
-                    mean_rxn[ind[f]] = float(larr[6][:-1])
-                    med_rxn[ind[f]] = float(larr[7][:-1])
-                    perc_rxn[ind[f]] = float(larr[8][:-1])
+        perc_rxn = [0.0 for x in farr]
+        med_rxn = [0.0 for x in farr]
+        mean_rxn = [0.0 for x in farr]
         
-        # read new_perf files for m1, m2 :
-        perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]] = read_actual_metric_file(pre + '_new_perf_%i%i.out'%(f,t))
+        new_farr = [0.0 for x in farr]
 
-    print new_farr
-    p1 = plt.plot(new_farr, perc_m, 'r-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-    plt.plot(new_farr, med_m, 'g:', label='Median')
-    plt.plot(new_farr, mean_m, 'b--', label='Mean')
-    plt.title('Metric at displacement time : %f'%(t))
-    plt.xlabel('Publisher Frequency')
-    plt.ylabel('Metric (offset)')
-    plt.legend()
-    plt.show()
+        m_rxn_ratio = [1.0 for x in farr]
 
-    p2 = plt.plot(new_farr, perc_rxn, 'r-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-    plt.plot(new_farr, med_rxn, 'g:', label='Median')
-    plt.plot(new_farr, mean_rxn, 'b--', label='Mean')
-    plt.title('Metric at displacement time : %f'%(t))
-    plt.xlabel('Publisher Frequency')
-    plt.ylabel('RxnTime')
-    plt.legend()
-    plt.show()
+        with open(sys.argv[1], 'r') as af:
+            afl = af.readlines()
+            for l in afl:
+                ls = l.split(' ')
+                freq = int(ls[0])
+                if int(ls[1]) == t and freq in farr:
+                    new_farr[ind[freq]] = float(ls[-1][:-1])
 
-    p1 = plt.plot(new_farr, perc_m1, 'r-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-    plt.plot(new_farr, med_m1, 'g:', label='Median')
-    plt.plot(new_farr, mean_m1, 'b--', label='Mean')
-    plt.title('Absolute Deg Diff at displacement time : %f'%(t))
-    plt.xlabel('Publisher Frequency')
-    plt.ylabel('Metric (offset)')
-    plt.legend()
-    plt.show()
+        # Measuring from gz model states :
+        # m2 : if tb3 pointing towards (x,y1) and human at (x,y2) then y1/y2
+        # m1 : tb3_theta - human_theta absolute (diff in radians of orientation)
+        perc_m1 = [0.0 for x in farr]
+        med_m1 = [0.0 for x in farr]
+        mean_m1 = [0.0 for x in farr]
 
-    rel_perf_tail_improv_wrt_low_freq.append(perc_m[ind[10]]/perc_m[ind[opt_freq]])
-    abs_perf_tail_improv_wrt_low_freq.append(perc_m1[ind[10]]/perc_m1[ind[opt_freq]])
+        perc_m2 = [0.0 for x in farr]
+        med_m2 = [0.0 for x in farr]
+        mean_m2 = [0.0 for x in farr]    
 
-    rel_perf_med_improv_wrt_low_freq.append(med_m[ind[10]]/med_m[ind[opt_freq]])
-    abs_perf_med_improv_wrt_low_freq.append(med_m1[ind[10]]/med_m1[ind[opt_freq]])
+        for f in farr:
+            # read tracker log to find metric vals.
+            with open(pre + '_new_tracker_node_' + str(f) + str(t) + '.out', 'r') as fil:
+                print "Reading for : ", f, t
+                for l in fil.readlines():
+                    larr = l.split(' ')
+                    if "perf_metric" in l:
+                        mean_m[ind[f]] = float(larr[7][:-1])
+                        med_m[ind[f]] = float(larr[8][:-1])
+                        perc_m[ind[f]] = float(larr[9][:-1])
+                    elif "rxn_time" in l:
+                        mean_rxn[ind[f]] = float(larr[6][:-1])
+                        med_rxn[ind[f]] = float(larr[7][:-1])
+                        perc_rxn[ind[f]] = float(larr[8][:-1])
+            m_rxn_ratio[ind[f]] = med_m[ind[f]]/(med_rxn[ind[f]]*med_rxn[ind[f]])
+            
+            # read new_perf files for m1, m2 :
+            # perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]] = read_actual_metric_file(pre + '_new_perf_%i%i.out'%(f,t))
 
-plt.plot(human_speed_arr, rel_perf_tail_improv_wrt_low_freq, 'r-', label='Ratio of 99ile')
-plt.plot(human_speed_arr, rel_perf_med_improv_wrt_low_freq, 'g:', label='Ratio of Median')
-plt.title('Ratio of relative offset at 10 & 70Hz (~Opt) w.r.t Object speed')
-plt.xlabel('Object Speed')
-plt.ylabel('Ratio')
-plt.legend()
-plt.show()
+        print new_farr
+        p1 = plt.plot(new_farr, perc_m, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, med_m, 'g.:', label='Median')
+        plt.plot(new_farr, mean_m, 'b*--', label='Mean')
+        plt.title('Metric at displacement time : %f, c1 : %s'%(t, sys.argv[4]))
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('Rel Metric (offset)')
+        plt.legend()
+        plt.show()
 
-plt.plot(human_speed_arr, abs_perf_tail_improv_wrt_low_freq, 'r-', label='Ratio of 99ile')
-plt.plot(human_speed_arr, abs_perf_med_improv_wrt_low_freq, 'g:', label='Ratio of Median')
-plt.title('Ratio of absolute offset at 10 & 70Hz (~Opt) w.r.t Object speed')
-plt.xlabel('Object Speed')
-plt.ylabel('Ratio')
-plt.legend()
-plt.show()
+        p2 = plt.plot(new_farr, perc_rxn, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, med_rxn, 'g.:', label='Median')
+        plt.plot(new_farr, mean_rxn, 'b*--', label='Mean')
+        plt.title('RxnTime at displacement time : %f, c1 : %s'%(t, sys.argv[4]))
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('RxnTime')
+        plt.legend()
+        plt.show()
+
+        plt.plot(new_farr, m_rxn_ratio, 'g*:', label='Ratio')
+        plt.title('Ratio of Median metric to median rxn time at c1 : %s'%(sys.argv[4]))
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('Ratio')
+        plt.show()
+
+        x = zip(med_rxn, med_m)
+        x.sort()
+        print x
+        rtime = [y[0] for y in x]
+        m = [y[1] for y in x]
+        plt.plot(rtime, m, 'bo:', label='Metric')
+        plt.title('RxnTime vs Perf Metric at 132KB, c1 : %s'%(sys.argv[4]))
+        plt.xlabel('RxnTime')
+        plt.ylabel('Metric')
+        plt.show()
+        # p1 = plt.plot(new_farr, perc_m1, 'r-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        # plt.plot(new_farr, med_m1, 'g:', label='Median')
+        # plt.plot(new_farr, mean_m1, 'b--', label='Mean')
+        # plt.title('Absolute Deg Diff at displacement time : %f'%(t))
+        # plt.xlabel('Publisher Frequency')
+        # plt.ylabel('Abs Metric (offset)')
+        # plt.legend()
+        # plt.show()
+
+        rel_perf_tail_improv_wrt_low_freq.append(perc_m[ind[10]]/perc_m[ind[opt_freq]])
+        # abs_perf_tail_improv_wrt_low_freq.append(perc_m1[ind[10]]/perc_m1[ind[opt_freq]])
+
+        rel_perf_med_improv_wrt_low_freq.append(med_m[ind[10]]/med_m[ind[opt_freq]])
+        # abs_perf_med_improv_wrt_low_freq.append(med_m1[ind[10]]/med_m1[ind[opt_freq]])
+
+    # plt.plot(human_speed_arr, rel_perf_tail_improv_wrt_low_freq, 'r-', label='Ratio of 99ile')
+    # plt.plot(human_speed_arr, rel_perf_med_improv_wrt_low_freq, 'g:', label='Ratio of Median')
+    # plt.title('Ratio of relative offset at 10 & 70Hz (~Opt) w.r.t Object speed')
+    # plt.xlabel('Object Speed')
+    # plt.ylabel('Ratio')
+    # plt.legend()
+    # plt.show()
+
+    # plt.plot(human_speed_arr, abs_perf_tail_improv_wrt_low_freq, 'r-', label='Ratio of 99ile')
+    # plt.plot(human_speed_arr, abs_perf_med_improv_wrt_low_freq, 'g:', label='Ratio of Median')
+    # plt.title('Ratio of absolute offset at 10 & 70Hz (~Opt) w.r.t Object speed')
+    # plt.xlabel('Object Speed')
+    # plt.ylabel('Ratio')
+    # plt.legend()
+    # plt.show()
