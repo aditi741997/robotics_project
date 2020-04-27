@@ -2,10 +2,10 @@ cmake_minimum_required(VERSION 2.8.3)
 project(beginner_tutorials)
 
 ## Find catkin and any catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs genmsg)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs cv_bridge sensor_msgs genmsg)
 
 ## Generate added messages and services
-generate_messages(DEPENDENCIES std_msgs)
+generate_messages(DEPENDENCIES std_msgs sensor_msgs)
 
 ## Declare a catkin package
 catkin_package()
@@ -23,3 +23,7 @@ add_dependencies(old_publisher beginner_tutorials_generate_messages_cpp)
 add_executable(subscriber src/subscriber.cpp)
 target_link_libraries(subscriber ${catkin_LIBRARIES})
 add_dependencies(subscriber beginner_tutorials_generate_messages_cpp)
+
+add_executable(objdetector src/obj_detector.cpp)
+target_link_libraries(objdetector ${catkin_LIBRARIES})
+add_dependencies(objdetector beginner_tutorials_generate_messages_cpp)

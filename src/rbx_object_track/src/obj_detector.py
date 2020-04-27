@@ -1,11 +1,12 @@
 import rospy
 import cv2
 import imutils
+import sys
 # import cv2.cv as cv
 from rbx1_vision.ros2opencv2 import ROS2OpenCV2
 
 class ObjDetector(ROS2OpenCV2):
-    def __init__(self, node_name):
+    def __init__(self, node_name, plimit):
         super(ObjDetector, self).__init__(node_name)
 
         self.detect_box = None
@@ -15,19 +16,36 @@ class ObjDetector(ROS2OpenCV2):
         self.misses = 0
         self.hit_rate = 0
 
+        self.limit = plimit
+
+    def calc_primes(self):
+        i = 1
+        num = 1
+        primes = 0
+        while (num <= self.limit):
+            i = 2
+            while (i <= num):
+                if (num%i == 0):
+                    break
+                i += 1
+            if (i == num):
+                primes += 1
+            num += 1
+
     def process_image(self, img):
         try:
             # Create a greyscale version of the image
             # grey = cv2.cvtColor(cv_image, cv2.COLOR_BGR2GRAY)
-
+            self.calc_primes()
             self.detect_box = self.detect_obj(img)
             if self.detect_box is not None:
                 self.hits += 1
             else:
                 self.misses += 1            
             # Keep tabs on the hit rate so far
-            if ((self.hits + self.misses) > 0):
+            if ((self.hits + self.misses) > 0) and ((self.hits+self.misses)%20 == 0):
                 self.hit_rate = float(self.hits) / (self.hits + self.misses)
+                print img.shape[:2]
                 rospy.loginfo("Hit rate : " + str(self.hit_rate))
         except:
             pass
@@ -65,7 +83,8 @@ class ObjDetector(ROS2OpenCV2):
 if __name__ == '__main__':
     try:
         node_name = "obj_detector"
-        ObjDetector(node_name)
+        print "ARGS : ", sys.argv
+        ObjDetector(node_name, int(sys.argv[1]))
         rospy.spin()
     except KeyboardInterrupt:
         print "Shutting down obj detector node."

@@ -1,7 +1,6 @@
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include <std_msgs/Header.h>
-
 #include <sstream>
 #include <stdlib.h>
 #include <string.h>
@@ -119,7 +118,7 @@ int main (int argc, char **argv)
     int64_t limit = atoi(argv[5]);
     int sub_count = atoi(argv[7]);
     std::string node_name = argv[8];
-    std::string topic = argv[9];
+    std::string topic = "/camera1/image_raw";
     ROS_INFO("Starting publisher with node name %s, topic %s", node_name.c_str(), topic.c_str());
 
     ros::init(argc, argv, node_name);

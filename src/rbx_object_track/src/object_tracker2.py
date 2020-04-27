@@ -8,7 +8,7 @@ from rbx1_vision.msg import roi_time
 import time
 
 class ObjectTracker2():
-    def __init__(self, cam_topic):
+    def __init__(self, cam_topic, cpp):
         rospy.init_node("object_tracker2")
                 
         # Set the shutdown function (stop the robot)
@@ -30,7 +30,7 @@ class ObjectTracker2():
         self.x_threshold = rospy.get_param("~x_threshold", 0.1)
 
         # Publisher to control the robot's movement
-        self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1)
+        self.cmd_vel_pub = rospy.Publisher('cmd_vel', Twist, queue_size=1, tcp_nodelay=True)
         
         # Intialize the movement command
         self.move_cmd = Twist()
@@ -71,7 +71,7 @@ class ObjectTracker2():
         rospy.wait_for_message(cam_topic + '/camera_info', CameraInfo)
         
         # Subscribe the camera_info topic to get the image width and height
-        sub_info = rospy.Subscriber(cam_topic + '/camera_info', CameraInfo, self.get_camera_info, queue_size=1)
+        sub_info = rospy.Subscriber(cam_topic + '/camera_info', CameraInfo, self.get_camera_info, queue_size=1, tcp_nodelay=True)
 
         # Wait until we actually have the camera data
         while self.image_width == 0 or self.image_height == 0:
@@ -80,23 +80,38 @@ class ObjectTracker2():
 
         # Subscribe to the ROI topic and set the callback to update the robot's motion
         # rospy.Subscriber('roi', RegionOfInterest, self.move_robot, queue_size=1)
-        rospy.Subscriber('roi', roi_time, self.move_robot, queue_size=1)
-        
-        # Wait until we have an ROI to follow
-        rospy.loginfo("Waiting for messages on /roi...")
-        rospy.wait_for_message('roi', RegionOfInterest)
+        if cpp == "0":
+            rospy.Subscriber('roi', roi_time, self.process_roi, queue_size=1, tcp_nodelay=True)
+            rospy.loginfo("Waiting for messages on /roi...")
+            rospy.wait_for_message('roi', RegionOfInterest)
+        else:
+            rospy.Subscriber('roi', Header, self.process_hdr, queue_size=1, tcp_nodelay=True)
+            rospy.loginfo("Waiting for messages on /roi...")
+            rospy.wait_for_message('roi', Header)
         
         rospy.loginfo("ROI messages detected. Starting tracker...")
 
-    def move_robot(self, msg):
+    def process_roi(self, msg):
         start = time.time()
-        if msg.width == 0 or msg.height == 0:
+        self.move_robot(msg.x_offset, msg.y_offset, msg.width, msg.height, start)
+
+    def process_hdr(self, msg):
+        start = time.time()
+        lf = msg.frame_id.split(' ')
+        x = int(lf[0])
+        y = int(lf[1])
+        w = int(lf[2])
+        h = int(lf[3])
+        self.move_robot(x, y, w, h, start)
+
+    def move_robot(self, x_offset, y_offset, width, height, start):
+        if width == 0 or height == 0:
             self.target_visible = False
             self.move_cmd = Twist()
         else:
             self.target_visible = True
 
-            target_offset_x = msg.x_offset + msg.width / 2 - self.image_width / 2
+            target_offset_x = x_offset + width / 2 - self.image_width / 2
     
             try:
                 percent_offset_x = float(target_offset_x) / (float(self.image_width) / 2.0)
@@ -217,8 +232,9 @@ class ObjectTracker2():
 if __name__ == '__main__':
     try:
         camera_topic = sys.argv[1]
+        cpp = sys.argv[2] # if we're using cpp version for N1,2, we will get Header input.
         print "Init tracker!"
-        ObjectTracker2(camera_topic)
+        ObjectTracker2(camera_topic, cpp)
         rospy.spin()
     except rospy.ROSInterruptException:
         rospy.loginfo("Object tracking node terminated.")

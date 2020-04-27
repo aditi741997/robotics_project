@@ -60,7 +60,7 @@ class ROS2OpenCV2(object):
         # Initialize the Region of Interest and its publisher
         self.ROI = RegionOfInterest()
         # self.roi_pub = rospy.Publisher("/roi", RegionOfInterest, queue_size=1)
-        self.roi_time_pub = rospy.Publisher("/roi", roi_time, queue_size=1)
+        self.roi_time_pub = rospy.Publisher("/roi", roi_time, queue_size=1, tcp_nodelay=True)
 
         # Initialize a number of global variables
         self.frame = None
@@ -104,13 +104,15 @@ class ROS2OpenCV2(object):
 
         # Subscribe to the image and depth topics and set the appropriate callbacks
         # The image topic names can be remapped in the appropriate launch file
-        self.image_sub = rospy.Subscriber("/camera1/rgb/image_raw", Image, self.image_callback, queue_size=1)
+        self.image_sub = rospy.Subscriber("/camera1/rgb/image_raw", Image, self.image_callback, queue_size=1, tcp_nodelay=True)
         # self.depth_sub = rospy.Subscriber("input_depth_image", Image, self.depth_callback, queue_size=1)
 
         self.sum_cb_time = 0.0
         self.count = 0
         self.time_max_vals = 25000
         self.arr_cb_time = deque([],self.time_max_vals)
+        self.rostime_ratio = deque([], self.time_max_vals)
+        self.lat_arr = []
 
     def on_mouse_click(self, event, x, y, flags, param):
         # This function allows the user to selection a ROI using the mouse
@@ -138,7 +140,9 @@ class ROS2OpenCV2(object):
 
     def image_callback(self, data):
         # Time this loop to get cycles per second
+        self.lat_arr.append((rospy.Time.now() - data.header.stamp).to_sec())
         start = time.time()
+        s2 = rospy.get_time()
         # rospy.loginfo("STarting image cb")
 
         # Store the image header in a global variable
@@ -268,6 +272,7 @@ class ROS2OpenCV2(object):
 
         # Compute the time for this loop and estimate CPS as a running average
         end = time.time()
+        e2 = rospy.get_time()
         duration = end - start
         fps = int(1.0 / duration)
         # rospy.loginfo("Time : " + str(duration))
@@ -279,6 +284,8 @@ class ROS2OpenCV2(object):
         self.count += 1
         self.sum_cb_time += duration
         self.arr_cb_time.append(duration)
+        # print s2, e2, e2-s2, duration
+        self.rostime_ratio.append((e2-s2))
 
     def depth_callback(self, data):
         # Convert the ROS image to OpenCV format using a cv_bridge helper function
@@ -418,8 +425,12 @@ class ROS2OpenCV2(object):
     def cleanup(self):
         print "Shutting down vision node."
         s = sorted(self.arr_cb_time)
-        print "Mean, Median, Tail of cb time", self.sum_cb_time/self.count, s[len(s)/2], s[len(s) - 1]
+        print "Mean, Median, Tail of cb time", self.sum_cb_time/self.count, s[len(s)/2], s[(95*len(s))/100]
         print "Avg over count, Median over ?values", self.count, len(s)
+        sr = sorted(self.rostime_ratio)
+        print "Mean, median, Tail of rostime ratio : ", sum(sr)/len(sr), sr[len(sr)/2], sr[(95*len(sr))/100]
+        sl = sorted(self.lat_arr)
+        print "Mean, median, Tail of latency : ", sum(sl)/len(sl), sl[len(sl)/2], sl[(95*len(sl))/100]
         cv2.destroyAllWindows()
 
 def main(args):
