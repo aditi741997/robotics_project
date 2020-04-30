@@ -71,6 +71,13 @@ public:
         print_stats();
     }
 
+    std::string get_string(int x)
+    {
+        std::stringstream ss;
+        ss << x;
+        return ss.str();
+    }
+
     void objDetectCB(const sensor_msgs::Image::ConstPtr& msg)
     {
         double lat = (ros::Time::now() - msg->header.stamp).toSec();
@@ -104,7 +111,7 @@ public:
         cv::dilate(img_threshold, img_threshold, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
         cv::erode(img_threshold, img_threshold, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
 
-        std::vector<std::vector<cv::Point>> v;
+        std::vector<std::vector<cv::Point> > v;
         cv::findContours(img_threshold, v, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0) );
 
         // grabcontours?
@@ -153,7 +160,7 @@ public:
             hdr.seq = msg->header.seq;
             hdr.stamp = msg->header.stamp;
             if (v.size() > 0)
-                hdr.frame_id = std::to_string(best_boundingrect.x) + " " + std::to_string(best_boundingrect.y) + " " + std::to_string(best_boundingrect.width) + " " + std::to_string(best_boundingrect.height);
+                hdr.frame_id = get_string(best_boundingrect.x) + " " + get_string(best_boundingrect.y) + " " + get_string(best_boundingrect.width) + " " + get_string(best_boundingrect.height);
             else
                 hdr.frame_id = "0 0 0 0";
 
