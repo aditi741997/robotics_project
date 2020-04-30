@@ -3,8 +3,8 @@ import os
 import matplotlib.pyplot as plt
 import math
 
-# farr = [10, 30, 50, 70]
-farr = [6, 12, 30, 40, 50, 60, 70, 100]
+farr = [10, 15, 20, 25, 30, 35, 40, 45, 50, 70]
+# farr = [12, 20, 28, 36, 44, 52, 60, 70, 80, 90, 100, 130]
 
 pre = ''
 
@@ -20,14 +20,26 @@ if __name__ == '__main__':
     new_farrs = {}
     ci_264kb = {"_Newc1" : 20, "_c1" : 26, "_Medc1" : 16}
     ci_1mb = {"" : 16, "_Newc1" : 22, "_c1" : 34} # 
-    ci = ci_1mb if sys.argv[4] == "1mb" else ci_264kb
+    # newc = {"_c1A" : 22, "_c1BA" : 30, "_c1BB" : 30} # "_c1A" : 22, "_c1AB" : 22, : python
+    # newc = {"_c1" : 18, "_c1B" : 22, "_c1D" : 38} # cpp 
+    newc = {"" : int(sys.argv[5])}
+    if sys.argv[4] == "1mb":
+        ci = ci_1mb
+    elif sys.argv[4] == "264kb":
+        ci = ci_264kb
+    else:
+        ci = newc
     t=8
     for c1 in ci.keys():
         print "Starting ", c1
         if c1 == "" and sys.argv[4] == "1mb":
             farr[1] = 10
-        else:
-            farr[1] = 12
+        # else:
+        #     farr[1] = 12
+        # if c1 == "_c1A" and sys.argv[4] == "new":
+        #     farr[-2] = 115
+        # else:
+        #     farr[-2] = 120
         ind = {}
         for i in range(len(farr)):
             ind[farr[i]] = i
@@ -37,8 +49,12 @@ if __name__ == '__main__':
         mean_lat = [0.0 for x in farr]
         mean_perc_lat = [0.0 for x in farr]
 
-        new_farr = [0.0 for x in farr]
+        real_perc_lat =  [0.0 for x in farr]
+        real_med_lat = [0.0 for x in farr]
+        real_mean_lat = [0.0 for x in farr]
 
+        new_farr = [0.0 for x in farr]
+        print farr
         with open(pre1 + "_actual_freq.txt", 'r') as af:
             afl = af.readlines()
             for l in afl:
@@ -47,32 +63,62 @@ if __name__ == '__main__':
                 if int(ls[1]) == t and freq in farr:
                     new_farr[ind[freq]] = float(ls[-1][:-1])
 
-        ss = 'new_' if sys.argv[4] != "1mb" else ''
+        ss = 'new_' if sys.argv[4] == "264kb" else ''
         for f in farr:
             with open(pre1 + '_' + ss + 'preprocess_node_' + str(f) + str(t) + '.out', 'r') as fil:
-                print "Reading for ", f, t
+                print "Reading for ", f, t, pre1
                 for l in fil.readlines():
                     larr = l.split(' ')
                     if (cpp == 1):
                         # c1n_latency if roscpp files :
                         if 'c1n_latency' in l:
-                            perc_lat[ind[f]] = float(larr[2][:-1])
-                            med_lat[ind[f]] = float(larr[3][:-1])
-                            mean_lat[ind[f]] = float(larr[4][:-1])
+                            if ":," in l:
+                                perc_lat[ind[f]] = float(larr[2][:-1])
+                                med_lat[ind[f]] = float(larr[3][:-1])
+                                mean_lat[ind[f]] = float(larr[4][:-1])
+                            else:
+                                perc_lat[ind[f]] = float(larr[6][:-1])
+                                med_lat[ind[f]] = float(larr[7][:-1])
+                                mean_lat[ind[f]] = float(larr[8][:-1])
                     else:
                         if 'latency of msg arrival at N1' in l:
                             perc_lat[ind[f]] = float(larr[14][:-2])
                             med_lat[ind[f]] = float(larr[13][:-1])
                             mean_lat[ind[f]] = float(larr[12][:-1])
-            if med_lat[ind[f]] == 0.0:
-                # need to read lat file
+
+            if (cpp == 0):
                 with open(pre1 + '_' + ss + 'preprocess_lat_' + str(f) + str(t) + '.txt', 'r') as ff:
-                    lat_arr = [float(x[:-1]) for x in ff.readlines()[:-1]]
+                    arr = [x.split(' ') for x in ff.readlines()[:-1]]
+                    lat_arr = [float(x[2][:-1]) for x in arr]
                     ll = len(lat_arr)
                     lat_arr = sorted(lat_arr)
-                    perc_lat[ind[f]] = lat_arr[(95*ll)/100]
-                    med_lat[ind[f]] = lat_arr[ll/2]
-                    mean_lat[ind[f]] = sum(lat_arr)/ll
+                    if perc_lat[ind[f]] == 0:
+                        perc_lat[ind[f]] = lat_arr[(95*ll)/100]
+                        med_lat[ind[f]] = lat_arr[ll/2]
+                        mean_lat[ind[f]] = sum(lat_arr)/ll
+                    real_recv_times = {}
+                    for x in arr:
+                        real_recv_times[int(x[0])] = float(x[1])
+                    # print real_recv_times[3000], "real recv time at N1 for msg id 5"
+
+                # for real lat : read real send time from gz logs :
+                with open('/home/aditi/catkin_ws/Apr_Cam_RT_Logs/' + pre1 + '_CamLogs_' + str(f) + '.out', 'r') as fil:
+                    arr = [x.split(' ') for x in fil.readlines()[:-1]]
+                    real_msg_ts = [0.0 for x in arr]
+                    for x in arr:
+                        real_msg_ts[int(x[0])] = float(x[2][:-1])
+                    print real_msg_ts[5], real_msg_ts[17]
+
+                real_lat_arr = []
+                for k in sorted(real_recv_times.keys()):
+                    real_lat_arr.append(real_recv_times[k] - real_msg_ts[k])
+                    if k%500 == 3:
+                        print real_lat_arr[-1], k
+                real_lat_arr.sort()
+                rl = len(real_lat_arr)
+                real_perc_lat[ind[f]] = real_lat_arr[(rl*95)/100]
+                real_med_lat[ind[f]] = real_lat_arr[(rl)/2]
+                real_mean_lat[ind[f]] = sum(real_lat_arr)/rl
 
             mean_perc_lat[ind[f]] = perc_lat[ind[f]] + mean_lat[ind[f]]
 
@@ -83,9 +129,19 @@ if __name__ == '__main__':
         plt.plot(new_farr, perc_lat, 'ro-', label='9%iile'%x)
         plt.plot(new_farr, mean_lat, 'b.--', label='mean')
         plt.plot(new_farr, med_lat, 'g*:', label='Median')
-        plt.title('Mean, 9%iile Latency (gz->%s) c1=%dms, %s'%(x, s, ci[c1], pre))
+        plt.title('Mean, 9%iile Latency (gz->%s) c1=%dms, %s'%(x, s, ci[c1], pre1))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('Latency')
+        plt.ylim(0, 0.06)
+        plt.legend()
+        plt.show()
+
+        plt.plot(new_farr, real_perc_lat, 'ro-', label='9%iile'%x)
+        plt.plot(new_farr, real_mean_lat, 'b.--', label='mean')
+        plt.plot(new_farr, real_med_lat, 'g*:', label='Median')
+        plt.title('Mean, 9%iile RealTime Latency (gz->%s) c1=%dms, %s'%(x, s, ci[c1], pre1))
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('RT Latency')
         plt.legend()
         plt.show()
 
@@ -94,20 +150,20 @@ if __name__ == '__main__':
         new_farrs[c1] = new_farr
 
     for x in ci.keys():
-        plt.plot(new_farrs[x], mean_lats[x], '*:', label='Mean for %dms'%(ci[x]))
-    plt.title("Mean latency at " + sys.argv[3])
-    plt.xlabel('Publisher Frequency')
-    plt.ylabel('Mean latency')
-    plt.legend()
-    plt.show()
+        plt.plot(new_farrs[x], mean_lats[x], '*:', label='Mean for %dms, %s'%(ci[x], pre))
+        plt.title("Mean latency at " + sys.argv[3])
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('Mean latency')
+        plt.legend()
+        plt.show()
 
     for x in ci.keys():
-        plt.plot(new_farrs[x], med_lats[x], '*:', label='Median for %dms'%(ci[x]))
-    plt.title("Median latency at " + sys.argv[3])
-    plt.xlabel('Publisher Frequency')
-    plt.ylabel('Median latency')
-    plt.legend()
-    plt.show()
+        plt.plot(new_farrs[x], med_lats[x], '*:', label='Median for %dms, %s'%(ci[x], pre))
+        plt.title("Median latency at " + sys.argv[3])
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('Median latency')
+        plt.legend()
+        plt.show()
 
 
     # latency w.r.t. time :
