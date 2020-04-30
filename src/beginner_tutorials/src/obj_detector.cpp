@@ -20,7 +20,7 @@ class ObjDetector
     ros::Publisher roi_pub;
     ros::Subscriber img_sub;
     std::string pub_topic = "/roi";
-    std::string sub_topic = "/camera/rgb/image_raw";
+    std::string sub_topic = "/camera1/rgb/image_raw";
 
     int pub_queue_len, sub_queue_len, num_msgs, limit;
     bool publish, do_heavy;
@@ -45,6 +45,9 @@ public:
         do_heavy = doheavy;
         limit = lim;
 
+        hit = 0;
+        total = 0;
+
         if (publish)
         {
             roi_pub = nh.advertise<std_msgs::Header>(pub_topic, pub_queue_len);
@@ -60,6 +63,12 @@ public:
         img_sub = nh.subscribe(sub_topic, sub_queue_len, &ObjDetector::objDetectCB, this, ros::TransportHints().tcpNoDelay());
         std::cout << "Subscribed to images, about to call ros::spin \n";
         // cv::namedWindow(OPENCV_WINDOW);
+    }
+
+    ~ObjDetector()
+    {
+        ROS_INFO("IN destructor of ObjDetector!!!");
+        print_stats();
     }
 
     void objDetectCB(const sensor_msgs::Image::ConstPtr& msg)
@@ -123,13 +132,19 @@ public:
         {
             if (v.size() > 0)
                 ROS_INFO("Num contours %d, max cnt area %f, rect x %d, y %d, h %d, w %d", v.size(), max_cnt_area, best_boundingrect.x, best_boundingrect.y, best_boundingrect.height, best_boundingrect.width);
-            ROS_INFO("Hit rate : %f", (float)hit/total);
+            ROS_INFO("Hit rate : %f, num msgs %d", (float)hit/total, total);
         }
 
         if (do_heavy)
         {
             // call the primes function
             calcPrimes();
+        }
+
+        if(total%800 == 3)
+        {
+            ROS_INFO("Num msgs %d, Msg seq : %d", total, msg->header.seq);
+            print_stats();
         }
 
         if (publish)
@@ -149,30 +164,33 @@ public:
         compute_sum += compute;
         compute_arr.push_back(compute);
 
-        if (total > (num_msgs*98)/100)
+        if (total >= ((num_msgs*98)/100))
         {
             // exit stuff
-            ROS_INFO("Lat img received msg seq %i, #msgs received : %i", msg->header.seq, total);
-
-            // latency
-            int num_lat = latency_arr.size();
-            std::sort(latency_arr.begin(), latency_arr.end());
-            double avg_lat = latency_sum/num_lat;
-            double perc_lat = latency_arr[(95*num_lat)/100];
-            double med_lat = latency_arr[num_lat/2];
-
-            // compute
-            int num_com = compute_arr.size();
-            std::sort(compute_arr.begin(), compute_arr.end());
-            double avg_comp = compute_sum/num_com;
-            double perc_comp = compute_arr[(95*num_com)/100];
-            double med_comp = compute_arr[(95*num_com)/100];
-
-            ROS_INFO("ENDING.... Mean, median, tail Latency : %f %f %f ", avg_lat, med_lat, perc_lat);
-            ROS_INFO("Mean, median, tail Compute time (c2) : %f %f %f ", avg_comp, med_comp, perc_comp);
-
+            ROS_INFO("Last img received msg seq %i, #msgs received : %i", msg->header.seq, total);
+            print_stats();
             ros::shutdown();
         }
+    }
+
+    void print_stats()
+    {
+        // latency
+        int num_lat = latency_arr.size();
+        std::sort(latency_arr.begin(), latency_arr.end());
+        double avg_lat = latency_sum/num_lat;
+        double perc_lat = latency_arr[(95*num_lat)/100];
+        double med_lat = latency_arr[num_lat/2];
+
+        // compute
+        int num_com = compute_arr.size();
+        std::sort(compute_arr.begin(), compute_arr.end());
+        double avg_comp = compute_sum/num_com;
+        double perc_comp = compute_arr[(95*num_com)/100];
+        double med_comp = compute_arr[(95*num_com)/100];
+
+        ROS_INFO("Mean, median, tail Latency at N2: %f %f %f ", avg_lat, med_lat, perc_lat);
+        ROS_INFO("Mean, median, tail Compute time (c2) : %f %f %f ", avg_comp, med_comp, perc_comp);
     }
 
     void calcPrimes()

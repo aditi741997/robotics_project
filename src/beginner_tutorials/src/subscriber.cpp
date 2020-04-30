@@ -112,7 +112,7 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
 
     last_recv_time = recv_time;
 
-    if (msg_count%50 == 1)
+    if (msg_count%100 == 1)
     {
         std::cout << "msg count : " << msg_count << ", msg seq : " << msg->header.seq << std::endl;
     }
