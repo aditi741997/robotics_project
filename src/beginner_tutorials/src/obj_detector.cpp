@@ -8,6 +8,7 @@
 #include "opencv2/highgui/highgui.hpp"
 #include "opencv2/imgproc/imgproc.hpp"
 #include <sstream>
+#include <time.h>
 
 std::string pub_topic = "";
 ros::Publisher roi_pub;
@@ -33,6 +34,8 @@ class ObjDetector
     std::vector<double> latency_arr;
     double compute_sum = 0.0;
     std::vector<double> compute_arr;
+    double compute_rt_sum = 0.0;
+    std::vector<double> compute_rt_arr;
 
 public:
     ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim)
@@ -82,7 +85,8 @@ public:
     {
         double lat = (ros::Time::now() - msg->header.stamp).toSec();
         ros::Time cb_start = ros::Time::now();
-        if (lat > 0)
+        clock_t cb_start_rt = clock();
+	if (lat > 0)
         {
             latency_sum += lat;
             latency_arr.push_back(lat);
@@ -145,7 +149,7 @@ public:
         if (do_heavy)
         {
             // call the primes function
-            calcPrimes();
+            calcPrimes((total%50 == 3));
         }
 
         if(total%800 == 3)
@@ -171,6 +175,10 @@ public:
         compute_sum += compute;
         compute_arr.push_back(compute);
 
+	double compute_rt = (double)(clock() - cb_start_rt)/CLOCKS_PER_SEC;
+	compute_rt_sum += compute_rt;
+	compute_rt_arr.push_back(compute_rt);
+
         if (total >= ((num_msgs*98)/100))
         {
             // exit stuff
@@ -194,13 +202,21 @@ public:
         std::sort(compute_arr.begin(), compute_arr.end());
         double avg_comp = compute_sum/num_com;
         double perc_comp = compute_arr[(95*num_com)/100];
-        double med_comp = compute_arr[(95*num_com)/100];
+        double med_comp = compute_arr[(num_com)/2];
+
+	// compute_rt
+	int num_crt = compute_rt_arr.size();
+	std::sort(compute_rt_arr.begin(), compute_rt_arr.end());
+	double avg_crt = compute_rt_sum/num_crt;
+	double perc_crt = compute_rt_arr[(95*num_crt)/100];
+	double med_crt = compute_rt_arr[num_crt/2];
 
         ROS_INFO("Mean, median, tail Latency at N2: %f %f %f ", avg_lat, med_lat, perc_lat);
         ROS_INFO("Mean, median, tail Compute time (c2) : %f %f %f ", avg_comp, med_comp, perc_comp);
+	ROS_INFO("Mean, median, tail of RT Compute time (c2) : %f %f %f", avg_crt, med_crt, perc_crt);
     }
 
-    void calcPrimes()
+    void calcPrimes(bool y)
     {
         int i, num = 1, primes = 0;
 
@@ -215,6 +231,8 @@ public:
                 primes++;
             num++;
         }
+	if (y)
+	    ROS_INFO("Found %i primes", primes);
     }
 };
 

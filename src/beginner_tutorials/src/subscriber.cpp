@@ -68,7 +68,7 @@ std_msgs::Header hdr;
 double pub_time = 0.0;
 std::vector<double> pub_times;
 
-void calc_primes(int64_t limit)
+void calc_primes(int64_t limit, bool duh)
 {
     int i, num = 1, primes = 0;
 
@@ -83,7 +83,8 @@ void calc_primes(int64_t limit)
             primes++;
         num++;
     }
-    // ROS_INFO("Found %i primes", primes);
+    if (duh)
+        ROS_INFO("Found %i primes", primes);
 }
 
 void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
@@ -121,7 +122,7 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
     {
         // Single heavy function :
         // sieve(limit);
-        calc_primes(limit);
+        calc_primes(limit, (msg_count%80 == 3));
 
         // Adding 2 threads :
         // std::thread t1(sieve, limit);
@@ -273,7 +274,7 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
         ros::Time heavy_start = ros::Time::now();
         // Single heavy function :
         // sieve(limit);
-        calc_primes(limit);
+        calc_primes(limit, (msg_count%800 == 3));
 
         // Adding 2 threads :
         // std::thread t1(sieve, limit);
@@ -415,6 +416,7 @@ int main (int argc, char **argv)
     node_name = argv[10];
 
     ROS_INFO("Init node %s, sub_topic %s, expt %s, num_msgs : %i, ros_rate : %i", node_name.c_str(), argv[11], argv[12], num_msgs, ros_rate);
+    ROS_INFO("Other params : pql %i, sql %i, doheavy %i, limit %i", pub_queue_len, sub_queue_len, do_heavy, limit);
     ros::init(argc, argv, node_name);
     ros::NodeHandle n;
     

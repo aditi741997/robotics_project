@@ -27,6 +27,9 @@ class ObjTracker
     double metric_sum = 0.0;
     std::vector<double> metric_arr;    
 
+    double metric1_sum = 0.0;
+    std::vector<double> metric1_arr;    
+    
     double rxn_time_sum = 0.0;
     std::vector<double> rxn_time_arr;
     double last_in_time = 0.0;
@@ -38,6 +41,9 @@ class ObjTracker
     std::vector<double> tput_arr;
     double last_out_time = 0.0;
 
+    int nz_vel = 0;
+    int not_in_frame = 0;
+    int in_offset = 0;
     int percentile = 95;
 
 public:
@@ -58,6 +64,7 @@ public:
 
     void print_stats()
     {
+	ROS_INFO("tOTAL COUNT %i, Not inf rame %i, NZ vel %i, In thresh %i", cb_count, not_in_frame, nz_vel, in_offset);
         // latency
         print_smt(latency_sum, latency_arr, "N3 latency");
         // tput
@@ -66,6 +73,8 @@ public:
         print_smt(rxn_time_sum, rxn_time_arr, "RxnTime");
         // metric
         print_smt(metric_sum, metric_arr, "Metric");
+	// metric1
+	print_smt(metric1_sum, metric1_arr, "Metric1");
         // cb time
         print_smt(cb_time_sum, cb_time_arr, "N3 CB Time");
     }
@@ -103,6 +112,9 @@ public:
             move_cmd.linear.z = 0.0;
             move_cmd.linear.x = 0.0;
             move_cmd.linear.y = 0.0;
+	    not_in_frame += 1;
+	    metric1_sum += 1.0;
+	    metric1_arr.push_back(1.0);
         }
         else
         {
@@ -120,12 +132,16 @@ public:
             metric_sum += m;
             metric_arr.push_back(m);
 
+	    metric1_sum += m;
+	    metric1_arr.push_back(m);
+
             if (m > x_threshold)
             {
                 float speed = gain*perc_offset_x;
                 int direction = (speed < 0) ? -1 : 1;
                 move_cmd.angular.z = -1 * direction * std::max(min_rotation_speed, std::min(max_rotation_speed, std::abs(speed)));
-            }
+                nz_vel += 1;
+	    }
             else
             {
                 move_cmd.angular.z = 0.0; // check all others are 0 as well
@@ -135,7 +151,8 @@ public:
                 move_cmd.linear.z = 0.0;
                 move_cmd.linear.x = 0.0;
                 move_cmd.linear.y = 0.0;
-            }
+                in_offset += 1;
+	    }
         }
 
         cmd_vel_pub.publish(move_cmd);
@@ -166,7 +183,7 @@ public:
 
         if (cb_count%800 == 151)
         {
-            ROS_INFO("TRacker cb count : %d", cb_count);
+            ROS_INFO("TRacker cb count : %d, max rot speed %f, gain %f", cb_count, max_rotation_speed, gain);
             print_stats();
         }
 
