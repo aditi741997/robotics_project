@@ -122,7 +122,7 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
     {
         // Single heavy function :
         // sieve(limit);
-        calc_primes(limit, (msg_count%80 == 3));
+        calc_primes(limit, (msg_count%100 == 3));
 
         // Adding 2 threads :
         // std::thread t1(sieve, limit);
@@ -470,7 +470,7 @@ int main (int argc, char **argv)
     // creating a thread
     // std::thread t1(thread_func, limit);
     
-    ros::Subscriber sub = n.subscribe("/camera/rgb/image_raw", 1, chatterImgCallBack, ros::TransportHints().tcpNoDelay());
+    ros::Subscriber sub = n.subscribe("/camera/rgb/image_raw", 1, chatterImgCallBack, ros::TransportHints().tcpNoDelay(), true);
     // ros::Subscriber sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay());
     std::cout << "chatter subscribed, about to call spin \n";
     ros::spin();

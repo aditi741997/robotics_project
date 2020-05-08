@@ -57,7 +57,7 @@ public:
         x_threshold = x_thr;
 
         cmd_vel_pub = nh.advertise<geometry_msgs::Twist>(pub_topic, 1);
-        roi_sub = nh.subscribe(sub_topic, 1, &ObjTracker::move_robot, this, ros::TransportHints().tcpNoDelay());
+        roi_sub = nh.subscribe(sub_topic, 1, &ObjTracker::move_robot, this, ros::TransportHints().tcpNoDelay(), true);
 
         std::cout << "Subscribed to roi, about to call ros::spin \n";
     }

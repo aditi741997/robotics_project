@@ -63,7 +63,7 @@ public:
             ros::Duration(1.0).sleep();                    
         }
 
-        img_sub = nh.subscribe(sub_topic, sub_queue_len, &ObjDetector::objDetectCB, this, ros::TransportHints().tcpNoDelay());
+        img_sub = nh.subscribe(sub_topic, sub_queue_len, &ObjDetector::objDetectCB, this, ros::TransportHints().tcpNoDelay(), true);
         std::cout << "Subscribed to images, about to call ros::spin \n";
         // cv::namedWindow(OPENCV_WINDOW);
     }
@@ -175,9 +175,9 @@ public:
         compute_sum += compute;
         compute_arr.push_back(compute);
 
-	double compute_rt = (double)(clock() - cb_start_rt)/CLOCKS_PER_SEC;
-	compute_rt_sum += compute_rt;
-	compute_rt_arr.push_back(compute_rt);
+    	double compute_rt = (double)(clock() - cb_start_rt)/CLOCKS_PER_SEC;
+    	compute_rt_sum += compute_rt;
+    	compute_rt_arr.push_back(compute_rt);
 
         if (total >= ((num_msgs*98)/100))
         {
@@ -204,16 +204,16 @@ public:
         double perc_comp = compute_arr[(95*num_com)/100];
         double med_comp = compute_arr[(num_com)/2];
 
-	// compute_rt
-	int num_crt = compute_rt_arr.size();
-	std::sort(compute_rt_arr.begin(), compute_rt_arr.end());
-	double avg_crt = compute_rt_sum/num_crt;
-	double perc_crt = compute_rt_arr[(95*num_crt)/100];
-	double med_crt = compute_rt_arr[num_crt/2];
+    	// compute_rt
+    	int num_crt = compute_rt_arr.size();
+    	std::sort(compute_rt_arr.begin(), compute_rt_arr.end());
+    	double avg_crt = compute_rt_sum/num_crt;
+    	double perc_crt = compute_rt_arr[(95*num_crt)/100];
+    	double med_crt = compute_rt_arr[num_crt/2];
 
         ROS_INFO("Mean, median, tail Latency at N2: %f %f %f ", avg_lat, med_lat, perc_lat);
         ROS_INFO("Mean, median, tail Compute time (c2) : %f %f %f ", avg_comp, med_comp, perc_comp);
-	ROS_INFO("Mean, median, tail of RT Compute time (c2) : %f %f %f", avg_crt, med_crt, perc_crt);
+    	ROS_INFO("Mean, median, tail of RT Compute time (c2) : %f %f %f", avg_crt, med_crt, perc_crt);
     }
 
     void calcPrimes(bool y)
