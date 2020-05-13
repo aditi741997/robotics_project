@@ -8,6 +8,7 @@
 #include <sys/sysinfo.h>
 #include <vector>
 #include <algorithm>
+#include <time.h>
 
 // For adding a heavy thread :
 // #include <thread>
@@ -53,6 +54,9 @@ std::vector<double> dt_sum;
 double avg_heavy_time = 0.0;
 std::vector<double> heavy_times;
 
+double compute_rt_sum = 0.0;
+std::vector<double> compute_rt_arr;
+
 int percentile = 99;
 
 int64_t limit;
@@ -91,6 +95,7 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
 {
     ros::Time recv_time = ros::Time::now();
     ros::Time heavy_start = ros::Time::now();
+    clock_t cb_start_rt = clock();
 
     double recv_delta = (msg_count == 0) ? 0.0 : (recv_time - last_recv_time).toSec();
     double lat = (recv_time - msg->header.stamp).toSec();
@@ -122,7 +127,7 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
     {
         // Single heavy function :
         // sieve(limit);
-        calc_primes(limit, (msg_count%100 == 3));
+        calc_primes(limit, true);
 
         // Adding 2 threads :
         // std::thread t1(sieve, limit);
@@ -160,8 +165,8 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
     {
         chatter_pub.publish(msg);
     }
-
-    if (msg_count%800 == 3)
+    
+    if (msg_count%800 == 7)
     {
         std::sort(latencies.begin(), latencies.end());
         int num_lat = latencies.size();
@@ -178,10 +183,28 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
         double median_heavy = heavy_times[num_heavy/2];
         double avg_ht = avg_heavy_time/num_heavy;
         std::cout << "Msg seq : " << msg_count << ", c1n_latency : " << percentile_lat << ", " << median_lat << ", " << avg_lat << ", compute time(exc Deserial) : " << perc_heavy << ", " << median_heavy << ", " << avg_ht << ", \n";
+   	
+	int num_crt = compute_rt_arr.size();
+    	std::sort(compute_rt_arr.begin(), compute_rt_arr.end());
+    	double avg_crt = compute_rt_sum/num_crt;
+    	double perc_crt = compute_rt_arr[(95*num_crt)/100];
+    	double med_crt = compute_rt_arr[num_crt/2]; 
+	std::cout << "Msg seq :" << msg_count << "compute time(exc. deserial) : " << perc_crt << ", " << med_crt << ", " << avg_crt << std::endl;
+	
+	int num_tput = op_delta.size();
+	std::sort(op_delta.begin(), op_delta.end());
+	double avg_tput = sum_op_delta/num_tput;
+	double med_tput = op_delta[num_tput/2];
+	double perc_tput = op_delta[(95*num_tput)/100];
+	std::cout << "Msg seq : " << msg_count << " Tput of this node : " << perc_tput << ", " << med_tput << ", " << avg_tput << std::endl;	   
     }
 
     avg_heavy_time += (ros::Time::now() - heavy_start).toSec();
     heavy_times.push_back((ros::Time::now() - heavy_start).toSec());
+
+    double compute_rt = (double)(clock() - cb_start_rt)/CLOCKS_PER_SEC;
+    compute_rt_sum += compute_rt;
+    compute_rt_arr.push_back(compute_rt);
 
     if (msg_count >= ((num_msgs*98)/100))
     {
@@ -256,7 +279,8 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
     double lat = (recv_time - msg->stamp).toSec();
     recv_delta_arr.push_back(recv_delta);
     latencies.push_back(lat);
-    ROS_INFO("sent time : [%f], recv_time : [%f], msg count : %i, msg id : %i", msg->stamp.toSec(), recv_time.toSec(), msg_count, msg->seq);
+    if (msg_count%100 == 5)
+    	ROS_INFO("sent time : [%f], recv_time : [%f], msg count : %i, msg id : %i", msg->stamp.toSec(), recv_time.toSec(), msg_count, msg->seq);
 
     msg_count += 1;
     sum_latency += lat;
@@ -369,8 +393,8 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
         avg_heavy_time /= msg_count;
 
         std::ofstream outfile;
-        outfile.open((expt + "_" + node_name + "_dec25.txt").c_str(), std::ios_base::app);
-        outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", " << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", " << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << avg_heavy_time << ", " << "lost_msgs, " << (msg->seq + 1 - msg_count) << ", " << (msg->seq + 1) << ", c1n_latency, " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", c2, " << perc_heavy << ", " << median_heavy << ", " << avg_heavy_time << ", ";
+        outfile.open((expt + "_" + node_name + "_May.txt").c_str(), std::ios_base::app);
+        outfile << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << ", " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", " << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", rxnTime, " << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << "lost_msgs, " << (msg->seq + 1 - msg_count) << ", " << (msg->seq + 1) << ", c1n_latency, " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", c2, " << perc_heavy << ", " << median_heavy << ", " << avg_heavy_time << ", ";
 	if (to_publish)
 	{
 		outfile << "pub_time, " << pub_times[index] << ", " << pub_times[pub_times.size()/2] << ", " << pub_time/msg_count << ", ";
@@ -426,29 +450,28 @@ int main (int argc, char **argv)
     to_publish = atoi(argv[13]) == 1;
     if (to_publish)
     {
-    	// publish_topic = argv[14];
+/*    	publish_topic = argv[14];
+    	chatter_pub = n.advertise<std_msgs::Header>(publish_topic, sub_queue_len);
+    	 std::stringstream ss;
+             char* message;
+             message = new char[msg_size - 4];
+             memset(message, '0', msg_size - 4);
+             message[msg_size - 4 - 1] = '\0';
+             ss << message;
+    	 hdr.frame_id = ss.str();
+*/
         publish_topic = "/camera1/rgb/image_raw";
     	ROS_INFO("I will publish on %s", (publish_topic + "BLAH").c_str());
-    	// chatter_pub = n.advertise<std_msgs::Header>(publish_topic, sub_queue_len);
         chatter_pub = n.advertise<sensor_msgs::Image>(publish_topic, sub_queue_len);
 
-    	// std::stringstream ss;
-     //        char* message;
-     //        message = new char[msg_size - 4];
-     //        memset(message, '0', msg_size - 4);
-     //        message[msg_size - 4 - 1] = '\0';
-     //        ss << message;
-
-    	// hdr.frame_id = ss.str();
 
     	while (0 == chatter_pub.getNumSubscribers())
     	{
-            ROS_INFO("Waiting for subscribers to connect");
+            ROS_INFO("Subscriber name %s Waiting for subscribers to connect", node_name);
             ros::Duration(0.1).sleep();
         }
         ros::Duration(1.5).sleep();
     }
-    // ros::init(argc, argv, "listener");
 
     /* ros::TransportHints transport_type_ros;
     switch (transport_type)
@@ -470,8 +493,8 @@ int main (int argc, char **argv)
     // creating a thread
     // std::thread t1(thread_func, limit);
     
-    ros::Subscriber sub = n.subscribe("/camera/rgb/image_raw", 1, chatterImgCallBack, ros::TransportHints().tcpNoDelay(), true);
-    // ros::Subscriber sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay());
+   ros::Subscriber sub = n.subscribe("/camera/rgb/image_raw", 1, chatterImgCallBack, ros::TransportHints().tcpNoDelay(), true);
+    //  ros::Subscriber sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay());
     std::cout << "chatter subscribed, about to call spin \n";
     ros::spin();
 

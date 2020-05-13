@@ -69,7 +69,6 @@ void GazeboRosCameraUtils::configCallback(
     this->update_period_ = 1.0/config.camera_update_rate;
     this->update_rate_  = config.camera_update_rate;
     ROS_INFO_NAMED("gazebo_ros_camera_utils", "Reconfigure of camera_update_rate successful. update period : %f, update_rate : %f, current imager_Rate : %f", this->update_period_, this->update_rate_, this->parentSensor_->UpdateRate());
-
     ROS_INFO_NAMED("camera_utils", "Reconfigure request for the gazebo ros camera_: %s. New rate: %.2f",
              this->camera_name_.c_str(), config.imager_rate);
     this->parentSensor_->SetUpdateRate(config.imager_rate);
@@ -80,19 +79,11 @@ void GazeboRosCameraUtils::configCallback(
 // Destructor
 GazeboRosCameraUtils::~GazeboRosCameraUtils()
 {
-  std::cout << "In GazeboRosCameraUtils destructor!" << std::endl;
   this->parentSensor_->SetActive(false);
   this->rosnode_->shutdown();
   this->camera_queue_.clear();
   this->camera_queue_.disable();
   this->callback_queue_thread_.join();
-  // std::ofstream cam_seq_file;
-  // cam_seq_file.open("/home/aditi/catkin_ws/Apr_Cam_RT_Logs/DefaultBuf_cppLat_c1_CamLogs_" + std::to_string((int)(this->update_rate_)) + ".out");
-  // for (int i = 0; i < this->seq_time_arr.size(); i++)
-  // {
-  //   cam_seq_file << this->seq_time_arr[i];
-  // }
-  // cam_seq_file.close();
   delete this->rosnode_;
 }
 
@@ -267,7 +258,6 @@ void GazeboRosCameraUtils::Load(sensors::SensorPtr _parent,
   // ros callback queue for processing subscription
   this->deferred_load_thread_ = boost::thread(
     boost::bind(&GazeboRosCameraUtils::LoadThread, this));
-
   std::cout << "Inside gz ros camera utils LOAD, img topic name : " << this->image_topic_name_ << ", cam name : " << this->camera_name_ << ", update rate : " << this->update_rate_ << std::endl;
 }
 
@@ -431,7 +421,7 @@ void GazeboRosCameraUtils::ImageDisconnect()
   boost::mutex::scoped_lock lock(*this->image_connect_count_lock_);
 
   (*this->image_connect_count_)--;
-  std::cout << "Image ImageDisconnect!! in gazebo_ros_camera_utils" << std::endl;
+
   // if there are no more subscribers, but camera was active to begin with,
   // leave it active.  Use case:  this could be a multicamera, where
   // each camera shares the same parentSensor_.
@@ -612,26 +602,26 @@ void GazeboRosCameraUtils::Init()
   this->callback_queue_thread_ = boost::thread(
     boost::bind(&GazeboRosCameraUtils::CameraQueueThread, this));
 
+  load_event_();
+  this->initialized_ = true;
+
   this->last_img_pub = 0.0;
   this->img_pub_freq_sum = 0.0;
   std::cout << "In gz ros camera utils Init(), update_period_ : " << this->update_period_ << std::endl;
 
-  load_event_();
-  this->initialized_ = true;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 // Put camera_ data to the interface
 void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src,
-  common::Time &last_update_time, double last_update_realtime)
+  common::Time &last_update_time)
 {
   this->sensor_update_time_ = last_update_time;
-  this->PutCameraData(_src, last_update_realtime);
+  this->PutCameraData(_src);
 }
 
-void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src, double last_update_realtime)
+void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src)
 {
-  // std::cout << "GazeboRosCameraUtils::PutCameraData CALLED" << std::endl;
   if (!this->initialized_ || this->height_ <=0 || this->width_ <=0)
     return;
 
@@ -641,7 +631,6 @@ void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src, double last_
     boost::mutex::scoped_lock lock(this->lock_);
 
     // copy data into image
-    this->image_msg_.header.seq = this->img_pub_count;
     this->image_msg_.header.frame_id = this->frame_name_;
     this->image_msg_.header.stamp.sec = this->sensor_update_time_.sec;
     this->image_msg_.header.stamp.nsec = this->sensor_update_time_.nsec;
@@ -651,25 +640,24 @@ void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src, double last_
         this->skip_*this->width_, reinterpret_cast<const void*>(_src));
 
     // publish to ros
-    // std::cout << "About to publish now, msg time stamp : " << this->sensor_update_time_ << ", current time stamp : " << ros::Time::now() << std::endl;
+    this->image_pub_.publish(this->image_msg_);
     double d = (ros::Time::now().toSec() - this->last_img_pub);
 
-    this->last_img_pub = ros::Time::now().toSec();
-
-    this->seq_time_arr.push_back("" + std::to_string(this->img_pub_count) + " " + std::to_string(this->sensor_update_time_.Double()) + " " + std::to_string(last_update_realtime) + "\n");
-    this->image_pub_.publish(this->image_msg_);
-    this->img_pub_count += 1;
-
-    if (d < 0.5)
+    if ((this->last_img_pub > 0.0) && (d < 0.5) && (d > 0.0))
     {
-      this->img_pub_freq.push_back(d);
+	this->img_pub_freq.push_back(d);
       this->img_pub_freq_sum += d;
     }
 
+    this->last_img_pub = ros::Time::now().toSec();
+
+    this->img_pub_count += 1;
+
     if (this->img_pub_count%200 == 3)
     {
-      std::cout << "Mean pub rate at gz ros util : " << this->img_pub_freq_sum/this->img_pub_count << ", rows:" << this->height_ << ", cols : " << this->width_ << ", step : " << this->skip_*this->width_ << ", first char : " << this->image_msg_.data[0] << std::endl;
-      // std::cout << "Message Size : " << (this->image_msg_.data) << "," << std::endl;
+	std::sort(this->img_pub_freq.begin(), this->img_pub_freq.end());
+	int ipfc = this->img_pub_freq.size();
+      std::cout << "Mean Median Tail of pub rate at gz ros util : " << this->img_pub_freq_sum/this->img_pub_count << ", " << this->img_pub_freq[ipfc/2] << ", " << this->img_pub_freq[(95*ipfc)/100] << ", rows:" << this->height_ << ", cols : " << this->width_ << ", step : " << this->skip_*this->width_ << std::endl;
     }
   }
 }

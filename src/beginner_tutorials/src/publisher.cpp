@@ -67,6 +67,7 @@ public:
 
 	void publishMsg(const ros::TimerEvent& event)
 	{
+		ros::Time cb_s = ros::Time::now();
 		msg.seq = sent_count;
 		msg.stamp = ros::Time::now();
 		execute(limit);
@@ -76,8 +77,17 @@ public:
 		if (sent_count == num_msgs)
 		{
 			ROS_INFO("All msgs published, Shutting down!");
+			int num_cb = cb_arr.size();
+			double cb_avg = cb_sum/num_cb;
+			std::sort(cb_arr.begin(), cb_arr.end());
+			double cb_med = cb_arr[num_cb/2];
+			double cb_tail = cb_arr[(95*num_cb)/100];
+			ROS_INFO("c1 compute time : mean median tail %f %f %f", cb_avg, cb_med, cb_tail);
 			ros::shutdown();
 		}
+		double cb = (ros::Time::now() - cb_s).toSec();
+		cb_sum += cb;
+		cb_arr.push_back(cb);
 	}
 private:
 	int msg_size;
@@ -89,7 +99,8 @@ private:
 	std::string topic;
 	std_msgs::Header msg;
 	ros::Publisher chatter_pub;
-
+	double cb_sum;
+	std::vector<double> cb_arr;
 	void initMessage()
 	{
 		std::stringstream ss;
@@ -118,7 +129,8 @@ int main (int argc, char **argv)
     int64_t limit = atoi(argv[5]);
     int sub_count = atoi(argv[7]);
     std::string node_name = argv[8];
-    std::string topic = "/camera1/image_raw";
+//    std::string topic = "/camera1/image_raw";
+    std::string topic = "chatter";
     ROS_INFO("Starting publisher with node name %s, topic %s", node_name.c_str(), topic.c_str());
 
     ros::init(argc, argv, node_name);

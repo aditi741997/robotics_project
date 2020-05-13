@@ -88,6 +88,7 @@ public:
             double avg = m_sum/l;
             double med = m_arr[l/2];
             double perc = m_arr[(l*percentile)/100];
+	    ROS_INFO("Array count : %i", l);
             ROS_INFO("Mean, median, tail of %s is %f %f %f #", m.c_str(), avg, med, perc);            
         }
     }
