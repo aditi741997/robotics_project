@@ -37,7 +37,14 @@ class ObjTracker
     double latency_sum = 0.0;
     std::vector<double> latency_arr;
 
-    double tput_sum = 0.0;
+     double td_latency_sum = 0.0;
+    std::vector<double> td_latency_arr;
+
+     double td_rxn_time_sum = 0.0;
+    std::vector<double> td_rxn_time_arr;
+    double td_last_in_time = 0.0;
+
+  double tput_sum = 0.0;
     std::vector<double> tput_arr;
     double last_out_time = 0.0;
 
@@ -77,6 +84,10 @@ public:
 	print_smt(metric1_sum, metric1_arr, "Metric1");
         // cb time
         print_smt(cb_time_sum, cb_time_arr, "N3 CB Time");
+    	// N3Lat w.r.t. TDNode
+	print_smt(td_latency_sum, td_latency_arr, "N3 Lat w.r.t. TDNode");
+	// TDrxnTime
+	print_smt(td_rxn_time_sum, td_rxn_time_arr, "RxnTm w.r.t. TDNode");
     }
 
     void print_smt(double m_sum, std::vector<double> m_arr, std::string m)
@@ -88,7 +99,6 @@ public:
             double avg = m_sum/l;
             double med = m_arr[l/2];
             double perc = m_arr[(l*percentile)/100];
-	    ROS_INFO("Array count : %i", l);
             ROS_INFO("Mean, median, tail of %s is %f %f %f #", m.c_str(), avg, med, perc);            
         }
     }
@@ -103,6 +113,9 @@ public:
         ss >> y_offset;
         ss >> width;
         ss >> height;
+
+	double td_ts;
+	ss >> td_ts;
 
         if ((width == 0) || (height == 0))
         {
@@ -164,6 +177,10 @@ public:
             latency_sum += lat;
             latency_arr.push_back(lat);
 
+	    float td_lat = ros::Time::now().toSec() - td_ts;
+	    td_latency_sum += td_lat;
+	    td_latency_arr.push_back(td_lat);
+
             if (last_out_time > 0.0)
             {
                 double tput = ros::Time::now().toSec() - last_out_time;
@@ -177,14 +194,23 @@ public:
                 rxn_time_sum += rxn_time;
                 rxn_time_arr.push_back(rxn_time);
             }
+
+            if (td_last_in_time > 0.0)
+            {
+                double td_rxn_time = ros::Time::now().toSec() - td_last_in_time;
+                td_rxn_time_sum += td_rxn_time;
+                td_rxn_time_arr.push_back(td_rxn_time);
+            }
+
+
         }
 
         last_out_time = ros::Time::now().toSec();
         last_in_time = msg->stamp.toSec();
-
+	td_last_in_time = td_ts;
         if (cb_count%800 == 151)
         {
-            ROS_INFO("TRacker cb count : %d, max rot speed %f, gain %f", cb_count, max_rotation_speed, gain);
+            ROS_INFO("TRacker cb count : %d, max rot speed %f, gain %f, TD TS %f, msg->frame %s", cb_count, max_rotation_speed, gain, td_ts, msg->frame_id.c_str());
             print_stats();
         }
 

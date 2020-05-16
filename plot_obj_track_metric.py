@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import math
 
-farr = [10, 15, 20, 25, 30, 35, 50, 80]
+farr = [10, 15, 20, 25, 30, 33, 38, 45, 55, 67, 80, 100]
 # farr = [12, 20, 28, 36, 44, 52, 60, 70, 80, 90, 100, 130]
 
 pre = ''
@@ -37,6 +37,8 @@ def read_actual_metric_file(fname):
                 t_theta = 2*math.atan(ts/tc)
 		t_theta1 = math.atan(ty/3.0)
                 arr_m2.append(abs(t_theta1 - h_theta))
+		#if i%500 == 3:
+		    #print i, hpp, hy, tc, ts, ty, arr_m2[-1]
             except:
                 print "ERRORRR!! ", hpp
     sarr = sorted(arr_m1)
@@ -117,6 +119,14 @@ if __name__ == '__main__':
         med_tput = [0.0 for x in farr]
         mean_tput = [0.0 for x in farr]
 
+        td_perc_lat =  [0.0 for x in farr]
+        td_med_lat = [0.0 for x in farr]
+        td_mean_lat = [0.0 for x in farr]
+
+        td_perc_rxn = [0.0 for x in farr]
+        td_med_rxn = [0.0 for x in farr]
+        td_mean_rxn = [0.0 for x in farr]
+
         for f in farr:
             # read tracker log to find metric vals.
             with open(pre + '_tracker_node_' + str(f) + str(t) + '.out', 'r') as fil:
@@ -161,6 +171,15 @@ if __name__ == '__main__':
 			    mean_newm1[ind[f]] = float(larr[10])
 			    med_newm1[ind[f]] = float(larr[11])
 			    perc_newm1[ind[f]] = float(larr[12])
+			elif "N3 Lat w.r.t. TDNode" in l:
+			    td_mean_lat[ind[f]] = float(larr[13])
+                            td_med_lat[ind[f]] = float(larr[14])
+                            td_perc_lat[ind[f]] = float(larr[15])
+			elif "RxnTm w.r.t." in l:
+			    td_mean_rxn[ind[f]] = float(larr[12])
+                            td_med_rxn[ind[f]] = float(larr[13])
+                            td_perc_rxn[ind[f]] = float(larr[14])
+
             #m_rxn_ratio[ind[f]] = med_m[ind[f]]/(med_rxn[ind[f]]*med_rxn[ind[f]])
             
             # read new_perf files for m1, m2 :
@@ -171,7 +190,6 @@ if __name__ == '__main__':
 	abs_deg_arr.append(perc_m1)
 
         print new_farr
-	'''
         p1 = plt.plot(new_farr, perc_m, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, med_m, 'g.:', label='Median')
         plt.plot(new_farr, mean_m, 'b*--', label='Mean')
@@ -202,7 +220,17 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        # plt.plot(new_farr, m_rxn_ratio, 'g*:', label='Ratio')
+        p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, td_med_rxn, 'g.:', label='Median')
+        plt.plot(new_farr, td_mean_rxn, 'b*--', label='Mean')
+        plt.title('TD RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('RxnTime')
+        plt.ylim(0, 0.25)
+        plt.legend()
+        plt.show()
+
+	# plt.plot(new_farr, m_rxn_ratio, 'g*:', label='Ratio')
         # plt.title('Ratio of Median metric to median rxn time at c1 : %s'%(sys.argv[4]))
         # plt.xlabel('Publisher Frequency')
         # plt.ylabel('Ratio')
@@ -217,7 +245,17 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        p2 = plt.plot(new_farr, perc_tput, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        p2 = plt.plot(new_farr, td_perc_lat, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, td_med_lat, 'g.:', label='Median')
+        plt.plot(new_farr, td_mean_lat, 'b*--', label='Mean')
+        plt.title('TD Latency at displacement time : %f, %s'%(t, sys.argv[4]))
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('Latency')
+        plt.ylim(0, 0.2)
+        plt.legend()
+        plt.show()
+
+	p2 = plt.plot(new_farr, perc_tput, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, med_tput, 'g.:', label='Median')
         plt.plot(new_farr, mean_tput, 'b*--', label='Mean')
         plt.title('Tput at displacement time : %f, %s'%(t, sys.argv[4]))
@@ -226,6 +264,8 @@ if __name__ == '__main__':
         plt.ylim(0, 0.14)
         plt.legend()
         plt.show()
+
+	'''
         x = zip(med_rxn, med_m)
         x.sort()
         print x
@@ -249,7 +289,7 @@ if __name__ == '__main__':
         plt.ylabel('Median Metric')
         plt.xlim(0, 0.25)
         plt.show()
-
+	'''
         p1 = plt.plot(new_farr, perc_m1, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, med_m1, 'g.:', label='Median')
         plt.plot(new_farr, mean_m1, 'b*--', label='Mean')
@@ -270,7 +310,6 @@ if __name__ == '__main__':
 	plt.legend()
         plt.show()
 
-	'''
         #rel_perf_tail_improv_wrt_low_freq.append(perc_m[ind[10]]/perc_m[ind[opt_freq]])
         # abs_perf_tail_improv_wrt_low_freq.append(perc_m1[ind[10]]/perc_m1[ind[opt_freq]])
 

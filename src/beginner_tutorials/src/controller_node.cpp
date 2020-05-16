@@ -81,7 +81,7 @@ public:
         freq_threshold = thresh;
 
         // v1 : read stats from file
-        std::ifstream cb_stats_file("/home/aditi/catkin_ws/cb_stats_file.txt");
+        std::ifstream cb_stats_file("/home/ubuntu/catkin_ws/obj_track_cb_stats_file.txt");
         std::string line;
         while (std::getline(cb_stats_file, line))
         {

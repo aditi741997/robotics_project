@@ -72,6 +72,9 @@ std_msgs::Header hdr;
 double pub_time = 0.0;
 std::vector<double> pub_times;
 
+double td_latency_sum = 0.0;
+std::vector<double> td_latency_arr;
+
 void calc_primes(int64_t limit, bool duh)
 {
     int i, num = 1, primes = 0;
@@ -91,6 +94,19 @@ void calc_primes(int64_t limit, bool duh)
         ROS_INFO("Found %i primes", primes);
 }
 
+void print_smt(double m_sum, std::vector<double> m_arr, std::string m)
+    {
+        int l = m_arr.size();
+        if (l > 0)
+        {
+            std::sort(m_arr.begin(), m_arr.end());
+            double avg = m_sum/l;
+            double med = m_arr[l/2];
+            double perc = m_arr[(l*percentile)/100];
+            ROS_INFO("Mean, median, tail of %s is %f %f %f #", m.c_str(), avg, med, perc);            
+        }
+    }
+
 void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
 {
     ros::Time recv_time = ros::Time::now();
@@ -100,6 +116,14 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
     double recv_delta = (msg_count == 0) ? 0.0 : (recv_time - last_recv_time).toSec();
     double lat = (recv_time - msg->header.stamp).toSec();
     recv_delta_arr.push_back(recv_delta);
+
+    // compute latency w.r.t. TD publishing node
+    std::stringstream ss;
+    ss << msg->header.frame_id;
+    std::string frame_name;
+    double td_ts;
+    double td_lat = 0.0;
+    ss >> frame_name >> td_ts;
 
     if (lat < 0)
     {
@@ -111,6 +135,10 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
         latencies.push_back(lat);
         sum_latency += lat;
         sum_latency_sq += lat * lat;
+
+	td_lat = ros::Time::now().toSec() - td_ts;
+	td_latency_sum += td_lat;
+	td_latency_arr.push_back(td_lat);
     }
 
     msg_count += 1;
@@ -120,7 +148,7 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
 
     if (msg_count%100 == 1)
     {
-        std::cout << "msg count : " << msg_count << ", msg seq : " << msg->header.seq << std::endl;
+	ROS_INFO("msg count %i, msg seq %i, msg hdr.frame %s, td_ts %f, td_lat %f", msg_count, msg->header.seq, msg->header.frame_id.c_str(), td_ts, td_lat);
     }
 
     if (do_heavy)
@@ -197,6 +225,8 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
 	double med_tput = op_delta[num_tput/2];
 	double perc_tput = op_delta[(95*num_tput)/100];
 	std::cout << "Msg seq : " << msg_count << " Tput of this node : " << perc_tput << ", " << med_tput << ", " << avg_tput << std::endl;	   
+    	
+	print_smt(td_latency_sum, td_latency_arr, "Latency w.r.t. TDNode");
     }
 
     avg_heavy_time += (ros::Time::now() - heavy_start).toSec();
@@ -258,8 +288,7 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
         // used_ram /= msg_count;std::to_string(sub_id) + 
         avg_heavy_time = avg_heavy_time/(heavy_times.size());
 
-        // std::ofstream outfile;
-        // outfile.open((expt + "_" + node_name + "_dec25.txt").c_str(), std::ios_base::app);
+	print_smt(td_latency_sum, td_latency_arr, "Latency w.r.t. TDNode");
         std::cout << msg_size << ", " << pub_queue_len << ", " << num_msgs << ", " << sub_queue_len << ", " << ros_rate << ", " << transport_type << ", " << do_heavy << std::endl;
         std::cout << "Latency+c1 : " << perc_total_delay << ", " << median_total_delay << ", " << mean_total_delay << ", tput:" << perc_op_delta << ", " << median_op_delta << ", " << mean_op_delta << ", rxnTime:" << perc_dt_sum << ", " << median_dt_sum << ", " << mean_dt_sum << ", " << avg_heavy_time << ", " << "lost_msgs, " << (msg->header.seq + 1 - msg_count) << ", " << (msg->header.seq + 1) << std::endl;
         std::cout << "c1n_latency : " << percentile_lat << ", " << median_lat << ", " << sum_latency << ", compute time(exc Deserial) :, " << perc_heavy << ", " << median_heavy << ", " << avg_heavy_time << ", \n";

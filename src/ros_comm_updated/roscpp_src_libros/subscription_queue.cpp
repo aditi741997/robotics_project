@@ -42,10 +42,9 @@ SubscriptionQueue::SubscriptionQueue(const std::string& topic, int32_t queue_siz
 {
   // long term stats : Not needed in v1
   total_count = 0;
-  max_count = 50000;
+  max_count = 5000;
 
   sum_cb_time = 0.0;
-  arr_cb_time = std::vector<double> (max_count, 0.0); // we will write new time at count%L
   mean_cb = 0.0;
   med_cb = 0.0;
   tail_cb = 0.0;
@@ -54,7 +53,7 @@ SubscriptionQueue::SubscriptionQueue(const std::string& topic, int32_t queue_siz
   max_count_L = 50; // current cb time window size
 
   sum_cb_L = 0.0;
-  arr_cb_L = std::vector<double> (max_count_L, 0.0);
+  arr_cb_L = std::vector<double> (max_count_L, 0.0); // we will write new time at total_count%max_count_L
   mean_cb_L = 0.0;
   med_cb_L = 0.0;
   tail_cb_L = 0.0;
@@ -67,15 +66,17 @@ SubscriptionQueue::SubscriptionQueue(const std::string& topic, int32_t queue_siz
 
   // Params of the algorithm
   max_pub_freq = 20; // max freq at which this node can publish its cb time stats
-  cb_threshold = 0.1; // min. %age difference in stats to be published.
+  cb_threshold = 0.13; // min. %age difference in stats to be published.
   
   ROS_INFO("Made subscription queue! Publisher topic %s, publish? %i", cb_time_topic.c_str(), publish_cb_time);
 
   // v1 : using offline-computed estimate of mean,med,tail cb for now.
   if (publish_cb_time)
   {
-    // TODO:read current stats from file...
-    std::ifstream cb_stats_file("/home/aditi/catkin_ws/cb_stats_file.txt");
+    cb_eval_durn = 60.0;
+    cb_eval_init = false;
+    // read current stats from file...
+    std::ifstream cb_stats_file("/home/ubuntu/catkin_ws/obj_track_cb_stats_file.txt");
     std::string line;
     while (std::getline(cb_stats_file, line))
     {
@@ -91,7 +92,7 @@ SubscriptionQueue::SubscriptionQueue(const std::string& topic, int32_t queue_siz
       }
     }
 
-    ROS_INFO("Found cb time stats : mean med tail : %f %f %f", mean_cb, med_cb, tail_cb);
+    ROS_INFO("Found cb time stats : mean med tail : %f %f %f, cb_eval_start_time is %f", mean_cb, med_cb, tail_cb, cb_eval_start_time);
   }
 }
 
@@ -157,6 +158,12 @@ CallbackInterface::CallResult SubscriptionQueue::call()
 {
   // The callback may result in our own destruction.  Therefore, we may need to keep a reference to ourselves
   // that outlasts the scoped_try_lock
+  if (!cb_eval_init)
+  {
+    cb_eval_init = true;
+    cb_eval_start_time = ros::Time::now().toSec();
+    ROS_INFO("cb_eval_start_time is now %f", cb_eval_start_time);
+  }
   ros::Time call_start = ros::Time::now();
   boost::shared_ptr<SubscriptionQueue> self;
   boost::recursive_mutex::scoped_try_lock lock(callback_mutex_, boost::defer_lock);
@@ -233,6 +240,29 @@ CallbackInterface::CallResult SubscriptionQueue::call()
     
     total_count += 1;
 
+    if ((ros::Time::now().toSec() - cb_eval_start_time) < cb_eval_durn)
+    {
+	sum_cb_time += cb_time;
+	arr_cb_time.push_back(cb_time);
+
+	if (total_count%100 == 51)
+	{
+		std::sort(arr_cb_time.begin(), arr_cb_time.end());
+		med_cb = arr_cb_time[arr_cb_time.size()/2];
+		ROS_INFO("Publishing! total_count : %i, cb_eval_start_time %f, cb_eval_durn %f", total_count, cb_eval_start_time, cb_eval_durn);	
+		// publish current cb time stats. 
+		std_msgs::Header h;
+        	h.stamp = ros::Time::now();
+        	std::stringstream ss;
+        	ss << cb_time_pub.getTopic() << " E ";
+        	ss << med_cb;
+        	h.frame_id = ss.str();
+        	// ROS_INFO("About to publish!");
+        	cb_time_pub.publish(h);
+	}
+    }
+    else
+    {
     if (total_count >= max_count_L)
     {
 
@@ -249,7 +279,7 @@ CallbackInterface::CallResult SubscriptionQueue::call()
       // If current stats are quite different than expected 
       // AND time since last pub >= 1.0/max_pub_freq, then publish
       // v1 : using median
-      if ( ( ( med_cb_L >= ((1.0+cb_threshold)*med_cb) ) || ( (med_cb_L) <= ((1.0-cb_threshold)*med_cb) ) ) && ( (ros::Time::now().toSec() - last_pub_time) >= (1.0/max_pub_freq) ) )
+      if ( ( ( med_cb_L > ((1.0+cb_threshold)*med_cb) ) || ( (med_cb_L) < ((1.0-cb_threshold)*med_cb) ) ) && ( (ros::Time::now().toSec() - last_pub_time) >= (1.0/max_pub_freq) ) )
       {
         // publish!
         // v1 : only publish the short term median CBTime
@@ -257,10 +287,9 @@ CallbackInterface::CallResult SubscriptionQueue::call()
         h.seq = num_publish;
         h.stamp = ros::Time::now();
         std::stringstream ss;
-        ss << cb_time_pub.getTopic() << ' ';
+        ss << cb_time_pub.getTopic() << " L ";
         ss << med_cb_L;
         h.frame_id = ss.str();
-
         // ROS_INFO("About to publish!");
         cb_time_pub.publish(h);
 
@@ -269,7 +298,10 @@ CallbackInterface::CallResult SubscriptionQueue::call()
         last_pub_time = ros::Time::now().toSec();
       }
     } 
-  }
+ 
+    }
+
+ }
 
   return CallbackInterface::Success;
 }

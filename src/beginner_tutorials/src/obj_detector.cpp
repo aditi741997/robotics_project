@@ -39,6 +39,9 @@ class ObjDetector
     double tput_sum = 0.0;
     std::vector<double> tput_arr;
     double last_pub_time = 0.0;
+
+    double td_latency_sum;
+    std::vector<double> td_latency_arr; 
 public:
     ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim)
     {
@@ -83,15 +86,35 @@ public:
         return ss.str();
     }
 
-    void objDetectCB(const sensor_msgs::Image::ConstPtr& msg)
+     std::string get_string_d(double x)
+    {
+        std::stringstream ss;
+        ss << x;
+        return ss.str();
+    }
+
+   void objDetectCB(const sensor_msgs::Image::ConstPtr& msg)
     {
         double lat = (ros::Time::now() - msg->header.stamp).toSec();
         ros::Time cb_start = ros::Time::now();
         clock_t cb_start_rt = clock();
+
+	 // compute latency w.r.t. TD publishing node
+    std::stringstream ss;
+    ss << msg->header.frame_id;
+    std::string frame_name;
+    double td_ts;
+    double td_lat = 0.0;
+    ss >> frame_name >> td_ts;
+
 	if (lat > 0)
         {
             latency_sum += lat;
             latency_arr.push_back(lat);
+
+	    td_lat = ros::Time::now().toSec() - td_ts;
+            td_latency_sum += td_lat;
+            td_latency_arr.push_back(td_lat);
         }
         else
             ROS_INFO("Negative latency! %f, %d, ros time : %f", lat, msg->header.seq, ros::Time::now().toSec());
@@ -170,6 +193,7 @@ public:
             else
                 hdr.frame_id = "0 0 0 0";
 
+	    hdr.frame_id += " " + get_string_d(td_ts);
             roi_pub.publish(hdr);
         }
 
@@ -225,6 +249,7 @@ public:
         ROS_INFO("Mean, median, tail Compute time (c2) : %f %f %f ", avg_comp, med_comp, perc_comp);
 	ROS_INFO("Mean, median, tail of RT Compute time (c2) : %f %f %f", avg_crt, med_crt, perc_crt);
 	print_arr(tput_sum, tput_arr, "N2 Tput");
+	print_arr(td_latency_sum, td_latency_arr, "Lat at N2 w.r.t. TD node");
     }
 
 

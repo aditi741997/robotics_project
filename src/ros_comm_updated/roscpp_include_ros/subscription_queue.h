@@ -85,6 +85,10 @@ public:
   bool full();
 
   // store stats since t=0
+  double cb_eval_start_time;
+  double cb_eval_durn;
+  bool cb_eval_init;
+
   double sum_cb_time;
   std::vector<double> arr_cb_time;
   double mean_cb, med_cb, tail_cb;

@@ -3,7 +3,7 @@ import os
 import matplotlib.pyplot as plt
 import math
 
-farr = [10, 15, 20, 25, 30, 35, 40, 45, 50, 70]
+farr = [10, 15, 20, 25, 30, 33, 38, 45, 55, 67, 80, 100]
 # farr = [12, 20, 28, 36, 44, 52, 60, 70, 80, 90, 100, 130]
 
 pre = ''
@@ -29,7 +29,7 @@ if __name__ == '__main__':
         ci = ci_264kb
     else:
         ci = newc
-    t=8
+    t=int(sys.argv[6])
     for c1 in ci.keys():
         print "Starting ", c1
         if c1 == "" and sys.argv[4] == "1mb":
@@ -52,6 +52,10 @@ if __name__ == '__main__':
         real_perc_lat =  [0.0 for x in farr]
         real_med_lat = [0.0 for x in farr]
         real_mean_lat = [0.0 for x in farr]
+	
+	td_perc_lat = [0.0 for x in farr]
+	td_med_lat = [0.0 for x in farr]
+	td_mean_lat = [0.0 for x in farr]
 
         new_farr = [0.0 for x in farr]
         print farr
@@ -80,6 +84,10 @@ if __name__ == '__main__':
                                 perc_lat[ind[f]] = float(larr[6][:-1])
                                 med_lat[ind[f]] = float(larr[7][:-1])
                                 mean_lat[ind[f]] = float(larr[8][:-1])
+			elif "Latency w.r.t. TDNode" in l:
+				td_perc_lat[ind[f]] = float(larr[12])
+				td_med_lat[ind[f]] = float(larr[13])
+				td_mean_lat[ind[f]] = float(larr[14])
                     else:
                         if 'latency of msg arrival at N1' in l:
                             perc_lat[ind[f]] = float(larr[14][:-2])
@@ -132,11 +140,20 @@ if __name__ == '__main__':
         plt.title('Mean, 9%iile Latency (gz->%s) c1=%dms, %s'%(x, s, ci[c1], pre1))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('Latency')
-        plt.ylim(0, 0.06)
+        plt.ylim(0, 0.095)
         plt.legend()
         plt.show()
 
-        plt.plot(new_farr, real_perc_lat, 'ro-', label='9%iile'%x)
+        plt.plot(new_farr, td_perc_lat, 'ro-', label='9%iile'%x)
+        plt.plot(new_farr, td_mean_lat, 'b.--', label='mean')
+        plt.plot(new_farr, td_med_lat, 'g*:', label='Median')
+        plt.title('Mean, 9%iile Latency w.r.t. TDNode (gz->%s) c1=%dms, %s'%(x, s, ci[c1], pre1))
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('Latency wrt TD')
+        plt.legend()
+        plt.show()
+
+	plt.plot(new_farr, real_perc_lat, 'ro-', label='9%iile'%x)
         plt.plot(new_farr, real_mean_lat, 'b.--', label='mean')
         plt.plot(new_farr, real_med_lat, 'g*:', label='Median')
         plt.title('Mean, 9%iile RealTime Latency (gz->%s) c1=%dms, %s'%(x, s, ci[c1], pre1))
