@@ -29,6 +29,8 @@
 #include "ros/subscription_queue.h"
 #include "ros/message_deserializer.h"
 #include "ros/subscription_callback_helper.h"
+#include <bits/stdc++.h>
+#include <sys/time.h>
 
 namespace ros
 {
@@ -66,7 +68,7 @@ SubscriptionQueue::SubscriptionQueue(const std::string& topic, int32_t queue_siz
 
   // Params of the algorithm
   max_pub_freq = 20; // max freq at which this node can publish its cb time stats
-  cb_threshold = 0.13; // min. %age difference in stats to be published.
+  cb_threshold = 0.05; // min. %age difference in stats to be published.
   
   ROS_INFO("Made subscription queue! Publisher topic %s, publish? %i", cb_time_topic.c_str(), publish_cb_time);
 
@@ -165,6 +167,8 @@ CallbackInterface::CallResult SubscriptionQueue::call()
     ROS_INFO("cb_eval_start_time is now %f", cb_eval_start_time);
   }
   ros::Time call_start = ros::Time::now();
+  clock_t call_start_real = clock();
+
   boost::shared_ptr<SubscriptionQueue> self;
   boost::recursive_mutex::scoped_try_lock lock(callback_mutex_, boost::defer_lock);
 
@@ -226,7 +230,8 @@ CallbackInterface::CallResult SubscriptionQueue::call()
     i.helper->call(params);
   }
 
-  double cb_time = (ros::Time::now() - call_start).toSec();
+ // double cb_time = (ros::Time::now() - call_start).toSec();
+  double cb_time = (double)(clock() - call_start_real)/CLOCKS_PER_SEC;
 
   if (publish_cb_time)
   {
@@ -274,7 +279,7 @@ CallbackInterface::CallResult SubscriptionQueue::call()
       tail_cb_L = sorted_cb_times_L[(95*max_count_L)/100];
 
       if (total_count%500 == 3)
-        ROS_INFO("Window sz : %i, total_count %i, num_publish %i, mean med tail : %f %f %f", max_count_L, total_count, num_publish, mean_cb_L, med_cb_L, tail_cb_L);
+        ROS_INFO("Window sz : %i, total_count %i, num_publish %i, mean med tail : %f %f %f, Current med_cb %f", max_count_L, total_count, num_publish, mean_cb_L, med_cb_L, tail_cb_L, med_cb);
       
       // If current stats are quite different than expected 
       // AND time since last pub >= 1.0/max_pub_freq, then publish

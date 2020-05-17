@@ -686,6 +686,10 @@ void GazeboRosCameraUtils::PublishCameraImg(const ros::TimerEvent& event)
       double curr_time = ros::Time::now().toSec();
       std::stringstream ss;
       ss << curr_time;
+      ss << " ";
+      struct timespec ts_rt;
+      clock_gettime(CLOCK_MONOTONIC, &ts_rt);
+      ss << (ts_rt.tv_sec + 1e-9*ts_rt.tv_nsec);
       this->image_msg_.header.frame_id = this->frame_name_ + " " + ss.str();
       this->image_msg_.header.stamp.sec = this->sensor_update_time_.sec;
       this->image_msg_.header.stamp.nsec = this->sensor_update_time_.nsec;

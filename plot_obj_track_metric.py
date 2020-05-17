@@ -3,7 +3,10 @@ import os
 import matplotlib.pyplot as plt
 import math
 
-farr = [10, 15, 20, 25, 30, 33, 38, 45, 55, 67, 80, 100]
+#farr = [10, 15, 20, 25, 30, 33, 38, 45, 55, 67, 80, 100]
+#farr = [10, 15, 19, 21, 23, 25, 30, 33, 38, 45, 55, 67, 80, 100]
+farr = [12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
+farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 35, 40, 60, 80, 100] # Smallc1 2c
 # farr = [12, 20, 28, 36, 44, 52, 60, 70, 80, 90, 100, 130]
 
 pre = ''
@@ -53,6 +56,19 @@ def read_actual_metric_file(fname):
 def cmps(x):
     return x[0]
 
+def subtract_min(x):
+    # find the smallest elem in array and subtract it from all elements
+    if (len(x) > 0):
+	m = x[0]
+	for i in range(len(x)):
+	    if x[i] < m:
+		m = x[i]
+	# subtract from all elems :
+	new_arr = [(y-m) for y in x]
+	return new_arr
+    else:
+	return x
+
 if __name__ == '__main__':
     pre = sys.argv[2]
     cpp = int(sys.argv[5])
@@ -70,8 +86,8 @@ if __name__ == '__main__':
 
     dist = 8.0
     # human_speed_arr = [dist/24, dist/20, dist/16, dist/12, dist/8, dist/4, dist/3, dist/2]
-    t_arr = [8,  20]
-    t_ind = {8:0, 20:1}    
+    t_arr = [16,  4]
+    t_ind = {4:1, 16:0}    
 
     abs_deg_arr = []
 
@@ -216,7 +232,7 @@ if __name__ == '__main__':
         plt.title('RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('RxnTime')
-        plt.ylim(0, 0.25)
+        plt.ylim(0, 0.35)
         plt.legend()
         plt.show()
 
@@ -226,9 +242,38 @@ if __name__ == '__main__':
         plt.title('TD RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('RxnTime')
-        plt.ylim(0, 0.25)
+        plt.ylim(0, 0.35)
         plt.legend()
         plt.show()
+
+	new_perc_rxn = subtract_min(perc_rxn)
+	new_med_rxn = subtract_min(med_rxn)
+	new_mean_rxn = subtract_min(mean_rxn)
+
+	new_td_perc_rxn = subtract_min(td_perc_rxn)
+	new_td_med_rxn = subtract_min(td_med_rxn)
+	new_td_mean_rxn = subtract_min(td_mean_rxn)
+
+	plt.plot(new_farr, new_med_rxn, 'ro-', label='Median RxnTime')
+	plt.plot(new_farr, new_td_med_rxn, 'g*:', label='Median TD RxnTime')
+	plt.title('Median RxnTime vs RT w.r.t. TD publisher')
+	plt.xlabel('Publisher freq')
+	plt.legend()
+	plt.show()
+
+	plt.plot(new_farr, new_mean_rxn, 'ro-', label='Mean RxnTime')
+	plt.plot(new_farr, new_td_mean_rxn, 'g*:', label='Mean TD RxnTime')
+	plt.title('Mean RxnTime vs RT w.r.t. TD publisher')
+	plt.xlabel('Publisher freq')
+	plt.legend()
+	plt.show()
+
+	plt.plot(new_farr, new_perc_rxn, 'ro-', label='Tail RxnTime')
+	plt.plot(new_farr, new_td_perc_rxn, 'g*:', label='Tail TD RxnTime')
+	plt.title('Tail RxnTime vs RT w.r.t. TD publisher')
+	plt.xlabel('Publisher freq')
+	plt.legend()
+	plt.show()
 
 	# plt.plot(new_farr, m_rxn_ratio, 'g*:', label='Ratio')
         # plt.title('Ratio of Median metric to median rxn time at c1 : %s'%(sys.argv[4]))

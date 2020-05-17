@@ -3,7 +3,10 @@ import os
 import matplotlib.pyplot as plt
 import math
 
-farr = [10, 15, 20, 25, 30, 33, 38, 45, 55, 67, 80, 100]
+#farr = [10, 15, 20, 25, 30, 33, 38, 45, 55, 67, 80, 100]
+#farr = [10, 15, 19, 21, 23, 25, 30, 33, 38, 45, 55, 67, 80, 100]
+farr = [9, 12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
+farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 35, 40, 60, 80, 100] # Smallc1 2c
 # farr = [12, 20, 28, 36, 44, 52, 60, 80, 90, 100, 120, 140]
 
 pre = ''
@@ -19,7 +22,7 @@ if __name__ == '__main__':
     new_farrs = {}
 
     ci = {"" : int(sys.argv[3])}
-    t = 8
+    t = int(sys.argv[4])
     for c1 in ci.keys():
         print "STarting ", c1
 
@@ -82,7 +85,7 @@ if __name__ == '__main__':
         plt.title('Mean, 9%iile Latency (TD->N1->%s N2) c2=%dms, %s'%(x, s, ci[c1], pre1))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('Latency w.r.t. TDNode')
-        plt.ylim(0, 0.03)
+        plt.ylim(0, 0.09)
         plt.legend()
         plt.show()
 

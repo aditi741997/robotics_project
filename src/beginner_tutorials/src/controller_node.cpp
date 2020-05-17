@@ -125,20 +125,56 @@ public:
     {
         // this is called when any of the nodes publishes its stats.
         std::stringstream ss(msg->frame_id);
-        std::string topic;
+        std::string topic, stage;
+	double update;
         double mean_cb, med_cb, perc_cb, mean_cb_L, med_cb_L, perc_cb_L;
         ss >> topic;
-
+	ss >> stage;
         // ss >> mean_cb;
         // ss >> med_cb;
         // ss >> perc_cb;
 
         // v1 : only publishing topic name, median value.
-        ss >> med_cb_L;
+        ss >> update;
         // ss >> mean_cb_L;
         // ss >> perc_cb_L;
 
         int ind = topic_map[topic];
+
+	if (stage.find('L') != std::string::npos)
+	{
+		// update med_cb_times_L and check for freq...
+		// v1: Only median
+        	med_cb_times_L[ind] = med_cb_L;
+    	    	cb_topics_msg_count[ind] += 1;
+
+       		// calculate new optimal freq
+        	double m = 0.0;
+        	double sig = 0.0;
+        	for (int i = 0; i < med_cb_times_L.size(); i++)
+        	{
+            		// find M
+            		m = std::max(m, med_cb_times_L[i]);
+            		// find Sigma
+            		sig += med_cb_times_L[i];
+        	}
+        	double new_freq = (float)num_cores/sig;
+        	if (m > 0.0)
+            		new_freq = std::min(1.0/m, new_freq);
+
+        	// if [this freq is very different [1.5x ?] AND last_freq_change-now >= 1/max_change_rate] from current freq, notify cv
+        	if ( (std::abs(new_freq - current_freq) >= (freq_threshold*current_freq) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
+        	{
+            		ROS_INFO("Need to change frequency! Got msg %s %f, current_freq %f, new_freq %f", topic.c_str(), med_cb_L, current_freq, new_freq);
+            		updateFrequency(new_freq);
+        	}
+
+	}
+	else
+	{
+		// update med_cb_times
+		med_cb_times[ind] = update;
+	}
 
         // mean_cb_times[ind] = mean_cb;
         // med_cb_times[ind] = med_cb;
@@ -148,30 +184,6 @@ public:
         // mean_cb_times_L[ind] = mean_cb_L;
         // perc_cb_times_L[ind] = perc_cb_L;
 
-        // v1: Only median
-        med_cb_times_L[ind] = med_cb_L;
-        cb_topics_msg_count[ind] += 1;
-
-        // calculate new optimal freq
-        double m = 0.0;
-        double sig = 0.0;
-        for (int i = 0; i < med_cb_times_L.size(); i++)
-        {
-            // find M
-            m = std::max(m, med_cb_times_L[i]);
-            // find Sigma
-            sig += med_cb_times_L[i];
-        }
-        double new_freq = (float)num_cores/sig;
-        if (m > 0.0)
-            new_freq = std::min(1.0/m, new_freq);
-
-        // if [this freq is very different [1.5x ?] AND last_freq_change-now >= 1/max_change_rate] from current freq, notify cv
-        if ( (std::abs(new_freq - current_freq) >= (freq_threshold*current_freq) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
-        {
-            ROS_INFO("Need to change frequency! Got msg %s %f, current_freq %f, new_freq %f", topic.c_str(), med_cb_L, current_freq, new_freq);
-            updateFrequency(new_freq);
-        }
     }
 
     std::string get_string(double x)
