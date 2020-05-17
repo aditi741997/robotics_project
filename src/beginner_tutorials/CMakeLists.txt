@@ -28,6 +28,11 @@ add_executable(objdetector src/obj_detector.cpp)
 target_link_libraries(objdetector ${catkin_LIBRARIES})
 add_dependencies(objdetector beginner_tutorials_generate_messages_cpp)
 
+
 add_executable(objtracker src/obj_tracker.cpp)
 target_link_libraries(objtracker ${catkin_LIBRARIES})
 add_dependencies(objtracker beginner_tutorials_generate_messages_cpp)
+
+add_executable(controller src/controller_node.cpp)
+target_link_libraries(controller ${catkin_LIBRARIES})
+add_dependencies(controller beginner_tutorials_generate_messages_cpp)
