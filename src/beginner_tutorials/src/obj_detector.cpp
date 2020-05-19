@@ -48,6 +48,12 @@ class ObjDetector
     
    double td_clock_lat_sum;
     std::vector<double> td_clock_lat_arr; 
+
+    std::string haar_cascade1 = "/home/ubuntu/catkin_ws/src/rbx/data/haar_detectors/haarcascade_frontalface_alt.xml";
+    std::string haar_cascade2 = "/home/ubuntu/catkin_ws/src/rbx/data/haar_detectors/haarcascade_frontalface_alt2.xml";
+    cv::CascadeClassifier hcascade1;
+    cv::CascadeClassifier hcascade2;
+
 public:
     ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim)
     {
@@ -77,6 +83,9 @@ public:
         img_sub = nh.subscribe(sub_topic, sub_queue_len, &ObjDetector::objDetectCB, this, ros::TransportHints().tcpNoDelay(), true);
         std::cout << "Subscribed to images, about to call ros::spin \n";
         // cv::namedWindow(OPENCV_WINDOW);
+	if( !hcascade1.load( haar_cascade1 ) ){ ROS_INFO("ERROR Loading haar cascade1"); };
+        if( !hcascade2.load( haar_cascade2 ) ){ ROS_INFO("ERROR Loading haar cascade2"); };
+
     }
 
     ~ObjDetector()
@@ -97,6 +106,19 @@ public:
         std::stringstream ss;
         ss << x;
         return ss.str();
+    }
+
+    void haar(cv::Mat img, bool run_cascade2)
+    {
+        std::vector<cv::Rect> faces;
+        cv::Mat frame_gray;
+
+        cv::cvtColor( img, frame_gray, CV_BGR2GRAY );
+        cv::equalizeHist( frame_gray, frame_gray );
+
+        hcascade1.detectMultiScale( frame_gray, faces, 1.05, 3, 0|cv::CASCADE_DO_CANNY_PRUNING, cv::Size(30, 30) );
+        if (run_cascade2)
+            hcascade2.detectMultiScale( frame_gray, faces, 1.3, 2, 0|cv::CASCADE_SCALE_IMAGE, cv::Size(30, 30) );
     }
 
    void objDetectCB(const sensor_msgs::Image::ConstPtr& msg)
@@ -144,6 +166,7 @@ public:
           ROS_ERROR("cv_bridge exception: %s", e.what());
           return;
         }
+	haar(cv_ptr->image, false);
         cv::Mat frame_hsv;
         cv::cvtColor( cv_ptr->image, frame_hsv, cv::COLOR_BGR2HSV );
 
