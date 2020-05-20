@@ -40,13 +40,14 @@ class FreqController
     double change_rate;
     double max_change_rate;
     double freq_threshold;
+    double eps;
 
     ros::NodeHandle nh;
     boost::thread controller_thread;
-    bool running;
+    ros::Timer ct;    
 
 public:
-    FreqController(std::vector<std::string>& cb_topics, int k, double mcr, double thresh)
+    FreqController(std::vector<std::string>& cb_topics, int k, double mcr, double thresh, double epsilon)
     {
         node_cb_topics = cb_topics;
         num_nodes = cb_topics.size();
@@ -77,11 +78,11 @@ public:
         num_cores = k;
         max_change_rate = mcr;
         change_rate = 1.0;
-
+	eps = epsilon;
         freq_threshold = thresh;
 
         // v1 : read stats from file
-        std::ifstream cb_stats_file("/home/ubuntu/catkin_ws/obj_track_cb_stats_file.txt");
+/*        std::ifstream cb_stats_file("/home/ubuntu/catkin_ws/obj_track_cb_stats_file.txt");
         std::string line;
         while (std::getline(cb_stats_file, line))
         {
@@ -117,8 +118,15 @@ public:
         }
         current_freq = std::min(1.0/m, (float)num_cores/sig);
         updateFrequency(current_freq);
+*/
+	// v2 : initialize with low frequency.
+	current_freq = 5.0;
+	updateFrequency(current_freq);
 
-        ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_rate %f, max_change_rate %f, freq_thresh %f", num_cores, num_nodes, current_freq, change_rate, max_change_rate, freq_threshold);
+ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_rate %f, max_change_rate %f, freq_thresh %f", num_cores, num_nodes, current_freq, change_rate, max_change_rate, freq_threshold);
+
+	// v2 : after one minute, set freq based on all stats arrived.
+        ct = nh.createTimer(ros::Duration(60.0), &FreqController::controllerFunc, this, true);  
     }
 
     void updateStats(const std_msgs::Header::ConstPtr& msg)
@@ -143,6 +151,8 @@ public:
 
 	if (stage.find('L') != std::string::npos)
 	{
+		if (cb_topics_msg_count[ind]%20 == 0)
+			ROS_INFO("Received an L update : %s, median of %s [ind:%i] is %f, count: %i", msg->frame_id.c_str(), topic.c_str(), ind, update, cb_topics_msg_count[ind]);
 		// update med_cb_times_L and check for freq...
 		// v1: Only median
         	med_cb_times_L[ind] = med_cb_L;
@@ -172,8 +182,11 @@ public:
 	}
 	else
 	{
+		ROS_INFO("Received an E update : %s, median of %s [ind:%i] is %f", msg->frame_id.c_str(), topic.c_str(), ind, update);
 		// update med_cb_times
 		med_cb_times[ind] = update;
+		// also initialze med_cb_times_L
+		med_cb_times_L[ind] = update;
 	}
 
         // mean_cb_times[ind] = mean_cb;
@@ -195,8 +208,8 @@ public:
 
     void updateFrequency(double new_freq)
     {
-        double new_new_freq = (current_freq + new_freq)/2.0;
-
+//        double new_new_freq = (current_freq + new_freq)/2.0;
+	double new_new_freq = new_freq - eps; // since we're using clock() time, freq value is exact.
         // using dynamic reconfigure to update publishing frequency in gazebo :
         std::string cmd = "rosrun dynamic_reconfigure dynparam set /camera \"{'camera_update_rate': ";
         cmd += get_string(new_new_freq);
@@ -208,9 +221,32 @@ public:
         last_freq_change_time = ros::Time::now().toSec();
     }
 
-    void controllerFunc()
+    void controllerFunc(const ros::TimerEvent& event)
     {
-        while (running)
+	ROS_INFO("In controllerFunc");
+	// now calculate the best freq based on stats received
+        	double m = 0.0;
+        	double sig = 0.0;
+        	for (int i = 0; i < med_cb_times_L.size(); i++)
+        	{
+            		// find M
+			double x = med_cb_times_L[i];
+            		m = std::max(m, x);
+            		// find Sigma
+            		sig += x;
+        	}
+        	double new_freq = (float)num_cores/sig;
+        	if (m > 0.0)
+            		new_freq = std::min(1.0/m, new_freq);
+		ROS_INFO("Controller : New freq : %f", new_freq);
+	
+	if ( (std::abs(new_freq - current_freq) >= (freq_threshold*current_freq) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
+                {
+                        ROS_INFO("Controller : Need to change frequency! current_freq %f, new_freq %f", current_freq, new_freq);
+                        updateFrequency(new_freq);
+                }
+
+/*        while (running)
         {
             // calculate freq
             double m = 0.0;
@@ -220,6 +256,7 @@ public:
             // TODO: if [this freq is very different [1.5x ?] AND last_freq_change-now >= 1/max_change_rate] then change freq, update last_change_time
             // cv.timed wait (1/change_rate)
         }
+*/
     }
 };
 
@@ -229,13 +266,14 @@ int main(int argc, char **argv)
     int k = atoi(argv[1]); // num of cores
     int m = atoi(argv[2]); // number of nodes
     double freq_thresh = atof(argv[3]);
+    double epsi = atof(argv[4]);
     ROS_INFO("Init node name %s, num_cores %i, num ndoes %i", node_name.c_str(), k, m);
     ros::init(argc, argv, node_name);
     std::vector<std::string> topic_list (m);
     for (int i = 0; i < m; i++)
-        topic_list[i] = argv[4+i];
+        topic_list[i] = argv[5+i];
 
-    FreqController fc(topic_list, k, 10.0, freq_thresh);
+    FreqController fc(topic_list, k, 10.0, freq_thresh, epsi);
     ros::spin();
 
     return 0;

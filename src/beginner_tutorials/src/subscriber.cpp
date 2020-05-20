@@ -11,7 +11,7 @@
 #include <time.h>
 #include <bits/stdc++.h> 
 #include <sys/time.h>
-
+#include <stdlib.h>
 // For adding a heavy thread :
 // #include <thread>
 #include <cstdlib>
@@ -79,6 +79,8 @@ std::vector<double> pub_times;
 
 double td_latency_sum = 0.0;
 std::vector<double> td_latency_arr;
+
+bool add_rand_noise = false;
 
 void calc_primes(int64_t limit, bool duh)
 {
@@ -152,7 +154,7 @@ void chatterImgCallBack(const sensor_msgs::Image::ConstPtr& msg)
 
     last_recv_time = recv_time;
 
-    if (msg_count%100 >= 1)
+    if (msg_count%100 == 1)
     {
 	ROS_INFO("msg count %i, msg seq %i, msg hdr.frame %s, td_ts %f, td_lat %f", msg_count, msg->header.seq, msg->header.frame_id.c_str(), td_ts, td_lat);
     }

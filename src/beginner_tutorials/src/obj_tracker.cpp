@@ -15,6 +15,7 @@ class ObjTracker
     ros::Subscriber roi_sub;
     std::string sub_topic = "roi";
     std::string pub_topic = "cmd_vel";
+    std::string rtc_pub_topic = "/camera/rtc_event";
     float max_rotation_speed, min_rotation_speed, gain, x_threshold;
     int img_width, img_height; // 640, 480
 
@@ -53,8 +54,10 @@ class ObjTracker
     int in_offset = 0;
     int percentile = 95;
 
+    bool rtc_event_driven;
+    ros::Publisher rtc_pub;
 public:
-    ObjTracker(double max_rot, double x_thr)
+    ObjTracker(double max_rot, bool ed, double x_thr)
     {
         img_width = 640;
         img_height = 480;
@@ -62,9 +65,20 @@ public:
         max_rotation_speed = max_rot;
         gain = max_rot;
         x_threshold = x_thr;
-
+	rtc_event_driven = ed;
         cmd_vel_pub = nh.advertise<geometry_msgs::Twist>(pub_topic, 1);
         roi_sub = nh.subscribe(sub_topic, 1, &ObjTracker::move_robot, this, ros::TransportHints().tcpNoDelay(), true);
+
+	if (rtc_event_driven)
+	{
+		// this node will publish a msg which will trigger the gz_ros_pkg camera_util to publish
+		rtc_pub = nh.advertise<std_msgs::Header>(rtc_pub_topic, 1);
+		while (0 == rtc_pub.getNumSubscribers())
+        	{
+            		ROS_INFO("Tracker : RTCPub: Waiting for subscribers to connect");
+            		ros::Duration(0.1).sleep();
+        	}
+	}
 
         std::cout << "Subscribed to roi, about to call ros::spin \n";
     }
@@ -170,6 +184,14 @@ public:
         }
 
         cmd_vel_pub.publish(move_cmd);
+	if (rtc_event_driven)
+	{
+		ROS_INFO("About to publish RTC on %s", rtc_pub_topic.c_str());
+		std_msgs::Header hdr;
+		hdr.stamp = ros::Time::now();
+		hdr.frame_id = "";
+		rtc_pub.publish(hdr);
+	}
 
         if (cb_count > 5)
         {
@@ -224,10 +246,11 @@ public:
 int main(int argc, char** argv)
 {
     double max_rot = atof(argv[1]);
+    bool event_driven = (atoi(argv[2]) == 1);
     std::string node_name = "objecttracker";
     ROS_INFO("Init node name %s, max rot %f", node_name.c_str(), max_rot);
     ros::init(argc, argv, node_name);
-    ObjTracker ot(max_rot, 0.1);
+    ObjTracker ot(max_rot, event_driven, 0.1);
     ros::spin();
 
     return 0;

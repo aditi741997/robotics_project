@@ -68,7 +68,11 @@ void GazeboRosCameraUtils::configCallback(
     ROS_INFO_NAMED("gazebo_ros_camera_utils", "Reconfigure request for the gazebo ros camera %s, New update_rate : %f", this->camera_name_.c_str(), config.camera_update_rate);
     this->update_period_ = 1.0/config.camera_update_rate;
     this->update_rate_  = config.camera_update_rate;
-    this->camera_img_publish_thread.setPeriod(ros::Duration(this->update_period_));
+    if (this->timer_driven_pub)
+    {
+        this->camera_img_publish_thread.setPeriod(ros::Duration(this->update_period_));
+    	ROS_INFO("Timer Driven Pub : Also changed timer's period.");
+    }
     ROS_INFO_NAMED("gazebo_ros_camera_utils", "Reconfigure of camera_update_rate successful. update period : %f, update_rate : %f, current imager_Rate : %f", this->update_period_, this->update_rate_, this->parentSensor_->UpdateRate());
     ROS_INFO_NAMED("camera_utils", "Reconfigure request for the gazebo ros camera_: %s. New rate: %.2f",
              this->camera_name_.c_str(), config.imager_rate);
@@ -610,9 +614,19 @@ void GazeboRosCameraUtils::Init()
   this->img_pub_freq_sum = 0.0;
 
   this->img_ready = false;
-  this->camera_img_publish_thread = this->rosnode_->createTimer(ros::Duration(this->update_period_), &GazeboRosCameraUtils::PublishCameraImg, this);
+  this->timer_driven_pub = false; //  CHANGE THIS to toggle
+  this->started_ed_pub = false;
+  if (this->timer_driven_pub)
+  {
+    this->camera_img_publish_thread = this->rosnode_->createTimer(ros::Duration(this->update_period_), &GazeboRosCameraUtils::TimerEventPub, this);
+    std::cout << "In gz ros camera utils Init(), Initialized CamPublish Timer with update_period_ : " << this->update_period_ << std::endl;
+  }
+  else
+  {
+    this->rtc_ed_sub = this->rosnode_->subscribe("rtc_event", 1, &GazeboRosCameraUtils::RTCEventPub, this);
+    std::cout << "IN gz ros camera utils Init(), Initialized subscriber to rtc_event\n";
+  }
 
-  std::cout << "In gz ros camera utils Init(), Initialized CamPublish Timer with update_period_ : " << this->update_period_ << std::endl;
 
 }
 
@@ -633,11 +647,18 @@ void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src)
     return;
   }
 
-  // update data in class for our publish Thread.
   this->img_ready = true;
   this->img = _src;
+    
+  // need to publish first img if event driven publishing.
+  if ( (!(this->timer_driven_pub)) && (!(this->started_ed_pub)) )
+  {
+    // update data in class for our publish Thread.
+    ROS_INFO("Publishing in PutCameraData to kick start ED Pub");
+    PublishCameraImg();
+  }
 
-  /*
+   /*
   /// don't bother if there are no subscribers
   if ((*this->image_connect_count_) > 0)
   {
@@ -676,7 +697,20 @@ void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src)
   */
 }
 
-void GazeboRosCameraUtils::PublishCameraImg(const ros::TimerEvent& event)
+void GazeboRosCameraUtils::RTCEventPub(const std_msgs::Header::ConstPtr& msg)
+{
+  this->started_ed_pub = true;
+  // ROS_INFO("ED Pub!");
+  PublishCameraImg();
+}
+
+void GazeboRosCameraUtils::TimerEventPub(const ros::TimerEvent& event)
+{
+  // ROS_INFO("TD Pub!");
+  PublishCameraImg();
+}
+
+void GazeboRosCameraUtils::PublishCameraImg()
 {
   if ((*this->image_connect_count_) > 0)
   {
@@ -716,7 +750,7 @@ void GazeboRosCameraUtils::PublishCameraImg(const ros::TimerEvent& event)
       {
 	std::sort(this->img_pub_freq.begin(), this->img_pub_freq.end());
 	int ipfc = this->img_pub_freq.size();
-        std::cout << "In PublishCamImg [Timer] Mean Median Tail of pub rate at gz ros util : " << this->img_pub_freq_sum/this->img_pub_count << ", " << this->img_pub_freq[ipfc/2] << ", " << this->img_pub_freq[(95*ipfc)/100] << ", rows:" << this->height_ << ", cols : " << this->width_ << ", step : " << this->skip_*this->width_ << std::endl;
+        std::cout << "In PublishCamImg Mean Median Tail of pub rate at gz ros util : " << this->img_pub_freq_sum/this->img_pub_count << ", " << this->img_pub_freq[ipfc/2] << ", " << this->img_pub_freq[(95*ipfc)/100] << ", rows:" << this->height_ << ", cols : " << this->width_ << ", step : " << this->skip_*this->width_ << std::endl;
       }
 
     }

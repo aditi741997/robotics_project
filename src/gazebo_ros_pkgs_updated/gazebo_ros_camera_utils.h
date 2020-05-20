@@ -230,11 +230,21 @@ namespace gazebo
 
     // Timer driven publishing...
     protected: ros::Timer camera_img_publish_thread;
-    protected: void PublishCameraImg(const ros::TimerEvent& event);
+    protected: void TimerEventPub(const ros::TimerEvent& event);
+   
+    // (RTC) Event driven publishing...
+    protected: ros::Subscriber rtc_ed_sub; // subscriber to rtc events published by last node. 
+    protected: void RTCEventPub(const std_msgs::Header::ConstPtr& msg);
+    protected: bool started_ed_pub;
+ 
+    protected: bool timer_driven_pub; // denotes whether cam imgs will be published in TD or ED way.
+   
+    // for publishing camera imgs :
+    protected: void PublishCameraImg();
     protected: bool img_ready; // denotes whether or not we have an image to be published.
     protected: const unsigned char* img;
-
-    friend class GazeboRosMultiCamera;
+    
+        friend class GazeboRosMultiCamera;
     friend class GazeboRosTriggeredMultiCamera;
   };
 }
