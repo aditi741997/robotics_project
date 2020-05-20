@@ -9,6 +9,8 @@
 #include "opencv2/imgproc/imgproc.hpp"
 #include <sstream>
 #include <time.h>
+#include <Python.h>
+#include <bits/stdc++.h>
 
 std::string pub_topic = "";
 ros::Publisher roi_pub;
@@ -39,7 +41,8 @@ class ObjDetector
     double tput_sum = 0.0;
     std::vector<double> tput_arr;
     double last_pub_time = 0.0;
-    
+    double compute_only_sum = 0.0;
+    std::vector<double> compute_only_arr;
     double compute_ts_sum = 0.0;
     std::vector<double> compute_ts_arr;
 
@@ -81,15 +84,44 @@ public:
         }
 
         img_sub = nh.subscribe(sub_topic, sub_queue_len, &ObjDetector::objDetectCB, this, ros::TransportHints().tcpNoDelay(), true);
-        std::cout << "Subscribed to images, about to call ros::spin \n";
+	//cv::setNumThreads(2);
+        std::cout << "Subscribed to images, about to call ros::spin, cv numThreads : " << cv::getNumThreads() << ", " << cv::getNumberOfCPUs() << std::endl;
         // cv::namedWindow(OPENCV_WINDOW);
 	if( !hcascade1.load( haar_cascade1 ) ){ ROS_INFO("ERROR Loading haar cascade1"); };
         if( !hcascade2.load( haar_cascade2 ) ){ ROS_INFO("ERROR Loading haar cascade2"); };
-
+	std::cout << "duh0\n";
+	/* try
+	{
+		Py_Initialize();
+	}
+	catch (const std::exception& e)
+	{
+		
+	} 
+	std::cout << "duh1\n";
+        pName = PyString_FromString("/home/ubuntu/catkin_ws/Sample");
+        pModule = PyImport_Import(pName);
+        pDict = PyModule_GetDict(pModule);
+        pFunc = PyDict_GetItemString(pDict, "add");
+        pArgs = PyTuple_New(2);
+        pValue = PyInt_FromLong(2);
+        PyTuple_SetItem(pArgs, 0, pValue);
+        PyObject* pResult = PyObject_CallObject(pFunc, pArgs);
+        if (pResult == NULL)
+            ROS_INFO("NULL result from py call");
+        else
+        {
+            int result = PyInt_AsLong(pResult);
+            ROS_INFO("Result : %i", result);            
+        }
+        Py_Finalize();
+	*/
     }
 
     ~ObjDetector()
     {
+	Py_Finalize();
+	
         ROS_INFO("IN destructor of ObjDetector!!!");
         print_stats();
     }
@@ -116,9 +148,14 @@ public:
         cv::cvtColor( img, frame_gray, CV_BGR2GRAY );
         cv::equalizeHist( frame_gray, frame_gray );
 
-        hcascade1.detectMultiScale( frame_gray, faces, 1.05, 3, 0|cv::CASCADE_DO_CANNY_PRUNING, cv::Size(30, 30) );
+        hcascade1.detectMultiScale( frame_gray, faces, 1.1, 3, 0|cv::CASCADE_DO_CANNY_PRUNING, cv::Size(30, 30) );
         if (run_cascade2)
             hcascade2.detectMultiScale( frame_gray, faces, 1.3, 2, 0|cv::CASCADE_SCALE_IMAGE, cv::Size(30, 30) );
+    }
+
+    void py_haar(bool run_twice)
+    {
+	PyRun_SimpleString("import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_random_haar()");
     }
 
    void objDetectCB(const sensor_msgs::Image::ConstPtr& msg)
@@ -166,8 +203,16 @@ public:
           ROS_ERROR("cv_bridge exception: %s", e.what());
           return;
         }
-	haar(cv_ptr->image, false);
-        cv::Mat frame_hsv;
+	// haar(cv_ptr->image, false);
+        // py_haar(false);
+	std::vector<std::vector<cv::Point> > v;
+        total += 1;
+        cv::Rect best_boundingrect;
+        double max_cnt_area = 0.0;
+	struct timespec cb_only_end;
+	clock_gettime(CLOCK_MONOTONIC, &cb_only_end);
+	
+	cv::Mat frame_hsv;
         cv::cvtColor( cv_ptr->image, frame_hsv, cv::COLOR_BGR2HSV );
 
         cv::Mat img_threshold;
@@ -178,13 +223,10 @@ public:
         cv::dilate(img_threshold, img_threshold, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
         cv::erode(img_threshold, img_threshold, cv::getStructuringElement(cv::MORPH_ELLIPSE, cv::Size(5, 5)));
 
-        std::vector<std::vector<cv::Point> > v;
         cv::findContours(img_threshold, v, cv::RETR_EXTERNAL, cv::CHAIN_APPROX_SIMPLE, cv::Point(0, 0) );
 
         // grabcontours?
-        total += 1;
-        cv::Rect best_boundingrect;
-        double max_cnt_area = 0.0;
+        
         for (int i = 0; i < v.size(); i++)
         {
             // get the bounding rect, check if contourArea is better than current
@@ -193,12 +235,12 @@ public:
                 max_cnt_area = cv::contourArea(v[i]);
                 best_boundingrect = cv::boundingRect(v[i]);
             }
-        }
+        } 
         if (v.size() > 0)
         {
             hit += 1;
-            cv::Mat drawing = cv::Mat::zeros(img_threshold.size(), CV_8UC3);
-            cv::rectangle(drawing, best_boundingrect.tl(), best_boundingrect.br(), cv::Scalar(50, 50, 50));
+            // cv::Mat drawing = cv::Mat::zeros(img_threshold.size(), CV_8UC3);
+            // cv::rectangle(drawing, best_boundingrect.tl(), best_boundingrect.br(), cv::Scalar(50, 50, 50));
             // cv::imshow(OPENCV_WINDOW, drawing);
             // cv::waitKey(3);
         }
@@ -234,7 +276,7 @@ public:
 	    hdr.frame_id += " " + get_string_d(td_ts);
             roi_pub.publish(hdr);
         }
-
+	// PyRun_SimpleString("print('Hello World from Embedded Python!!!')");
         double compute = (ros::Time::now() - cb_start).toSec();
         compute_sum += compute;
         compute_arr.push_back(compute);
@@ -247,6 +289,10 @@ public:
 	double compute_ts =  cb_end_ts.tv_sec + 1e-9*cb_end_ts.tv_nsec - ( cb_start_ts.tv_sec + 1e-9*cb_start_ts.tv_nsec);
     	compute_ts_sum += compute_ts;
     	compute_ts_arr.push_back(compute_ts);
+
+	double cb_only = cb_only_end.tv_sec + 1e-9*cb_only_end.tv_nsec - ( cb_start_ts.tv_sec + 1e-9*cb_start_ts.tv_nsec);
+	compute_only_sum += cb_only;
+	compute_only_arr.push_back(cb_only);
 
 	if ( (total >= 2) && (last_pub_time > 0.0) )
 	{
@@ -294,7 +340,8 @@ public:
 	print_arr(tput_sum, tput_arr, "N2 Tput");
 	print_arr(td_latency_sum, td_latency_arr, "Lat at N2 w.r.t. TD node");
 	print_arr(compute_ts_sum, compute_ts_arr, "RT (TS) Compute Time");
-    	// print_arr(td_clock_lat_sum, td_clock_lat_arr, "RT (TS) Latency at N2 w.r.t. TD node");
+    	print_arr(compute_only_sum, compute_only_arr, "TS compute only time!!");
+	// print_arr(td_clock_lat_sum, td_clock_lat_arr, "RT (TS) Latency at N2 w.r.t. TD node");
     }
 
 
@@ -340,7 +387,16 @@ int main(int argc, char **argv)
     bool doheavy = atoi(argv[6]) == 1;
     int lim = atoi(argv[7]);
 
-    ROS_INFO("Init node %s, pub queue len %d, sub_queue_len %d, num_msgs %d, pub %d, doheavy %d, limit %d", node_name, pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);
+  PyObject* pInt;
+
+	Py_Initialize();
+	std::cout << "py envt init\n";
+	// PyRun_SimpleString("print('Hello World from Embedded Python!!!');import cv2;haar_scaleFactor = 1.3;print('haar:%f, cv2 numThr : %i'%(haar_scaleFactor, cv2.getNumThreads()));cascade='/home/ubuntu/catkin_ws/src/rbx/data/haar_detectors/';cs1 =  cv2.CascadeClassifier(cascade);image=cv2.imread('/home/ubuntu/catkin_ws/src/rbx/data/images_fei/Haar_FaceDetected/47-08.jpg');cs1.detectMultiScale(image, **haar_params);");
+	PyRun_SimpleString("print('Hello World from Embedded Python!!!');import cv2;import sys;sys.path.append('/home/ubuntu/catkin_ws');import haar_detector;haar_detector.do_haar(cv2.imread('/home/ubuntu/catkin_ws/src/rbx/data/images_fei/Haar_FaceDetected/47-08.jpg'))");
+	/*  std::string ps = "taskset -c " + std::string(argv[8]) + " python /home/ubuntu/catkin_ws/Sample.py";
+	system(ps.c_str());	
+*/	
+    ROS_INFO("Init node %s, pub queue len %d, sub_queue_len %d, num_msgs %d, pub %d, doheavy %d, limit %d", node_name.c_str(), pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);
 
     ros::init(argc, argv, node_name);
     ObjDetector od(pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);
