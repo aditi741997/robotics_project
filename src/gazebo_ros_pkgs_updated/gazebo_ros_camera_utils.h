@@ -236,6 +236,7 @@ namespace gazebo
     protected: ros::Subscriber rtc_ed_sub; // subscriber to rtc events published by last node. 
     protected: void RTCEventPub(const std_msgs::Header::ConstPtr& msg);
     protected: bool started_ed_pub;
+    protected: bool kick_started; // to ensure we only send one msg to start RTC
  
     protected: bool timer_driven_pub; // denotes whether cam imgs will be published in TD or ED way.
    

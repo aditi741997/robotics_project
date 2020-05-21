@@ -616,6 +616,7 @@ void GazeboRosCameraUtils::Init()
   this->img_ready = false;
   this->timer_driven_pub = false; //  CHANGE THIS to toggle
   this->started_ed_pub = false;
+  this->kick_started = false;
   if (this->timer_driven_pub)
   {
     this->camera_img_publish_thread = this->rosnode_->createTimer(ros::Duration(this->update_period_), &GazeboRosCameraUtils::TimerEventPub, this);
@@ -647,16 +648,24 @@ void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src)
     return;
   }
 
+// update data in class for our publish Thread.
   this->img_ready = true;
   this->img = _src;
     
   // need to publish first img if event driven publishing.
   if ( (!(this->timer_driven_pub)) && (!(this->started_ed_pub)) )
   {
-    // update data in class for our publish Thread.
-    ROS_INFO("Publishing in PutCameraData to kick start ED Pub");
-    PublishCameraImg();
-  }
+    if (this->rtc_ed_sub.getNumPublishers() > 0)
+    {
+	if (!(this->kick_started))
+	{
+		// to ensure that all the nodes are ready before we start.
+		ROS_INFO("Publishing in PutCameraData to kick start ED Pub");
+		PublishCameraImg();
+		this->kick_started = true; // we don't wanna publish multiple msgs.
+	}
+    }
+ }
 
    /*
   /// don't bother if there are no subscribers
@@ -699,6 +708,9 @@ void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src)
 
 void GazeboRosCameraUtils::RTCEventPub(const std_msgs::Header::ConstPtr& msg)
 {
+  double lag = (ros::Time::now() - msg->stamp).toSec();
+  if (lag > 0.002)
+    ROS_INFO("Got RTC Event with TS %f, lag from current time %f", msg->stamp.toSec(), lag);
   this->started_ed_pub = true;
   // ROS_INFO("ED Pub!");
   PublishCameraImg();
