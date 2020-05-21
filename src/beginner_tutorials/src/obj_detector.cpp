@@ -244,7 +244,7 @@ public:
             // cv::imshow(OPENCV_WINDOW, drawing);
             // cv::waitKey(3);
         }
-        if (total%100 == 3)
+        if (total%400 == 3)
         {
             if (v.size() > 0)
                 ROS_INFO("Num contours %d, max cnt area %f, rect x %d, y %d, h %d, w %d", v.size(), max_cnt_area, best_boundingrect.x, best_boundingrect.y, best_boundingrect.height, best_boundingrect.width);

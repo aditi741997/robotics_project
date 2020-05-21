@@ -56,8 +56,11 @@ class ObjTracker
 
     bool rtc_event_driven;
     ros::Publisher rtc_pub;
+
+    bool dyn_algo;
+    double expt_start_time;
 public:
-    ObjTracker(double max_rot, bool ed, double x_thr)
+    ObjTracker(double max_rot, bool ed, bool da, double x_thr)
     {
         img_width = 640;
         img_height = 480;
@@ -68,6 +71,9 @@ public:
 	rtc_event_driven = ed;
         cmd_vel_pub = nh.advertise<geometry_msgs::Twist>(pub_topic, 1);
         roi_sub = nh.subscribe(sub_topic, 1, &ObjTracker::move_robot, this, ros::TransportHints().tcpNoDelay(), true);
+	
+	dyn_algo = da;
+	expt_start_time = 0.0;	
 
 	if (rtc_event_driven)
 	{
@@ -80,7 +86,7 @@ public:
         	}
 	}
 
-        std::cout << "Subscribed to roi, about to call ros::spin \n";
+        std::cout << "Subscribed to roi, about to call ros::spin " << "rtc?" << rtc_event_driven << ", dyn?" << dyn_algo << std::endl;
     }
 
     void print_stats()
@@ -113,12 +119,22 @@ public:
             double avg = m_sum/l;
             double med = m_arr[l/2];
             double perc = m_arr[(l*percentile)/100];
-            ROS_INFO("Mean, median, tail of %s is %f %f %f #", m.c_str(), avg, med, perc);            
+            ROS_INFO("Mean, median, tail of %s is %f %f %f , arr sz %i #", m.c_str(), avg, med, perc, l);            
         }
+    }
+ 
+    bool add_to_arr()
+    {
+	if (!dyn_algo)
+		return true;
+	else
+		return ((ros::Time::now().toSec() - expt_start_time) > 59.0); 
     }
 
     void move_robot(const std_msgs::Header::ConstPtr& msg)
     {
+	if (expt_start_time == 0.0)
+		expt_start_time = ros::Time::now().toSec();	
         double start_time = ros::Time::now().toSec();
         int x_offset, y_offset, width, height;
         std::stringstream ss(msg->frame_id);
@@ -157,11 +173,15 @@ public:
                     std::cout << "ERRORRR perc_offset_x was negative, m should've been +ve now...";
             }
 
-            metric_sum += m;
-            metric_arr.push_back(m);
+	    if (add_to_arr())
+	    {
+	      metric_sum += m;
+              metric_arr.push_back(m);
 
-	    metric1_sum += m;
-	    metric1_arr.push_back(m);
+	      metric1_sum += m;
+	      metric1_arr.push_back(m);
+
+	    }
 
             if (m > x_threshold)
             {
@@ -193,7 +213,7 @@ public:
 		rtc_pub.publish(hdr);
 	}
 
-        if (cb_count > 5)
+        if ( (cb_count > 5) && (add_to_arr()) )
         {
             float lat = (ros::Time::now() - msg->stamp).toSec();
             latency_sum += lat;
@@ -247,10 +267,12 @@ int main(int argc, char** argv)
 {
     double max_rot = atof(argv[1]);
     bool event_driven = (atoi(argv[2]) == 1);
+    // if this is true, start measuring stats after 60sec.
+    bool dyn_algo = (atoi(argv[3]) == 1);
     std::string node_name = "objecttracker";
     ROS_INFO("Init node name %s, max rot %f", node_name.c_str(), max_rot);
     ros::init(argc, argv, node_name);
-    ObjTracker ot(max_rot, event_driven, 0.1);
+    ObjTracker ot(max_rot, event_driven, dyn_algo, 0.1);
     ros::spin();
 
     return 0;
