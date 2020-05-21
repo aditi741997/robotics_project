@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import math
 
 #farr = [10, 15, 20, 25, 30, 33, 38, 45, 55, 67, 80, 100]
-#farr = [10, 15, 19, 21, 23, 25, 30, 33, 38, 45, 55, 67, 80, 100]
 farr = [12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
-farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 35, 40, 60, 80, 100] # Smallc1 2c
+farr = [10, 15, 21, 23, 25, 30, 33, 38, 45, 80, 100] # Smallc1 1c
+farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2c
 # farr = [12, 20, 28, 36, 44, 52, 60, 70, 80, 90, 100, 130]
 
 pre = ''
@@ -71,6 +71,8 @@ def subtract_min(x):
 
 if __name__ == '__main__':
     pre = sys.argv[2]
+    pre_perf = sys.argv[7]
+    post_perf = sys.argv[8]
     cpp = int(sys.argv[5])
     ind = {}
     for i in range(len(farr)):
@@ -86,8 +88,8 @@ if __name__ == '__main__':
 
     dist = 8.0
     # human_speed_arr = [dist/24, dist/20, dist/16, dist/12, dist/8, dist/4, dist/3, dist/2]
-    t_arr = [16,  4]
-    t_ind = {4:1, 16:0}    
+    t_arr = [4]
+    t_ind = {4:0}    
 
     abs_deg_arr = []
 
@@ -197,11 +199,22 @@ if __name__ == '__main__':
                             td_perc_rxn[ind[f]] = float(larr[14])
 
             #m_rxn_ratio[ind[f]] = med_m[ind[f]]/(med_rxn[ind[f]]*med_rxn[ind[f]])
-            
-            # read new_perf files for m1, m2 :
-	    (a, b) = read_actual_metric_file(pre + '_perf_%i%i.out'%(f,t))
-            perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]] = b #angle diff
-	    perc_m2[ind[f]], med_m2[ind[f]], mean_m2[ind[f]] = a #ty-hy
+            run_num = [8, 9]
+	    perc = 0.0
+	    med = 0.0
+	    mean = 0.0
+	    for ri in range(len(run_num)): 
+            	# read new_perf files for m1, m2 :
+	    	(a, b) = read_actual_metric_file(pre_perf + str(run_num[ri]) + post_perf + '_perf_%i%i.out'%(f,t))
+            	b1, b2, b3 = b
+		perc += b1
+		med += b2
+		mean += b3
+		#perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]] = b #angle diff
+	    	#perc_m2[ind[f]], med_m2[ind[f]], mean_m2[ind[f]] = a #ty-hy
+	    perc_m1[ind[f]] = perc/len(run_num)
+	    med_m1[ind[f]] = med/len(run_num)
+	    mean_m1[ind[f]] = mean/len(run_num)
 
 	abs_deg_arr.append(perc_m1)
 

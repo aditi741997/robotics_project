@@ -4,9 +4,9 @@ import matplotlib.pyplot as plt
 import math
 
 #farr = [10, 15, 20, 25, 30, 33, 38, 45, 55, 67, 80, 100]
-farr = [10, 15, 19, 21, 23, 25, 30, 33, 38, 45, 55, 67, 80, 100] #Smallc1
-farr = [9, 12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
-farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 35, 40, 60, 80, 100] # Smallc1 2c
+farr = [10, 15, 19, 21, 22, 23, 25, 30, 33, 38, 45, 67, 80, 100] #Smallc1
+#farr = [9, 12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
+#farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 35, 40, 60, 80, 100] # Smallc1 2c
 # farr = [12, 20, 28, 36, 44, 52, 60, 70, 80, 90, 100, 130]
 
 pre = ''
@@ -16,7 +16,8 @@ pre = ''
 if __name__ == '__main__':
     pre = sys.argv[1]
     cpp = int(sys.argv[2])
-
+    need_actual_freq = (int(sys.argv[7]) == 1) # we dont need new_freq for RTC and DynamicAlgo.
+    farr = farr if need_actual_freq else [15]
 
     mean_lats = {}
     med_lats = {}
@@ -62,40 +63,62 @@ if __name__ == '__main__':
 
         new_farr = [0.0 for x in farr]
         print farr
-        with open(pre1 + "_actual_freq.txt", 'r') as af:
-            afl = af.readlines()
-            for l in afl:
-                ls = l.split(' ')
-                freq = int(ls[0])
-                if int(ls[1]) == t and freq in farr:
-                    new_farr[ind[freq]] = float(ls[-1][:-1])
+	if need_actual_freq:
+            with open(pre1 + "_actual_freq.txt", 'r') as af:
+                afl = af.readlines()
+            	for l in afl:
+            	    ls = l.split(' ')
+                    freq = int(ls[0])
+                    if int(ls[1]) == t and freq in farr:
+                        new_farr[ind[freq]] = float(ls[-1][:-1])
+	else:
+	    new_farr = farr
 
         ss = 'new_' if sys.argv[4] == "264kb" else ''
+	runs = [1,2,3,4,5,6,7,8,9,10]
         for f in farr:
-            with open(pre1 + '_' + ss + 'preprocess_node_' + str(f) + str(t) + '.out', 'r') as fil:
-                print "Reading for ", f, t, pre1
-                for l in fil.readlines():
-                    larr = l.split(' ')
-                    if (cpp == 1):
-                        # c1n_latency if roscpp files :
-                        if 'c1n_latency' in l:
-                            if ":," in l:
-                                perc_lat[ind[f]] = float(larr[2][:-1])
-                                med_lat[ind[f]] = float(larr[3][:-1])
-                                mean_lat[ind[f]] = float(larr[4][:-1])
-                            else:
-                                perc_lat[ind[f]] = float(larr[6][:-1])
-                                med_lat[ind[f]] = float(larr[7][:-1])
-                                mean_lat[ind[f]] = float(larr[8][:-1])
-			elif "Latency w.r.t. TDNode" in l:
-				td_perc_lat[ind[f]] = float(larr[12])
-				td_med_lat[ind[f]] = float(larr[13])
-				td_mean_lat[ind[f]] = float(larr[14])
-                    else:
-                        if 'latency of msg arrival at N1' in l:
-                            perc_lat[ind[f]] = float(larr[14][:-2])
-                            med_lat[ind[f]] = float(larr[13][:-1])
-                            mean_lat[ind[f]] = float(larr[12][:-1])
+	    for r in runs:
+                with open('%s_preprocess_node_%i.%i.%i.out'%(pre1, r, f, t), 'r') as fil:
+                    print "Reading for ", f, t, pre1, r
+                    for l in fil.readlines():
+                        larr = l.split(' ')
+                        if (cpp == 1):
+                            # c1n_latency if roscpp files :
+                            if 'c1n_latency' in l:
+                                if ":," in l:
+                                    pl= float(larr[2][:-1])
+                                    medl = float(larr[3][:-1])
+                                    meanl = float(larr[4][:-1])
+                                else:
+                                    pl = float(larr[6][:-1])
+                                    medl = float(larr[7][:-1])
+                                    meanl = float(larr[8][:-1])
+			    elif "Latency w.r.t. TDNode" in l:
+				tdpl = float(larr[12])
+				tdmedl = float(larr[13])
+				tdmeanl = float(larr[14])
+                        else:
+                            if 'latency of msg arrival at N1' in l:
+                                perc_lat[ind[f]] = float(larr[14][:-2])
+                                med_lat[ind[f]] = float(larr[13][:-1])
+                                mean_lat[ind[f]] = float(larr[12][:-1])
+		    perc_lat[ind[f]] += pl
+		    med_lat[ind[f]] += medl
+		    mean_lat[ind[f]] += meanl
+		    
+		    td_perc_lat[ind[f]] += tdpl
+		    td_med_lat[ind[f]] += tdmedl
+		    td_mean_lat[ind[f]] += tdmeanl
+
+		    print perc_lat, med_lat, td_mean_lat
+	    #average over 10 runs:
+	    perc_lat[ind[f]] /= len(runs)
+	    med_lat[ind[f]] /= len(runs)
+	    mean_lat[ind[f]] /= len(runs)
+	    
+	    td_perc_lat[ind[f]] /= len(runs)
+	    td_med_lat[ind[f]] /= len(runs)
+	    td_mean_lat[ind[f]] /= len(runs)
 
             if (cpp == 0):
                 with open(pre1 + '_' + ss + 'preprocess_lat_' + str(f) + str(t) + '.txt', 'r') as ff:
@@ -134,8 +157,9 @@ if __name__ == '__main__':
             mean_perc_lat[ind[f]] = perc_lat[ind[f]] + mean_lat[ind[f]]
 
         print new_farr
-        print perc_lat
-        x = 9 if (cpp == 1) else 5
+        print perc_lat, med_lat, mean_lat
+	print td_perc_lat, td_med_lat, td_mean_lat
+        x = 5
         s = 'roscpp' if (cpp == 1) else 'rospy'
         plt.plot(new_farr, perc_lat, 'ro-', label='9%iile'%x)
         plt.plot(new_farr, mean_lat, 'b.--', label='mean')
