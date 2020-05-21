@@ -709,8 +709,8 @@ void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src)
 void GazeboRosCameraUtils::RTCEventPub(const std_msgs::Header::ConstPtr& msg)
 {
   double lag = (ros::Time::now() - msg->stamp).toSec();
-  if (lag > 0.002)
-    ROS_INFO("Got RTC Event with TS %f, lag from current time %f", msg->stamp.toSec(), lag);
+  //if (lag > 0.002)
+    //ROS_INFO("Got RTC Event with TS %f, lag from current time %f", msg->stamp.toSec(), lag);
   this->started_ed_pub = true;
   // ROS_INFO("ED Pub!");
   PublishCameraImg();
