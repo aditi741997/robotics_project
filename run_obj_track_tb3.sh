@@ -4,13 +4,13 @@
 # CHECK sleep line 31
 # CHECK sleep lines 60
 # CHECK param of preprocess
-# DynAlgo : rm rostopic, measure_actual_freq, gz_ros_cam_util TD, objtracker 0 1, rbx_perf 1
+# DynAlgo : rm rostopic, measure_actual_freq, gz_ros_cam_util TD, objtracker 0 1, rbx_perf 1, num_cores in controller
 # RTC : rm rostopic & measure_actual_freq & controller, gz_ros_cam_util ED, objtracker 1 0, rbx_perf 0 
 bot=waffle_pi
 export TURTLEBOT3_MODEL=$bot
 echo $TURTLEBOT3_MODEL
 export DISPLAY=:0
-x=Expt1_1c_Dyn
+x=Expt1_2c_Dyn
 # SBx : setting to x*10^5
 source ~/.bashrc
 #source /home/aditi/local/share/gazebo-9/setup.sh
@@ -24,7 +24,7 @@ echo 0 | sudo tee /sys/devices/system/cpu/cpu11/online
 echo 0 | sudo tee /sys/devices/system/cpu/cpu10/online
 echo 0 | sudo tee /sys/devices/system/cpu/cpu9/online
 echo 0 | sudo tee /sys/devices/system/cpu/cpu8/online
-echo 0 | sudo tee /sys/devices/system/cpu/cpu7/online
+echo 1 | sudo tee /sys/devices/system/cpu/cpu7/online
 echo 1 | sudo tee /sys/devices/system/cpu/cpu6/online
 echo 1 | sudo tee /sys/devices/system/cpu/cpu5/online
 echo 1 | sudo tee /sys/devices/system/cpu/cpu4/online
@@ -57,21 +57,21 @@ do
             lat="${x}_preprocess_lat_$r.$freq.$t.txt"
             echo $prep_out
             # taskset -c 7 python src/rbx1/rbx1_vision/src/rbx1_vision/preprocess_img.py 2300 $lat > $prep_out 2> $prep_err & # 1200 -> 9ms, 1500 -> 13ms.
-            taskset -a -c 6 rosrun beginner_tutorials subscriber 960000 1 $freq 8500 1 0 1 1 7700 listener chatter meh 1 > $prep_out 2> $prep_err &
+            taskset -a -c 6-7 rosrun beginner_tutorials subscriber 960000 1 $freq 8500 1 0 1 1 7700 listener chatter meh 1 > $prep_out 2> $prep_err &
             sleep 2s
             vis_out="${x}_vision_node_$r.$freq.$t.out"
             vis_err="${x}_vision_node_$r.$freq.$t.err"
             echo $vis_out
             # taskset -c 6 python src/rbx1/rbx1_vision/src/rbx1_vision/face_detector.py > $vis_out 2> $vis_err &
             # taskset -a -c 6 python src/rbx1/rbx1_vision/src/rbx1_vision/obj_detector.py 2100 > $vis_out 2> $vis_err &
-            taskset -a -c 6 rosrun beginner_tutorials objdetector 1 1 8000 obj_detector 1 1 12700 > $vis_out 2> $vis_err &
+            taskset -a -c 6-7 rosrun beginner_tutorials objdetector 1 1 8000 obj_detector 1 1 12700 > $vis_out 2> $vis_err &
             sleep 2s
             track_out="${x}_tracker_node_$r.$freq.$t.out"
             track_err="${x}_tracker_node_$r.$freq.$t.err"
             echo $track_out
             # taskset -a -c 6 python src/rbx1/rbx1_apps/nodes/object_tracker2.py /camera/rgb 1 > $track_out 2> $track_err &
-            taskset -a -c 6 rosrun beginner_tutorials objtracker 3.2 0 1 > $track_out 2> $track_err &
-	    taskset -a -c 5 rosrun beginner_tutorials controller 1 3 0.1 1.0 /camera/rgb/image_raw_cb_time /camera1/rgb/image_raw_cb_time /roi_cb_time & 
+            taskset -a -c 6-7 rosrun beginner_tutorials objtracker 3.2 0 1 > $track_out 2> $track_err &
+	    taskset -a -c 5 rosrun beginner_tutorials controller 2 3 0.1 1.0 /camera/rgb/image_raw_cb_time /camera1/rgb/image_raw_cb_time /roi_cb_time & 
             sleep 5s
 	    perf_file="${x}_perf_$r.$freq.$t.out"
             echo $perf_file
@@ -79,8 +79,8 @@ do
             #conda activate py2_opencv
             echo "Killing rostopic"
             kill -INT $(ps -ef | grep rostopic | grep -v grep | awk '{print $2}')
-	    taskset -c 5 python src/rbx/src/measure_rbx_perf.py $perf_file &
-            tim=$((9500/$freq))
+	    taskset -c 5 python src/rbx/src/measure_rbx_perf.py $perf_file 1 &
+            tim=$((2000/$freq))
             opt=23 #CHANGE THIS BASED ON ci !!!!!
             if [ $freq -lt $opt ]
             then
