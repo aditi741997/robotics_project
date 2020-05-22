@@ -108,6 +108,7 @@ public:
   int num_publish;
   int max_pub_freq;
   double cb_threshold;
+  int percentile;
 
 private:
   bool fullNoLock();

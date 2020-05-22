@@ -71,6 +71,8 @@ SubscriptionQueue::SubscriptionQueue(const std::string& topic, int32_t queue_siz
   cb_threshold = 0.05; // min. %age difference in stats to be published.
   
   ROS_INFO("Made subscription queue! Publisher topic %s, publish? %i", cb_time_topic.c_str(), publish_cb_time);
+  
+  percentile = 95;
 
   // v1 : using offline-computed estimate of mean,med,tail cb for now.
   if (publish_cb_time)
@@ -78,7 +80,7 @@ SubscriptionQueue::SubscriptionQueue(const std::string& topic, int32_t queue_siz
     cb_eval_durn = 60.0;
     cb_eval_init = false;
     // read current stats from file...
-    std::ifstream cb_stats_file("/home/ubuntu/catkin_ws/obj_track_cb_stats_file.txt");
+/*    std::ifstream cb_stats_file("/home/ubuntu/catkin_ws/obj_track_cb_stats_file.txt");
     std::string line;
     while (std::getline(cb_stats_file, line))
     {
@@ -95,6 +97,7 @@ SubscriptionQueue::SubscriptionQueue(const std::string& topic, int32_t queue_siz
     }
 
     ROS_INFO("Found cb time stats : mean med tail : %f %f %f, cb_eval_start_time is %f", mean_cb, med_cb, tail_cb, cb_eval_start_time);
+  */
   }
 }
 
@@ -254,13 +257,15 @@ CallbackInterface::CallResult SubscriptionQueue::call()
 	{
 		std::sort(arr_cb_time.begin(), arr_cb_time.end());
 		med_cb = arr_cb_time[arr_cb_time.size()/2];
-		ROS_INFO("Publishing! med_cb : %f, total_count : %i, cb_eval_start_time %f, cb_eval_durn %f", med_cb, total_count, cb_eval_start_time, cb_eval_durn);	
+		tail_cb = arr_cb_time[(percentile*(arr_cb_time.size()))/100];
+		ROS_INFO("Publishing! med_cb : %f, tail_cb : %f, total_count : %i, cb_eval_start_time %f, cb_eval_durn %f", med_cb, tail_cb, total_count, cb_eval_start_time, cb_eval_durn);	
 		// publish current cb time stats. 
 		std_msgs::Header h;
         	h.stamp = ros::Time::now();
         	std::stringstream ss;
         	ss << cb_time_pub.getTopic() << " E ";
-        	ss << med_cb;
+        	ss << med_cb << " ";
+		ss << tail_cb;
         	h.frame_id = ss.str();
         	// ROS_INFO("About to publish!");
         	cb_time_pub.publish(h);
@@ -276,15 +281,15 @@ CallbackInterface::CallResult SubscriptionQueue::call()
       std::partial_sort_copy(arr_cb_L.begin(), arr_cb_L.end(), sorted_cb_times_L.begin(), sorted_cb_times_L.end());
       med_cb_L = sorted_cb_times_L[max_count_L/2];
       mean_cb_L = sum_cb_L/max_count_L;
-      tail_cb_L = sorted_cb_times_L[(95*max_count_L)/100];
+      tail_cb_L = sorted_cb_times_L[(percentile*max_count_L)/100];
 
       if (total_count%500 == 3)
-        ROS_INFO("Window sz : %i, total_count %i, num_publish %i, mean med tail : %f %f %f, Current med_cb %f", max_count_L, total_count, num_publish, mean_cb_L, med_cb_L, tail_cb_L, med_cb);
+        ROS_INFO("Window sz : %i, total_count %i, num_publish %i, mean med tail : %f %f %f, Current med_cb %f, tail_cb %f", max_count_L, total_count, num_publish, mean_cb_L, med_cb_L, tail_cb_L, med_cb, tail_cb);
       
       // If current stats are quite different than expected 
       // AND time since last pub >= 1.0/max_pub_freq, then publish
       // v1 : using median
-      if ( ( ( med_cb_L > ((1.0+cb_threshold)*med_cb) ) || ( (med_cb_L) < ((1.0-cb_threshold)*med_cb) ) ) && ( (ros::Time::now().toSec() - last_pub_time) >= (1.0/max_pub_freq) ) )
+      if ( ( ( tail_cb_L > ((1.0+cb_threshold)*tail_cb) ) || ( (tail_cb_L) < ((1.0-cb_threshold)*tail_cb) ) ) && ( (ros::Time::now().toSec() - last_pub_time) >= (1.0/max_pub_freq) ) )
       {
         // publish!
         // v1 : only publish the short term median CBTime
@@ -293,7 +298,8 @@ CallbackInterface::CallResult SubscriptionQueue::call()
         h.stamp = ros::Time::now();
         std::stringstream ss;
         ss << cb_time_pub.getTopic() << " L ";
-        ss << med_cb_L;
+        ss << med_cb_L << " ";
+	ss << tail_cb_L;
         h.frame_id = ss.str();
         // ROS_INFO("About to publish!");
         cb_time_pub.publish(h);

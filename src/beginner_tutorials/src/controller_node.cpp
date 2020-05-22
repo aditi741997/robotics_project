@@ -27,8 +27,8 @@ class FreqController
     std::vector<double> med_cb_times;
     std::vector<double> med_cb_times_L;
 
-    std::vector<double> perc_cb_times;
-    std::vector<double> perc_cb_times_L;
+    std::vector<double> tail_cb_times;
+    std::vector<double> tail_cb_times_L;
 
     std::vector<int> cb_topics_msg_count;
 
@@ -44,10 +44,14 @@ class FreqController
 
     ros::NodeHandle nh;
     boost::thread controller_thread;
-    ros::Timer ct;    
+    ros::Timer ct;
+
+    double offline_durn;
+    double offline_freq;
+    bool use_median;
 
 public:
-    FreqController(std::vector<std::string>& cb_topics, int k, double mcr, double thresh, double epsilon)
+    FreqController(std::vector<std::string>& cb_topics, int k, double mcr, double thresh, double epsilon, double offln_durn, double offln_freq, bool use_med)
     {
         node_cb_topics = cb_topics;
         num_nodes = cb_topics.size();
@@ -62,11 +66,11 @@ public:
         ROS_INFO("Subscribed to all the topics! About to read from file");
         mean_cb_times = std::vector<double> (num_nodes, 0.0);
         med_cb_times = std::vector<double> (num_nodes, 0.0);
-        perc_cb_times = std::vector<double> (num_nodes, 0.0);
+        tail_cb_times = std::vector<double> (num_nodes, 0.0);
 
         mean_cb_times_L = std::vector<double> (num_nodes, 0.0);
         med_cb_times_L = std::vector<double> (num_nodes, 0.0);
-        perc_cb_times_L = std::vector<double> (num_nodes, 0.0);
+        tail_cb_times_L = std::vector<double> (num_nodes, 0.0);
 
         cb_topics_msg_count = std::vector<int> (num_nodes, 0);
 
@@ -81,6 +85,9 @@ public:
 	eps = epsilon;
         freq_threshold = thresh;
 
+	offline_durn = offln_durn;
+	offline_freq = offln_freq;
+	use_median = use_med;
         // v1 : read stats from file
 /*        std::ifstream cb_stats_file("/home/ubuntu/catkin_ws/obj_track_cb_stats_file.txt");
         std::string line;
@@ -120,13 +127,13 @@ public:
         updateFrequency(current_freq);
 */
 	// v2 : initialize with low frequency.
-	current_freq = 5.0;
+	current_freq = offline_freq;
 	updateFrequency(current_freq);
 
 ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_rate %f, max_change_rate %f, freq_thresh %f", num_cores, num_nodes, current_freq, change_rate, max_change_rate, freq_threshold);
 
 	// v2 : after one minute, set freq based on all stats arrived.
-        ct = nh.createTimer(ros::Duration(60.0), &FreqController::controllerFunc, this, true);  
+        ct = nh.createTimer(ros::Duration(offline_durn), &FreqController::controllerFunc, this, true);  
     }
 
     void updateStats(const std_msgs::Header::ConstPtr& msg)
@@ -134,8 +141,8 @@ ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_ra
         // this is called when any of the nodes publishes its stats.
         std::stringstream ss(msg->frame_id);
         std::string topic, stage;
-	double update;
-        double mean_cb, med_cb, perc_cb, mean_cb_L, med_cb_L, perc_cb_L;
+	double update, update2;
+        // double mean_cb, med_cb, perc_cb, mean_cb_L, med_cb_L, perc_cb_L;
         ss >> topic;
 	ss >> stage;
         // ss >> mean_cb;
@@ -143,7 +150,9 @@ ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_ra
         // ss >> perc_cb;
 
         // v1 : only publishing topic name, median value.
+	// v2 : topic name, med, tail
         ss >> update;
+	ss >> update2;
         // ss >> mean_cb_L;
         // ss >> perc_cb_L;
 
@@ -152,41 +161,60 @@ ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_ra
 	if (stage.find('L') != std::string::npos)
 	{
 		if (cb_topics_msg_count[ind]%20 == 0)
-			ROS_INFO("Received an L update : %s, median of %s [ind:%i] is %f, count: %i", msg->frame_id.c_str(), topic.c_str(), ind, update, cb_topics_msg_count[ind]);
+			ROS_INFO("Received an L update : %s, median of %s [ind:%i] is %f & tail is %f, count: %i", msg->frame_id.c_str(), topic.c_str(), ind, update, update2, cb_topics_msg_count[ind]);
 		// update med_cb_times_L and check for freq...
 		// v1: Only median
-        	med_cb_times_L[ind] = med_cb_L;
-    	    	cb_topics_msg_count[ind] += 1;
+        	med_cb_times_L[ind] = update;
+		// v2 : tail, median
+		tail_cb_times_L[ind] = update2;
+
+		cb_topics_msg_count[ind] += 1;
 
        		// calculate new optimal freq
         	double m = 0.0;
         	double sig = 0.0;
-        	for (int i = 0; i < med_cb_times_L.size(); i++)
-        	{
-            		// find M
-            		m = std::max(m, med_cb_times_L[i]);
-            		// find Sigma
-            		sig += med_cb_times_L[i];
-        	}
+		if (use_median)
+		{
+		 	for (int i = 0; i < med_cb_times_L.size(); i++)
+        		{
+        	    		// find M
+            			m = std::max(m, med_cb_times_L[i]);
+            			// find Sigma
+            			sig += tail_cb_times_L[i];
+        		}
+		}
+		else
+		{
+	        	for (int i = 0; i < tail_cb_times_L.size(); i++)
+        		{
+        	    		// find M
+            			m = std::max(m, tail_cb_times_L[i]);
+            			// find Sigma
+            			sig += tail_cb_times_L[i];
+        		}
+		}
         	double new_freq = (float)num_cores/sig;
         	if (m > 0.0)
             		new_freq = std::min(1.0/m, new_freq);
 
         	// if [this freq is very different [1.5x ?] AND last_freq_change-now >= 1/max_change_rate] from current freq, notify cv
-        	if ( (std::abs(new_freq - current_freq) >= (freq_threshold*current_freq) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
+        	if ( (std::abs((new_freq - eps) - current_freq) >= (freq_threshold*current_freq) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
         	{
-            		ROS_INFO("Need to change frequency! Got msg %s %f, current_freq %f, new_freq %f", topic.c_str(), med_cb_L, current_freq, new_freq);
+            		ROS_INFO("L-UPDATE : NEED to change frequency! Got msg %s %f, current_freq %f, new_freq %f", topic.c_str(), update, current_freq, new_freq);
             		updateFrequency(new_freq);
         	}
 
 	}
 	else
 	{
-		ROS_INFO("Received an E update : %s, median of %s [ind:%i] is %f", msg->frame_id.c_str(), topic.c_str(), ind, update);
+		ROS_INFO("Received an E update : %s, median of %s [ind:%i] is %f & tail is %f", msg->frame_id.c_str(), topic.c_str(), ind, update, update2);
 		// update med_cb_times
 		med_cb_times[ind] = update;
 		// also initialze med_cb_times_L
 		med_cb_times_L[ind] = update;
+		// v2 : also update tail
+		tail_cb_times[ind] = update2;
+		tail_cb_times_L[ind] = update2;
 	}
 
         // mean_cb_times[ind] = mean_cb;
@@ -227,36 +255,41 @@ ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_ra
 	// now calculate the best freq based on stats received
         	double m = 0.0;
         	double sig = 0.0;
-        	for (int i = 0; i < med_cb_times_L.size(); i++)
-        	{
-            		// find M
-			double x = med_cb_times_L[i];
-            		m = std::max(m, x);
-            		// find Sigma
-            		sig += x;
-        	}
-        	double new_freq = (float)num_cores/sig;
+
+		if (use_median)
+		{
+			for (int i = 0; i < med_cb_times_L.size(); i++)
+        		{
+            			// find M
+				double x = med_cb_times_L[i];
+            			m = std::max(m, x);
+            			// find Sigma
+            			sig += x;
+        		}
+		}
+        	else
+		{
+			// use tail
+			for (int i = 0; i < tail_cb_times_L.size(); i++)
+        		{
+            			// find M
+				double x = tail_cb_times_L[i];
+            			m = std::max(m, x);
+            			// find Sigma
+            			sig += x;
+			}
+		}
+		double new_freq = (float)num_cores/sig;
         	if (m > 0.0)
             		new_freq = std::min(1.0/m, new_freq);
 		ROS_INFO("Controller : New freq : %f", new_freq);
 	
-	if ( (std::abs(new_freq - current_freq) >= (freq_threshold*current_freq) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
+	if ( (std::abs((new_freq - eps) - current_freq) >= (freq_threshold*current_freq) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
                 {
-                        ROS_INFO("Controller : Need to change frequency! current_freq %f, new_freq %f", current_freq, new_freq);
+                        ROS_INFO("Controller : NEED to change frequency! current_freq %f, new_freq %f", current_freq, new_freq);
                         updateFrequency(new_freq);
                 }
 
-/*        while (running)
-        {
-            // calculate freq
-            double m = 0.0;
-            double sig = 0.0;
-            // TODO: Take max, sum over all nodes [Perc or Med?]
-            double new_freq = std::max(m, sig/num_cores);
-            // TODO: if [this freq is very different [1.5x ?] AND last_freq_change-now >= 1/max_change_rate] then change freq, update last_change_time
-            // cv.timed wait (1/change_rate)
-        }
-*/
     }
 };
 
@@ -267,13 +300,16 @@ int main(int argc, char **argv)
     int m = atoi(argv[2]); // number of nodes
     double freq_thresh = atof(argv[3]);
     double epsi = atof(argv[4]);
-    ROS_INFO("Init node name %s, num_cores %i, num ndoes %i", node_name.c_str(), k, m);
+    double offln_durn = atof(argv[5]); 
+    double offln_freq = atof(argv[6]);
+    bool use_med = (atoi(argv[7]) == 1);
+    ROS_INFO("Init node name %s, num_cores %i, num ndoes %i, offline durn %f, offline freq %f", node_name.c_str(), k, m, offln_durn, offln_freq);
     ros::init(argc, argv, node_name);
     std::vector<std::string> topic_list (m);
     for (int i = 0; i < m; i++)
-        topic_list[i] = argv[5+i];
+        topic_list[i] = argv[8+i];
 
-    FreqController fc(topic_list, k, 10.0, freq_thresh, epsi);
+    FreqController fc(topic_list, k, 10.0, freq_thresh, epsi, offln_durn, offln_freq, use_med);
     ros::spin();
 
     return 0;

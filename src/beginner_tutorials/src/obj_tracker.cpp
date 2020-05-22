@@ -59,8 +59,9 @@ class ObjTracker
 
     bool dyn_algo;
     double expt_start_time;
+    double offline_durn;
 public:
-    ObjTracker(double max_rot, bool ed, bool da, double x_thr)
+    ObjTracker(double max_rot, bool ed, bool da, double x_thr, double offln_durn)
     {
         img_width = 640;
         img_height = 480;
@@ -73,7 +74,8 @@ public:
         roi_sub = nh.subscribe(sub_topic, 1, &ObjTracker::move_robot, this, ros::TransportHints().tcpNoDelay(), true);
 	
 	dyn_algo = da;
-	expt_start_time = 0.0;	
+	expt_start_time = 0.0;
+	offline_durn = offln_durn;
 
 	if (rtc_event_driven)
 	{
@@ -128,7 +130,7 @@ public:
 	if (!dyn_algo)
 		return true;
 	else
-		return ((ros::Time::now().toSec() - expt_start_time) > 59.0); 
+		return ((ros::Time::now().toSec() - expt_start_time) > offline_durn); 
     }
 
     void move_robot(const std_msgs::Header::ConstPtr& msg)
@@ -268,10 +270,11 @@ int main(int argc, char** argv)
     bool event_driven = (atoi(argv[2]) == 1);
     // if this is true, start measuring stats after 60sec.
     bool dyn_algo = (atoi(argv[3]) == 1);
+    double offln_durn = atof(argv[4]);
     std::string node_name = "objecttracker";
     ROS_INFO("Init node name %s, max rot %f", node_name.c_str(), max_rot);
     ros::init(argc, argv, node_name);
-    ObjTracker ot(max_rot, event_driven, dyn_algo, 0.1);
+    ObjTracker ot(max_rot, event_driven, dyn_algo, 0.1, offln_durn);
     ros::spin();
 
     return 0;
