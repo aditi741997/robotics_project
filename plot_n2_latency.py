@@ -8,6 +8,7 @@ farr = [9, 12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
 farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 35, 40, 60, 80, 100] # Smallc1 2c
 farr = [10, 15, 19, 21, 22, 23, 25, 30, 33, 38, 45, 67, 80, 100]
 # farr = [12, 20, 28, 36, 44, 52, 60, 80, 90, 100, 120, 140]
+farr = [9, 16, 23, 24, 25, 30, 55, 80]
 
 pre = ''
 
@@ -39,7 +40,7 @@ if __name__ == '__main__':
     ind = {}
     for i in range(len(farr)):
         ind[farr[i]] = i
-    pre1 = pre + c1
+    pre1 = pre 
     perc_lat =  [0.0 for x in farr]
     med_lat = [0.0 for x in farr]
     mean_lat = [0.0 for x in farr]

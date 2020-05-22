@@ -8,6 +8,7 @@ farr = [10, 15, 19, 21, 22, 23, 25, 30, 33, 38, 45, 67, 80, 100] #Smallc1
 #farr = [9, 12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
 #farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 35, 40, 60, 80, 100] # Smallc1 2c
 # farr = [12, 20, 28, 36, 44, 52, 60, 70, 80, 90, 100, 130]
+farr = [9, 16, 23, 24, 25, 30, 55, 80]
 
 pre = ''
 
@@ -35,7 +36,7 @@ if __name__ == '__main__':
     #     ci = ci_264kb
     # else:
     #     ci = newc
-    # t=int(sys.argv[6])
+    t=int(sys.argv[6])
     # for c1 in ci.keys():
     #     print "Starting ", c1
     #     if c1 == "" and sys.argv[4] == "1mb":
@@ -46,10 +47,9 @@ if __name__ == '__main__':
     #     #     farr[-2] = 115
     #     # else:
     #     #     farr[-2] = 120
-    #     ind = {}
-    #     for i in range(len(farr)):
-    #         ind[farr[i]] = i
-    #     pre1 = pre + c1
+    ind = {}
+    for i in range(len(farr)):
+        ind[farr[i]] = i
 
     perc_lat =  [0.0 for x in farr]
     med_lat = [0.0 for x in farr]
@@ -66,6 +66,7 @@ if __name__ == '__main__':
 
     new_farr = [0.0 for x in farr]
     print farr
+    pre1 = pre 
     if need_actual_freq:
         with open(pre1 + "_actual_freq.txt", 'r') as af:
             afl = af.readlines()
@@ -77,8 +78,6 @@ if __name__ == '__main__':
     else:
         new_farr = farr
 
-        # ss = 'new_' if sys.argv[4] == "264kb" else ''
-    
     runs = [1,2,3,4,5,6,7,8,9,10]
     for f in farr:
         for r in runs:
@@ -174,7 +173,7 @@ if __name__ == '__main__':
     plt.plot(new_farr, perc_lat, 'ro-', label='9%iile'%x)
     plt.plot(new_farr, mean_lat, 'b.--', label='mean')
     plt.plot(new_farr, med_lat, 'g*:', label='Median')
-    plt.title('Mean, 9%iile Latency (gz->%s) c1=%dms, %s'%(x, s, ci[c1], pre1))
+    plt.title('Mean, 9%iile Latency (gz->%s) c1=%dms, %s'%(x, s, c1, pre1))
     plt.xlabel('Publisher Frequency')
     plt.ylabel('Latency')
     plt.ylim(0, 0.095)
@@ -184,7 +183,7 @@ if __name__ == '__main__':
     plt.plot(new_farr, td_perc_lat, 'ro-', label='9%iile'%x)
     plt.plot(new_farr, td_mean_lat, 'b.--', label='mean')
     plt.plot(new_farr, td_med_lat, 'g*:', label='Median')
-    plt.title('Mean, 9%iile Latency w.r.t. TDNode (gz->%s) c1=%dms, %s'%(x, s, ci[c1], pre1))
+    plt.title('Mean, 9%iile Latency w.r.t. TDNode (gz->%s) c1=%dms, %s'%(x, s, c1, pre1))
     plt.xlabel('Publisher Frequency')
     plt.ylabel('Latency wrt TD')
     plt.legend()
@@ -193,7 +192,7 @@ if __name__ == '__main__':
     plt.plot(new_farr, real_perc_lat, 'ro-', label='9%iile'%x)
     plt.plot(new_farr, real_mean_lat, 'b.--', label='mean')
     plt.plot(new_farr, real_med_lat, 'g*:', label='Median')
-    plt.title('Mean, 9%iile RealTime Latency (gz->%s) c1=%dms, %s'%(x, s, ci[c1], pre1))
+    plt.title('Mean, 9%iile RealTime Latency (gz->%s) c1=%dms, %s'%(x, s, c1, pre1))
     plt.xlabel('Publisher Frequency')
     plt.ylabel('RT Latency')
     plt.legend()

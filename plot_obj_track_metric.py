@@ -6,6 +6,7 @@ import math
 farr = [12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
 farr = [10, 15, 21, 23, 25, 30, 33, 38, 45, 80, 100] # Smallc1 1c
 farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2c
+farr = [9, 16, 23, 24, 25, 30, 55, 80]
 
 pre = ''
 
@@ -60,7 +61,7 @@ def subtract_min(x):
         m = x[0]
         for i in range(len(x)):
             if x[i] < m:
-            m = x[i]
+                m = x[i]
         # subtract from all elems :
         new_arr = [(y-m) for y in x]
         return new_arr
@@ -145,11 +146,11 @@ if __name__ == '__main__':
         td_med_rxn = [0.0 for x in farr]
         td_mean_rxn = [0.0 for x in farr]
 
-        runs = [1,2,3,4,5,6,7,8,9,10]        
+        runs = [4,5,6,7,8,9]        
         for f in farr:
             for r in runs:
                 # read tracker log to find metric vals.
-                with open('%s_tracker_node_%i.%i.%i.out'%(pre1, r, f, t), 'r') as fil:
+                with open('%s_tracker_node_%i.%i.%i.out'%(pre, r, f, t), 'r') as fil:
                     print "Reading for : ", f, t, r
                     for l in fil.readlines():
                         larr = l.split(' ')
@@ -199,7 +200,7 @@ if __name__ == '__main__':
                                 td_meanrxn = float(larr[12])
                                 td_medrxn = float(larr[13])
                                 td_percrxn = float(larr[14])
-                (a,b) = read_actual_metric_file('%s_perf_%i.%i.%i.out'%(pre1, r, f, t))
+                (a,b) = read_actual_metric_file('%s_perf_%i.%i.%i.out'%(pre, r, f, t))
                 # add the value of this run to the metric arr of len(farr)
                 mean_lat[ind[f]] += meanlat
                 med_lat[ind[f]] += medlat
@@ -266,15 +267,14 @@ if __name__ == '__main__':
             mean_m1[ind[f]] /= len(runs)
 
             with open(fname, 'a') as f1:
-                # TODO:write all metrics.
-                f1.write('%i %i 10RunAvg N3Latency Tail, Med, Mean : %f %f %f #\n'%(perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
-                f1.write('%i %i 10RunAvg N3Latency w.r.t. TDNode Tail, Med, Mean : %f %f %f #\n'%(td_perc_lat[ind[f]], td_med_lat[ind[f]], td_mean_lat[ind[f]]))
-                f1.write('%i %i 10RunAvg Tput Tail, Med, Mean : %f %f %f #\n'%(perc_tput[ind[f]], med_tput[ind[f]], mean_tput[ind[f]]))
-                f1.write('%i %i 10RunAvg RxnTime Tail, Med, Mean : %f %f %f #\n'%(perc_rxn[ind[f]], med_rxn[ind[f]], mean_rxn[ind[f]]))
-                f1.write('%i %i 10RunAvg RxnTime w.r.t. TDNode Tail, Med, Mean : %f %f %f #\n'%(td_perc_rxn[ind[f]], td_med_rxn[ind[f]], td_mean_rxn[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Rel. Metric Tail, Med, Mean : %f %f %f #\n'%(perc_m[ind[f]], med_m[ind[f]], mean_m[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Rel. Metric1 Tail, Med, Mean : %f %f %f #\n'%(perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Abs Metric Tail, Med, Mean : %f %f %f #\n'%(perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
+                f1.write('%i %i 10RunAvg N3Latency Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
+                f1.write('%i %i 10RunAvg N3Latency w.r.t. TDNode Tail, Med, Mean : %f %f %f #\n'%(f, t, td_perc_lat[ind[f]], td_med_lat[ind[f]], td_mean_lat[ind[f]]))
+                f1.write('%i %i 10RunAvg Tput Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_tput[ind[f]], med_tput[ind[f]], mean_tput[ind[f]]))
+                f1.write('%i %i 10RunAvg RxnTime Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_rxn[ind[f]], med_rxn[ind[f]], mean_rxn[ind[f]]))
+                f1.write('%i %i 10RunAvg RxnTime w.r.t. TDNode Tail, Med, Mean : %f %f %f #\n'%(f, t, td_perc_rxn[ind[f]], td_med_rxn[ind[f]], td_mean_rxn[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Rel. Metric Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_m[ind[f]], med_m[ind[f]], mean_m[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Rel. Metric1 Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Abs Metric Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
 
         abs_deg_arr.append(perc_m1)
 
@@ -383,7 +383,7 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-    '''
+        '''
         x = zip(med_rxn, med_m)
         x.sort()
         print x
@@ -407,7 +407,7 @@ if __name__ == '__main__':
         plt.ylabel('Median Metric')
         plt.xlim(0, 0.25)
         plt.show()
-    '''
+        '''
         p1 = plt.plot(new_farr, perc_m1, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, med_m1, 'g.:', label='Median')
         plt.plot(new_farr, mean_m1, 'b*--', label='Mean')
