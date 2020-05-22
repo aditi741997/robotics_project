@@ -160,11 +160,11 @@ CallbackInterface::CallResult SubscriptionQueue::call()
 {
   // The callback may result in our own destruction.  Therefore, we may need to keep a reference to ourselves
   // that outlasts the scoped_try_lock
-  if (!cb_eval_init)
+  if ((!cb_eval_init) && publish_cb_time)
   {
     cb_eval_init = true;
     cb_eval_start_time = ros::Time::now().toSec();
-    ROS_INFO("cb_eval_start_time is now %f", cb_eval_start_time);
+    ROS_INFO("For topic %s cb_eval_start_time is now %f", cb_time_pub.getTopic().c_str(), cb_eval_start_time);
   }
   ros::Time call_start = ros::Time::now();
   clock_t call_start_real = clock();
@@ -254,7 +254,7 @@ CallbackInterface::CallResult SubscriptionQueue::call()
 	{
 		std::sort(arr_cb_time.begin(), arr_cb_time.end());
 		med_cb = arr_cb_time[arr_cb_time.size()/2];
-		ROS_INFO("Publishing! total_count : %i, cb_eval_start_time %f, cb_eval_durn %f", total_count, cb_eval_start_time, cb_eval_durn);	
+		ROS_INFO("Publishing! med_cb : %f, total_count : %i, cb_eval_start_time %f, cb_eval_durn %f", med_cb, total_count, cb_eval_start_time, cb_eval_durn);	
 		// publish current cb time stats. 
 		std_msgs::Header h;
         	h.stamp = ros::Time::now();

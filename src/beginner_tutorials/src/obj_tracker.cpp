@@ -206,7 +206,6 @@ public:
         cmd_vel_pub.publish(move_cmd);
 	if (rtc_event_driven)
 	{
-		ROS_INFO("About to publish RTC on %s", rtc_pub_topic.c_str());
 		std_msgs::Header hdr;
 		hdr.stamp = ros::Time::now();
 		hdr.frame_id = "";
