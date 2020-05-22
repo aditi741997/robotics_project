@@ -38,10 +38,10 @@ def read_actual_metric_file(fname):
                 arr_m1.append(abs(ty-hy))
                 h_theta = math.atan(hy/3.0)
                 t_theta = 2*math.atan(ts/tc)
-		t_theta1 = math.atan(ty/3.0)
+        t_theta1 = math.atan(ty/3.0)
                 arr_m2.append(abs(t_theta1 - h_theta))
-		#if i%500 == 3:
-		    #print i, hpp, hy, tc, ts, ty, arr_m2[-1]
+        #if i%500 == 3:
+            #print i, hpp, hy, tc, ts, ty, arr_m2[-1]
             except:
                 print "ERRORRR!! ", hpp
     sarr = sorted(arr_m1)
@@ -59,15 +59,15 @@ def cmps(x):
 def subtract_min(x):
     # find the smallest elem in array and subtract it from all elements
     if (len(x) > 0):
-	m = x[0]
-	for i in range(len(x)):
-	    if x[i] < m:
-		m = x[i]
-	# subtract from all elems :
-	new_arr = [(y-m) for y in x]
-	return new_arr
+    m = x[0]
+    for i in range(len(x)):
+        if x[i] < m:
+        m = x[i]
+    # subtract from all elems :
+    new_arr = [(y-m) for y in x]
+    return new_arr
     else:
-	return x
+    return x
 
 if __name__ == '__main__':
     pre = sys.argv[2]
@@ -124,9 +124,9 @@ if __name__ == '__main__':
         med_m1 = [0.0 for x in farr]
         mean_m1 = [0.0 for x in farr]
 
-    	perc_newm1 = [0.0 for x in farr]
-    	med_newm1 = [0.0 for x in farr]
-    	mean_newm1 = [0.0 for x in farr]	
+        perc_newm1 = [0.0 for x in farr]
+        med_newm1 = [0.0 for x in farr]
+        mean_newm1 = [0.0 for x in farr]    
 
         perc_m2 = [0.0 for x in farr]
         med_m2 = [0.0 for x in farr]
@@ -190,16 +190,16 @@ if __name__ == '__main__':
                                 meantput = float(larr[10])
                                 medtput = float(larr[11])
                                 perctput = float(larr[12])
-                			elif "Metric1" in l:
-                			    meannewm1 = float(larr[10])
-                			    mednewm1 = float(larr[11])
-                			    percnewm1 = float(larr[12])
-                			elif "N3 Lat w.r.t. TDNode" in l:
-                			    td_meanlat = float(larr[13])
+                            elif "Metric1" in l:
+                                meannewm1 = float(larr[10])
+                                mednewm1 = float(larr[11])
+                                percnewm1 = float(larr[12])
+                            elif "N3 Lat w.r.t. TDNode" in l:
+                                td_meanlat = float(larr[13])
                                 td_medlat = float(larr[14])
                                 td_perclat = float(larr[15])
-                			elif "RxnTm w.r.t." in l:
-                			    td_meanrxn = float(larr[12])
+                            elif "RxnTm w.r.t." in l:
+                                td_meanrxn = float(larr[12])
                                 td_medrxn = float(larr[13])
                                 td_percrxn = float(larr[14])
                 (a,b) = read_actual_metric_file('%s_perf_%i.%i.%i.out'%(pre1, r, f, t))
@@ -269,7 +269,7 @@ if __name__ == '__main__':
                 f1.write('%i %i 10RunAvg Perf Rel. Metric1 Tail, Med, Mean : %f %f %f #\n'%(perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
                 f1.write('%i %i 10RunAvg Perf Abs Metric Tail, Med, Mean : %f %f %f #\n'%(perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
 
-	abs_deg_arr.append(perc_m1)
+        abs_deg_arr.append(perc_m1)
 
         print new_farr
         p1 = plt.plot(new_farr, perc_m, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
@@ -282,7 +282,7 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-	p5 = plt.plot(new_farr, perc_newm1, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        p5 = plt.plot(new_farr, perc_newm1, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, med_newm1, 'g.:', label='Median')
         plt.plot(new_farr, mean_newm1, 'b*--', label='Mean')
         plt.title('Metric1 at displacement time : %f, %s'%(t, sys.argv[4]))
@@ -312,36 +312,36 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-	new_perc_rxn = subtract_min(perc_rxn)
-	new_med_rxn = subtract_min(med_rxn)
-	new_mean_rxn = subtract_min(mean_rxn)
+    new_perc_rxn = subtract_min(perc_rxn)
+    new_med_rxn = subtract_min(med_rxn)
+    new_mean_rxn = subtract_min(mean_rxn)
 
-	new_td_perc_rxn = subtract_min(td_perc_rxn)
-	new_td_med_rxn = subtract_min(td_med_rxn)
-	new_td_mean_rxn = subtract_min(td_mean_rxn)
+    new_td_perc_rxn = subtract_min(td_perc_rxn)
+    new_td_med_rxn = subtract_min(td_med_rxn)
+    new_td_mean_rxn = subtract_min(td_mean_rxn)
 
-	plt.plot(new_farr, new_med_rxn, 'ro-', label='Median RxnTime')
-	plt.plot(new_farr, new_td_med_rxn, 'g*:', label='Median TD RxnTime')
-	plt.title('Median RxnTime vs RT w.r.t. TD publisher')
-	plt.xlabel('Publisher freq')
-	plt.legend()
-	plt.show()
+    plt.plot(new_farr, new_med_rxn, 'ro-', label='Median RxnTime')
+    plt.plot(new_farr, new_td_med_rxn, 'g*:', label='Median TD RxnTime')
+    plt.title('Median RxnTime vs RT w.r.t. TD publisher')
+    plt.xlabel('Publisher freq')
+    plt.legend()
+    plt.show()
 
-	plt.plot(new_farr, new_mean_rxn, 'ro-', label='Mean RxnTime')
-	plt.plot(new_farr, new_td_mean_rxn, 'g*:', label='Mean TD RxnTime')
-	plt.title('Mean RxnTime vs RT w.r.t. TD publisher')
-	plt.xlabel('Publisher freq')
-	plt.legend()
-	plt.show()
+    plt.plot(new_farr, new_mean_rxn, 'ro-', label='Mean RxnTime')
+    plt.plot(new_farr, new_td_mean_rxn, 'g*:', label='Mean TD RxnTime')
+    plt.title('Mean RxnTime vs RT w.r.t. TD publisher')
+    plt.xlabel('Publisher freq')
+    plt.legend()
+    plt.show()
 
-	plt.plot(new_farr, new_perc_rxn, 'ro-', label='Tail RxnTime')
-	plt.plot(new_farr, new_td_perc_rxn, 'g*:', label='Tail TD RxnTime')
-	plt.title('Tail RxnTime vs RT w.r.t. TD publisher')
-	plt.xlabel('Publisher freq')
-	plt.legend()
-	plt.show()
+    plt.plot(new_farr, new_perc_rxn, 'ro-', label='Tail RxnTime')
+    plt.plot(new_farr, new_td_perc_rxn, 'g*:', label='Tail TD RxnTime')
+    plt.title('Tail RxnTime vs RT w.r.t. TD publisher')
+    plt.xlabel('Publisher freq')
+    plt.legend()
+    plt.show()
 
-	# plt.plot(new_farr, m_rxn_ratio, 'g*:', label='Ratio')
+    # plt.plot(new_farr, m_rxn_ratio, 'g*:', label='Ratio')
         # plt.title('Ratio of Median metric to median rxn time at c1 : %s'%(sys.argv[4]))
         # plt.xlabel('Publisher Frequency')
         # plt.ylabel('Ratio')
@@ -366,7 +366,7 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-	p2 = plt.plot(new_farr, perc_tput, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+    p2 = plt.plot(new_farr, perc_tput, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, med_tput, 'g.:', label='Median')
         plt.plot(new_farr, mean_tput, 'b*--', label='Mean')
         plt.title('Tput at displacement time : %f, %s'%(t, sys.argv[4]))
@@ -376,7 +376,7 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-	'''
+    '''
         x = zip(med_rxn, med_m)
         x.sort()
         print x
@@ -400,7 +400,7 @@ if __name__ == '__main__':
         plt.ylabel('Median Metric')
         plt.xlim(0, 0.25)
         plt.show()
-	'''
+    '''
         p1 = plt.plot(new_farr, perc_m1, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, med_m1, 'g.:', label='Median')
         plt.plot(new_farr, mean_m1, 'b*--', label='Mean')
@@ -408,17 +408,17 @@ if __name__ == '__main__':
         plt.xlabel('Publisher Frequency')
         plt.ylabel('Abs Metric (offset)')
         plt.ylim(0, 3.2)
-	plt.legend()
+    plt.legend()
         plt.show()
 
-	p1 = plt.plot(new_farr, perc_m2, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+    p1 = plt.plot(new_farr, perc_m2, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, med_m2, 'g.:', label='Median')
         plt.plot(new_farr, mean_m2, 'b*--', label='Mean')
         plt.title('Absolute Distance b/w Cam & Obj at displacement time : %f'%(t))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('Abs Metric : Distance Diff')
         plt.ylim(0, 10)
-	plt.legend()
+    plt.legend()
         plt.show()
 
         #rel_perf_tail_improv_wrt_low_freq.append(perc_m[ind[10]]/perc_m[ind[opt_freq]])
@@ -428,7 +428,7 @@ if __name__ == '__main__':
         # abs_perf_med_improv_wrt_low_freq.append(med_m1[ind[10]]/med_m1[ind[opt_freq]])
     s_arr = ['o--', '*--', '^:', '<:', '>--']
     for t in sorted(t_ind.keys()):
-	plt.plot(new_farr, abs_deg_arr[t_ind[t]], s_arr[t_ind[t]], label='Speed:'+str(t/8.0))
+    plt.plot(new_farr, abs_deg_arr[t_ind[t]], s_arr[t_ind[t]], label='Speed:'+str(t/8.0))
     plt.title('Perf(Abs DegDiff) w.r.t diff obj speeds at cam speed %s'%(sys.argv[6]))
     plt.xlabel('Publisher Freq')
     plt.ylabel('Perf : ABsolute Deg Dif')

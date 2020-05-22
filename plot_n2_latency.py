@@ -50,7 +50,7 @@ if __name__ == '__main__':
 
         # hitrate_valid = [False for x in farr]
 
-	    new_farr = [0.0 for x in farr]
+        new_farr = [0.0 for x in farr]
         print farr
         if need_actual_freq:
             with open(pre1 + "_actual_freq.txt", 'r') as af:
@@ -77,8 +77,8 @@ if __name__ == '__main__':
                                 pl = float(larr[12])
                                 medl = float(larr[11])
                                 meanl = float(larr[10])
-                			elif 'TD node' in l:
-                			    tdpl = float(larr[17])
+                            elif 'TD node' in l:
+                                tdpl = float(larr[17])
                                 tdmedl = float(larr[16])
                                 tdmeanl = float(larr[15])
                     perc_lat[ind[f]] = += pl
