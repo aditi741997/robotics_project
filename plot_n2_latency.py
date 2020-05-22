@@ -80,7 +80,7 @@ if __name__ == '__main__':
                             tdpl = float(larr[17])
                             tdmedl = float(larr[16])
                             tdmeanl = float(larr[15])
-                perc_lat[ind[f]] = += pl
+                perc_lat[ind[f]] += pl
                 med_lat[ind[f]] += medl
                 mean_lat[ind[f]] += meanl
                 
