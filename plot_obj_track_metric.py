@@ -71,9 +71,11 @@ def subtract_min(x):
 
 if __name__ == '__main__':
     pre = sys.argv[2]
-    pre_perf = sys.argv[7]
-    post_perf = sys.argv[8]
     cpp = int(sys.argv[5])
+    need_actual_freq = (int(sys.argv[7]) == 1) # we dont need new_freq for RTC and DynamicAlgo.
+    farr = farr if need_actual_freq else [15]
+    fname = sys.argv[8]
+
     ind = {}
     for i in range(len(farr)):
         ind[farr[i]] = i
@@ -84,16 +86,14 @@ if __name__ == '__main__':
     rel_perf_med_improv_wrt_low_freq = []
     abs_perf_med_improv_wrt_low_freq = []
 
-    
-
     dist = 8.0
     # human_speed_arr = [dist/24, dist/20, dist/16, dist/12, dist/8, dist/4, dist/3, dist/2]
-    t_arr = [4]
-    t_ind = {4:0}    
+    t_arr = [int(sys.argv[9])]
+    t_ind = {t_arr[0] : 0}
 
     abs_deg_arr = []
 
-    for t in t_arr: #, 12, 16, 20]:
+    for t in t_arr:
         perc_m = [0.0 for x in farr]
         med_m = [0.0 for x in farr]
         mean_m = [0.0 for x in farr]
@@ -106,13 +106,16 @@ if __name__ == '__main__':
 
         m_rxn_ratio = [1.0 for x in farr]
 
-        with open(sys.argv[1], 'r') as af:
-            afl = af.readlines()
-            for l in afl:
-                ls = l.split(' ')
-                freq = int(ls[0])
-                if int(ls[1]) == t and freq in farr:
-                    new_farr[ind[freq]] = float(ls[-1][:-1])
+        if need_actual_freq:
+            with open(sys.argv[1], 'r') as af:
+                afl = af.readlines()
+                for l in afl:
+                    ls = l.split(' ')
+                    freq = int(ls[0])
+                    if int(ls[1]) == t and freq in farr:
+                        new_farr[ind[freq]] = float(ls[-1][:-1])
+        else:
+            new_farr = farr
 
         # Measuring from gz model states :
         # m2 : if tb3 pointing towards (x,y1) and human at (x,y2) then y1/y2
@@ -121,9 +124,9 @@ if __name__ == '__main__':
         med_m1 = [0.0 for x in farr]
         mean_m1 = [0.0 for x in farr]
 
-	perc_newm1 = [0.0 for x in farr]
-	med_newm1 = [0.0 for x in farr]
-	mean_newm1 = [0.0 for x in farr]	
+    	perc_newm1 = [0.0 for x in farr]
+    	med_newm1 = [0.0 for x in farr]
+    	mean_newm1 = [0.0 for x in farr]	
 
         perc_m2 = [0.0 for x in farr]
         med_m2 = [0.0 for x in farr]
@@ -145,76 +148,126 @@ if __name__ == '__main__':
         td_med_rxn = [0.0 for x in farr]
         td_mean_rxn = [0.0 for x in farr]
 
+        runs = [1,2,3,4,5,6,7,8,9,10]        
         for f in farr:
-            # read tracker log to find metric vals.
-            with open(pre + '_tracker_node_' + str(f) + str(t) + '.out', 'r') as fil:
-                print "Reading for : ", f, t
-                for l in fil.readlines():
-                    larr = l.split(' ')
-                    if cpp == 0:
-                        if "perf_metric" in l:
-                            mean_m[ind[f]] = float(larr[7][:-1])
-                            med_m[ind[f]] = float(larr[8][:-1])
-                            perc_m[ind[f]] = float(larr[9][:-1])
-                        elif "rxn_time" in l:
-                            mean_rxn[ind[f]] = float(larr[6][:-1])
-                            med_rxn[ind[f]] = float(larr[7][:-1])
-                            perc_rxn[ind[f]] = float(larr[8][:-1])
-                        elif "of latency" in l:
-                            mean_lat[ind[f]] = float(larr[6][:-1])
-                            med_lat[ind[f]] = float(larr[7][:-1])
-                            perc_lat[ind[f]] = float(larr[8][:-1])
-                        elif "of tput" in l:
-                            mean_tput[ind[f]] = float(larr[6][:-1])
-                            med_tput[ind[f]] = float(larr[7][:-1])
-                            perc_tput[ind[f]] = float(larr[8][:-1])
-                    else:
-                        if "Metric" in l and "Metric1" not in l:
-                            mean_m[ind[f]] = float(larr[10])
-                            med_m[ind[f]] = float(larr[11])
-                            perc_m[ind[f]] = float(larr[12])
-                        elif "RxnTime" in l:
-                            mean_rxn[ind[f]] = float(larr[10])
-                            med_rxn[ind[f]] = float(larr[11])
-                            perc_rxn[ind[f]] = float(larr[12])
-                        elif "N3 latency" in l:
-                            mean_lat[ind[f]] = float(larr[11])
-                            med_lat[ind[f]] = float(larr[12])
-                            perc_lat[ind[f]] = float(larr[13])
-                        elif "Tput" in l:
-                            mean_tput[ind[f]] = float(larr[10])
-                            med_tput[ind[f]] = float(larr[11])
-                            perc_tput[ind[f]] = float(larr[12])
-			elif "Metric1" in l:
-			    mean_newm1[ind[f]] = float(larr[10])
-			    med_newm1[ind[f]] = float(larr[11])
-			    perc_newm1[ind[f]] = float(larr[12])
-			elif "N3 Lat w.r.t. TDNode" in l:
-			    td_mean_lat[ind[f]] = float(larr[13])
-                            td_med_lat[ind[f]] = float(larr[14])
-                            td_perc_lat[ind[f]] = float(larr[15])
-			elif "RxnTm w.r.t." in l:
-			    td_mean_rxn[ind[f]] = float(larr[12])
-                            td_med_rxn[ind[f]] = float(larr[13])
-                            td_perc_rxn[ind[f]] = float(larr[14])
+            for r in runs:
+                # read tracker log to find metric vals.
+                with open('%s_tracker_node_%i.%i.%i.out'%(pre1, r, f, t), 'r') as fil:
+                    print "Reading for : ", f, t, r
+                    for l in fil.readlines():
+                        larr = l.split(' ')
+                        if cpp == 0:
+                            if "perf_metric" in l:
+                                mean_m[ind[f]] = float(larr[7][:-1])
+                                med_m[ind[f]] = float(larr[8][:-1])
+                                perc_m[ind[f]] = float(larr[9][:-1])
+                            elif "rxn_time" in l:
+                                mean_rxn[ind[f]] = float(larr[6][:-1])
+                                med_rxn[ind[f]] = float(larr[7][:-1])
+                                perc_rxn[ind[f]] = float(larr[8][:-1])
+                            elif "of latency" in l:
+                                mean_lat[ind[f]] = float(larr[6][:-1])
+                                med_lat[ind[f]] = float(larr[7][:-1])
+                                perc_lat[ind[f]] = float(larr[8][:-1])
+                            elif "of tput" in l:
+                                mean_tput[ind[f]] = float(larr[6][:-1])
+                                med_tput[ind[f]] = float(larr[7][:-1])
+                                perc_tput[ind[f]] = float(larr[8][:-1])
+                        else:
+                            if "Metric" in l and "Metric1" not in l:
+                                m_mean = float(larr[10])
+                                m_med = float(larr[11])
+                                m_perc = float(larr[12])
+                            elif "RxnTime" in l:
+                                meanrxn = float(larr[10])
+                                medrxn = float(larr[11])
+                                percrxn = float(larr[12])
+                            elif "N3 latency" in l:
+                                meanlat = float(larr[11])
+                                medlat = float(larr[12])
+                                perclat = float(larr[13])
+                            elif "Tput" in l:
+                                meantput = float(larr[10])
+                                medtput = float(larr[11])
+                                perctput = float(larr[12])
+                			elif "Metric1" in l:
+                			    meannewm1 = float(larr[10])
+                			    mednewm1 = float(larr[11])
+                			    percnewm1 = float(larr[12])
+                			elif "N3 Lat w.r.t. TDNode" in l:
+                			    td_meanlat = float(larr[13])
+                                td_medlat = float(larr[14])
+                                td_perclat = float(larr[15])
+                			elif "RxnTm w.r.t." in l:
+                			    td_meanrxn = float(larr[12])
+                                td_medrxn = float(larr[13])
+                                td_percrxn = float(larr[14])
+                (a,b) = read_actual_metric_file('%s_perf_%i.%i.%i.out'%(pre1, r, f, t))
+                # add the value of this run to the metric arr of len(farr)
+                mean_lat[ind[f]] += meanlat
+                med_lat[ind[f]] += medlat
+                perc_lat[ind[f]] += perclat
 
-            #m_rxn_ratio[ind[f]] = med_m[ind[f]]/(med_rxn[ind[f]]*med_rxn[ind[f]])
-            run_num = [8, 9]
-	    perc = 0.0
-	    med = 0.0
-	    mean = 0.0
-	    for ri in range(len(run_num)): 
-            	# read new_perf files for m1, m2 :
-	    	(a, b) = read_actual_metric_file(pre_perf + str(run_num[ri]) + post_perf + '_perf_%i%i.out'%(f,t))
-            	b1, b2, b3 = b
-		perc += b1
-		med += b2
-		mean += b3
-		#perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]] = b #angle diff
-	    	#perc_m2[ind[f]], med_m2[ind[f]], mean_m2[ind[f]] = a #ty-hy
-	    perc_m1[ind[f]] = perc/len(run_num)
-	    med_m1[ind[f]] = med/len(run_num)
-	    mean_m1[ind[f]] = mean/len(run_num)
+                td_mean_lat[ind[f]] += td_meanlat
+                td_med_lat[ind[f]] += td_medlat
+                td_perc_lat[ind[f]] += td_perclat
+
+                mean_rxn[ind[f]] += meanrxn
+                med_rxn[ind[f]] += medrxn
+                perc_rxn[ind[f]] += percrxn
+
+                td_mean_rxn[ind[f]] += td_meanrxn
+                td_med_rxn[ind[f]] += td_medrxn
+                td_perc_rxn[ind[f]] += td_percrxn
+
+                mean_tput[ind[f]] += meantput
+                med_tput[ind[f]] += medtput
+                perc_tput[ind[f]] += perctput
+
+                mean_m[ind[f]] += m_mean
+                med_m[ind[f]] += m_med
+                perc_m[ind[f]] += m_perc
+
+                mean_newm1[ind[f]] += meannewm1
+                med_newm1[ind[f]] += mednewm1
+                perc_newm1[ind[f]] += percnewm1
+
+                perc_m1[ind[f]] += b[0]
+                med_m1[ind[f]] += b[1]
+                mean_m1[ind[f]] += b[2]
+            # Divide all metric by len(runs)
+            mean_m[ind[f]] /= len(runs)
+            med_m[ind[f]] /= len(runs)
+            perc_m[ind[f]] /= len(runs)
+            mean_rxn[ind[f]] /= len(runs)
+            med_rxn[ind[f]] /= len(runs)
+            perc_rxn[ind[f]] /= len(runs)
+            mean_tput[ind[f]] /= len(runs)
+            med_tput[ind[f]] /= len(runs)
+            perc_tput[ind[f]] /= len(runs)
+            mean_newm1[ind[f]] /= len(runs)
+            med_newm1[ind[f]] /= len(runs)
+            perc_newm1[ind[f]] /= len(runs)
+            td_mean_lat[ind[f]] /= len(runs)
+            td_med_lat[ind[f]] /= len(runs)
+            td_perc_lat[ind[f]] /= len(runs)
+            td_mean_rxn[ind[f]] /= len(runs)
+            td_med_rxn[ind[f]] /= len(runs)
+            td_perc_rxn[ind[f]] /= len(runs)
+            perc_m1[ind[f]] /= len(runs)
+            med_m1[ind[f]] /= len(runs)
+            mean_m1[ind[f]] /= len(runs)
+
+            with open(fname, 'a') as f1:
+                # TODO:write all metrics.
+                f1.write('%i %i 10RunAvg N3Latency Tail, Med, Mean : %f %f %f #\n'%(perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
+                f1.write('%i %i 10RunAvg N3Latency w.r.t. TDNode Tail, Med, Mean : %f %f %f #\n'%(td_perc_lat[ind[f]], td_med_lat[ind[f]], td_mean_lat[ind[f]]))
+                f1.write('%i %i 10RunAvg Tput Tail, Med, Mean : %f %f %f #\n'%(perc_tput[ind[f]], med_tput[ind[f]], mean_tput[ind[f]]))
+                f1.write('%i %i 10RunAvg RxnTime Tail, Med, Mean : %f %f %f #\n'%(perc_rxn[ind[f]], med_rxn[ind[f]], mean_rxn[ind[f]]))
+                f1.write('%i %i 10RunAvg RxnTime w.r.t. TDNode Tail, Med, Mean : %f %f %f #\n'%(td_perc_rxn[ind[f]], td_med_rxn[ind[f]], td_mean_rxn[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Rel. Metric Tail, Med, Mean : %f %f %f #\n'%(perc_m[ind[f]], med_m[ind[f]], mean_m[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Rel. Metric1 Tail, Med, Mean : %f %f %f #\n'%(perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Abs Metric Tail, Med, Mean : %f %f %f #\n'%(perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
 
 	abs_deg_arr.append(perc_m1)
 
