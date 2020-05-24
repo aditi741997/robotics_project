@@ -53,15 +53,19 @@ class ObjTracker
     int not_in_frame = 0;
     int in_offset = 0;
     int percentile = 95;
+    int perc7 = 75;
+    int perc0 = 90;
+    int perc2 = 99;
+    double perc3 = 99.9;
+    double perc4 = 99.99;
 
     bool rtc_event_driven;
     ros::Publisher rtc_pub;
 
     bool dyn_algo;
     double expt_start_time;
-    double offline_durn;
 public:
-    ObjTracker(double max_rot, bool ed, bool da, double x_thr, double offln_durn)
+    ObjTracker(double max_rot, bool ed, bool da, double x_thr)
     {
         img_width = 640;
         img_height = 480;
@@ -74,8 +78,7 @@ public:
         roi_sub = nh.subscribe(sub_topic, 1, &ObjTracker::move_robot, this, ros::TransportHints().tcpNoDelay(), true);
 	
 	dyn_algo = da;
-	expt_start_time = 0.0;
-	offline_durn = offln_durn;
+	expt_start_time = 0.0;	
 
 	if (rtc_event_driven)
 	{
@@ -88,7 +91,7 @@ public:
         	}
 	}
 
-        std::cout << "Subscribed to roi, about to call ros::spin " << "rtc?" << rtc_event_driven << ", dyn?" << dyn_algo << std::endl;
+        std::cout << "Subscribed to roi, about to call ros::spin \n" << "rtc?" << rtc_event_driven << ", dyn?" << dyn_algo << std::endl;
     }
 
     void print_stats()
@@ -121,7 +124,8 @@ public:
             double avg = m_sum/l;
             double med = m_arr[l/2];
             double perc = m_arr[(l*percentile)/100];
-            ROS_INFO("Mean, median, tail of %s is %f %f %f , arr sz %i #", m.c_str(), avg, med, perc, l);            
+	    
+            ROS_INFO("Mean, median, tail of %s is %f %f %f , arr sz %i , %i : %f, %i : %f, %i : %f, %f : %f, %f : %f #", m.c_str(), avg, med, perc, l, perc7, m_arr[(l*perc7)/100], perc0, m_arr[(l*perc0)/100], perc2, m_arr[(l*perc2)/100], perc3, m_arr[(l*perc3)/100], perc4, m_arr[(l*perc4)/100]);            
         }
     }
  
@@ -130,7 +134,7 @@ public:
 	if (!dyn_algo)
 		return true;
 	else
-		return ((ros::Time::now().toSec() - expt_start_time) > offline_durn); 
+		return ((ros::Time::now().toSec() - expt_start_time) > 59.0); 
     }
 
     void move_robot(const std_msgs::Header::ConstPtr& msg)
@@ -270,11 +274,10 @@ int main(int argc, char** argv)
     bool event_driven = (atoi(argv[2]) == 1);
     // if this is true, start measuring stats after 60sec.
     bool dyn_algo = (atoi(argv[3]) == 1);
-    double offln_durn = atof(argv[4]);
     std::string node_name = "objecttracker";
     ROS_INFO("Init node name %s, max rot %f", node_name.c_str(), max_rot);
     ros::init(argc, argv, node_name);
-    ObjTracker ot(max_rot, event_driven, dyn_algo, 0.1, offln_durn);
+    ObjTracker ot(max_rot, event_driven, dyn_algo, 0.1);
     ros::spin();
 
     return 0;
