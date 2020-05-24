@@ -7,6 +7,7 @@ farr = [12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
 farr = [10, 15, 21, 23, 25, 30, 33, 38, 45, 80, 100] # Smallc1 1c
 farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2c
 farr = [9, 16, 23, 24, 25, 30, 55, 80]
+farr = [10, 14, 15, 16, 20, 30, 60]
 
 pre = ''
 
@@ -46,7 +47,7 @@ def read_actual_metric_file(fname):
     sarr = sorted(arr_m1)
     sarr2 = sorted(arr_m2)
     ans = (sarr[(95*len(sarr))/100], sarr[len(sarr)/2], sum(sarr)/len(sarr))
-    ans2 = (sarr2[(95*len(sarr2))/100], sarr2[len(sarr2)/2], sum(sarr2)/len(sarr2))
+    ans2 = (sarr2[(95*len(sarr2))/100], sarr2[len(sarr2)/2], sum(sarr2)/len(sarr2), sarr2[(99*len(sarr2))/100])
     print (ans, ans2)
     return (ans, ans2)
 
@@ -72,7 +73,7 @@ if __name__ == '__main__':
     pre = sys.argv[2]
     cpp = int(sys.argv[5])
     need_actual_freq = (int(sys.argv[7]) == 1) # we dont need new_freq for RTC and DynamicAlgo.
-    farr = farr if need_actual_freq else [15]
+    #farr = farr if need_actual_freq else [15]
     fname = sys.argv[8]
 
     ind = {}
@@ -95,11 +96,13 @@ if __name__ == '__main__':
         perc_m = [0.0 for x in farr]
         med_m = [0.0 for x in farr]
         mean_m = [0.0 for x in farr]
+	p9_m = [0.0 for x in farr]
 
         perc_rxn = [0.0 for x in farr]
         med_rxn = [0.0 for x in farr]
         mean_rxn = [0.0 for x in farr]
-        
+	p9_rxn = [0.0 for x in farr]        
+
         new_farr = [0.0 for x in farr]
 
         m_rxn_ratio = [1.0 for x in farr]
@@ -121,30 +124,37 @@ if __name__ == '__main__':
         perc_m1 = [0.0 for x in farr]
         med_m1 = [0.0 for x in farr]
         mean_m1 = [0.0 for x in farr]
+	p9_m1 = [0.0 for x in farr]
 
         perc_newm1 = [0.0 for x in farr]
         med_newm1 = [0.0 for x in farr]
         mean_newm1 = [0.0 for x in farr]    
+	p9_newm1 = [0.0 for x in farr]
 
         perc_m2 = [0.0 for x in farr]
         med_m2 = [0.0 for x in farr]
         mean_m2 = [0.0 for x in farr]
+	p9_m2 = [0.0 for x in farr]
 
         perc_lat =  [0.0 for x in farr]
         med_lat = [0.0 for x in farr]
         mean_lat = [0.0 for x in farr]
+	p9_lat = [0.0 for x in farr]
 
         perc_tput =  [0.0 for x in farr]
         med_tput = [0.0 for x in farr]
         mean_tput = [0.0 for x in farr]
+	p9_tput = [0.0 for x in farr]
 
         td_perc_lat =  [0.0 for x in farr]
         td_med_lat = [0.0 for x in farr]
         td_mean_lat = [0.0 for x in farr]
+	td_p9_lat = [0.0 for x in farr]
 
         td_perc_rxn = [0.0 for x in farr]
         td_med_rxn = [0.0 for x in farr]
         td_mean_rxn = [0.0 for x in farr]
+	td_p9_rxn = [0.0 for x in farr]
 
         runs = [4,5,6,7,8,9]        
         for f in farr:
@@ -176,111 +186,135 @@ if __name__ == '__main__':
                                 m_mean = float(larr[10])
                                 m_med = float(larr[11])
                                 m_perc = float(larr[12])
+				m_p9 = float(larr[26][:-1])
                             elif "RxnTime" in l:
                                 meanrxn = float(larr[10])
                                 medrxn = float(larr[11])
                                 percrxn = float(larr[12])
+				p9rxn = float(larr[26][:-1])
                             elif "N3 latency" in l:
                                 meanlat = float(larr[11])
                                 medlat = float(larr[12])
                                 perclat = float(larr[13])
+				p9lat = float(larr[27][:-1])
                             elif "Tput" in l:
                                 meantput = float(larr[10])
                                 medtput = float(larr[11])
                                 perctput = float(larr[12])
+				p9tput = float(larr[26][:-1])
                             elif "Metric1" in l:
                                 meannewm1 = float(larr[10])
                                 mednewm1 = float(larr[11])
                                 percnewm1 = float(larr[12])
+				p9newm1 = float(larr[26][:-1])
                             elif "N3 Lat w.r.t. TDNode" in l:
                                 td_meanlat = float(larr[13])
                                 td_medlat = float(larr[14])
                                 td_perclat = float(larr[15])
+				td_p9lat = float(larr[29][:-1])
                             elif "RxnTm w.r.t." in l:
                                 td_meanrxn = float(larr[12])
                                 td_medrxn = float(larr[13])
                                 td_percrxn = float(larr[14])
+				td_p9rxn = float(larr[28][:-1])
                 (a,b) = read_actual_metric_file('%s_perf_%i.%i.%i.out'%(pre, r, f, t))
                 # add the value of this run to the metric arr of len(farr)
                 mean_lat[ind[f]] += meanlat
                 med_lat[ind[f]] += medlat
                 perc_lat[ind[f]] += perclat
+		p9_lat[ind[f]] += p9lat
 
                 td_mean_lat[ind[f]] += td_meanlat
                 td_med_lat[ind[f]] += td_medlat
                 td_perc_lat[ind[f]] += td_perclat
+		td_p9_lat[ind[f]] += td_p9lat
 
                 mean_rxn[ind[f]] += meanrxn
                 med_rxn[ind[f]] += medrxn
                 perc_rxn[ind[f]] += percrxn
+		p9_rxn[ind[f]] += p9rxn
 
                 td_mean_rxn[ind[f]] += td_meanrxn
                 td_med_rxn[ind[f]] += td_medrxn
                 td_perc_rxn[ind[f]] += td_percrxn
+		td_p9_rxn[ind[f]] += td_p9rxn		
 
                 mean_tput[ind[f]] += meantput
                 med_tput[ind[f]] += medtput
                 perc_tput[ind[f]] += perctput
+		p9_tput[ind[f]] += p9tput
 
                 mean_m[ind[f]] += m_mean
                 med_m[ind[f]] += m_med
                 perc_m[ind[f]] += m_perc
+		p9_m[ind[f]] += m_p9
 
                 mean_newm1[ind[f]] += meannewm1
                 med_newm1[ind[f]] += mednewm1
                 perc_newm1[ind[f]] += percnewm1
+		p9_newm1[ind[f]] += p9newm1
 
                 perc_m1[ind[f]] += b[0]
                 med_m1[ind[f]] += b[1]
                 mean_m1[ind[f]] += b[2]
+		p9_m1[ind[f]] += b[3]
             # Divide all metric by len(runs)
             mean_m[ind[f]] /= len(runs)
             med_m[ind[f]] /= len(runs)
             perc_m[ind[f]] /= len(runs)
+	    p9_m[ind[f]] /= len(runs)
 
             mean_rxn[ind[f]] /= len(runs)
             med_rxn[ind[f]] /= len(runs)
             perc_rxn[ind[f]] /= len(runs)
+	    p9_rxn[ind[f]] /= len(runs)
 
             mean_tput[ind[f]] /= len(runs)
             med_tput[ind[f]] /= len(runs)
             perc_tput[ind[f]] /= len(runs)
+	    p9_tput[ind[f]] /= len(runs)
 
             mean_newm1[ind[f]] /= len(runs)
             med_newm1[ind[f]] /= len(runs)
             perc_newm1[ind[f]] /= len(runs)
+	    p9_newm1[ind[f]] /= len(runs)
 
             mean_lat[ind[f]] /= len(runs)
             med_lat[ind[f]] /= len(runs)
             perc_lat[ind[f]] /= len(runs)
+	    p9_lat[ind[f]] /= len(runs)
 
             td_mean_lat[ind[f]] /= len(runs)
             td_med_lat[ind[f]] /= len(runs)
             td_perc_lat[ind[f]] /= len(runs)
+	    td_p9_lat[ind[f]] /= len(runs)
 
             td_mean_rxn[ind[f]] /= len(runs)
             td_med_rxn[ind[f]] /= len(runs)
             td_perc_rxn[ind[f]] /= len(runs)
+	    td_p9_rxn[ind[f]] /= len(runs)
 
             perc_m1[ind[f]] /= len(runs)
             med_m1[ind[f]] /= len(runs)
             mean_m1[ind[f]] /= len(runs)
+	    p9_m1[ind[f]] /= len(runs)
 
             with open(fname, 'a') as f1:
-                f1.write('%i %i 10RunAvg N3Latency Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
-                f1.write('%i %i 10RunAvg N3Latency w.r.t. TDNode Tail, Med, Mean : %f %f %f #\n'%(f, t, td_perc_lat[ind[f]], td_med_lat[ind[f]], td_mean_lat[ind[f]]))
-                f1.write('%i %i 10RunAvg Tput Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_tput[ind[f]], med_tput[ind[f]], mean_tput[ind[f]]))
-                f1.write('%i %i 10RunAvg RxnTime Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_rxn[ind[f]], med_rxn[ind[f]], mean_rxn[ind[f]]))
-                f1.write('%i %i 10RunAvg RxnTime w.r.t. TDNode Tail, Med, Mean : %f %f %f #\n'%(f, t, td_perc_rxn[ind[f]], td_med_rxn[ind[f]], td_mean_rxn[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Rel. Metric Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_m[ind[f]], med_m[ind[f]], mean_m[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Rel. Metric1 Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Abs Metric Tail, Med, Mean : %f %f %f #\n'%(f, t, perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
+                f1.write('%i %i 10RunAvg N3Latency 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_lat[ind[f]], perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
+                f1.write('%i %i 10RunAvg N3Latency w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, td_p9_lat[ind[f]], td_perc_lat[ind[f]], td_med_lat[ind[f]], td_mean_lat[ind[f]]))
+                f1.write('%i %i 10RunAvg Tput 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_tput[ind[f]], perc_tput[ind[f]], med_tput[ind[f]], mean_tput[ind[f]]))
+                f1.write('%i %i 10RunAvg RxnTime 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_rxn[ind[f]], perc_rxn[ind[f]], med_rxn[ind[f]], mean_rxn[ind[f]]))
+                f1.write('%i %i 10RunAvg RxnTime w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, td_p9_rxn[ind[f]], td_perc_rxn[ind[f]], td_med_rxn[ind[f]], td_mean_rxn[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Rel. Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m[ind[f]], perc_m[ind[f]], med_m[ind[f]], mean_m[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Rel. Metric1 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m[ind[f]], perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Abs Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m1[ind[f]], perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
 
         abs_deg_arr.append(perc_m1)
 
         print new_farr
-        p1 = plt.plot(new_farr, perc_m, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, med_m, 'g.:', label='Median')
+        p1 = plt.plot(new_farr, perc_m, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m, 'y^:', label='99ile')
+	plt.plot(new_farr, med_m, 'g.:', label='Median')
         plt.plot(new_farr, mean_m, 'b*--', label='Mean')
         plt.title('Metric at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
@@ -289,8 +323,9 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        p5 = plt.plot(new_farr, perc_newm1, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, med_newm1, 'g.:', label='Median')
+        p5 = plt.plot(new_farr, perc_newm1, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_newm1, 'y^:', label='99ile')
+	plt.plot(new_farr, med_newm1, 'g.:', label='Median')
         plt.plot(new_farr, mean_newm1, 'b*--', label='Mean')
         plt.title('Metric1 at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
@@ -299,8 +334,9 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        p2 = plt.plot(new_farr, perc_rxn, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, med_rxn, 'g.:', label='Median')
+        p2 = plt.plot(new_farr, perc_rxn, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_rxn, 'y^:', label='99ile')
+	plt.plot(new_farr, med_rxn, 'g.:', label='Median')
         plt.plot(new_farr, mean_rxn, 'b*--', label='Mean')
         plt.title('RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
@@ -309,8 +345,9 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, td_med_rxn, 'g.:', label='Median')
+        p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, td_p9_rxn, 'y^:', label='99ile')
+	plt.plot(new_farr, td_med_rxn, 'g.:', label='Median')
         plt.plot(new_farr, td_mean_rxn, 'b*--', label='Mean')
         plt.title('TD RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
@@ -353,8 +390,9 @@ if __name__ == '__main__':
         # plt.xlabel('Publisher Frequency')
         # plt.ylabel('Ratio')
         # plt.show()
-        p2 = plt.plot(new_farr, perc_lat, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, med_lat, 'g.:', label='Median')
+        p2 = plt.plot(new_farr, perc_lat, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_lat, 'y^:', label='99ile')
+	plt.plot(new_farr, med_lat, 'g.:', label='Median')
         plt.plot(new_farr, mean_lat, 'b*--', label='Mean')
         plt.title('Latency at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
@@ -363,8 +401,9 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        p2 = plt.plot(new_farr, td_perc_lat, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, td_med_lat, 'g.:', label='Median')
+        p2 = plt.plot(new_farr, td_perc_lat, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, td_p9_lat, 'y^:', label='99ile')
+	plt.plot(new_farr, td_med_lat, 'g.:', label='Median')
         plt.plot(new_farr, td_mean_lat, 'b*--', label='Mean')
         plt.title('TD Latency at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
@@ -373,8 +412,9 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        p2 = plt.plot(new_farr, perc_tput, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, med_tput, 'g.:', label='Median')
+        p2 = plt.plot(new_farr, perc_tput, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_tput, 'y^:', label='99ile')
+	plt.plot(new_farr, med_tput, 'g.:', label='Median')
         plt.plot(new_farr, mean_tput, 'b*--', label='Mean')
         plt.title('Tput at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
@@ -408,8 +448,9 @@ if __name__ == '__main__':
         plt.xlim(0, 0.25)
         plt.show()
         '''
-        p1 = plt.plot(new_farr, perc_m1, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, med_m1, 'g.:', label='Median')
+        p1 = plt.plot(new_farr, perc_m1, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m1, 'y^:', label='99ile')
+	plt.plot(new_farr, med_m1, 'g.:', label='Median')
         plt.plot(new_farr, mean_m1, 'b*--', label='Mean')
         plt.title('Absolute Deg Diff at displacement time : %f'%(t))
         plt.xlabel('Publisher Frequency')

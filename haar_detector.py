@@ -5,9 +5,9 @@ import sys
 import math
 import random
 
-cascade = "/home/ubuntu/catkin_ws/src/rbx/data/haar_detectors/haarcascade_frontalface_alt.xml"
+cascade = "/home/ubuntu/catkin_ws/src/rbx/data/haar_detectors/haarcascade_frontalface_alt2.xml"
 cs1 = cv2.CascadeClassifier(cascade)
-haar_scaleFactor = 1.3
+haar_scaleFactor = 1.4
 haar_minNeighbors = 3
 haar_minSize = 30
 haar_maxSize = 150
@@ -18,6 +18,7 @@ haar_params = dict(scaleFactor = haar_scaleFactor,
     minSize = (haar_minSize, haar_minSize),
     maxSize = (haar_maxSize, haar_maxSize)
     )
+    #flags = cv2.CASCADE_SCALE_IMAGE,
 
 print cv2.getNumThreads(), "cv num threads"
 
@@ -27,6 +28,18 @@ def do_random_haar():
 	r = random.randint(0, len(farr)-1)
 	#print "Processing index ", r, ", img : ", fpath+farr[r]
 	do_haar(cv2.imread(fpath+farr[r]))	
+
+def do_haar_ob_track(ind):
+	fpath = "/home/ubuntu/catkin_ws/obj_track_imgs/img_" + str(ind) + ".xml"
+	#do haar on this img!
+	cv_file = cv2.FileStorage(fpath, cv2.FILE_STORAGE_READ)
+	img = cv_file.getNode("img").mat()
+	do_haar(img)
+
+def do_haar_vw_img(ind):
+	#ind must be in 0-999
+	fpath = "/home/ubuntu/catkin_ws/vw_face_vid7_imgs/img_" + str(ind) + ".png"
+	do_haar(cv2.imread(fpath))
 
 def do_haar(image):
 	t1 = time.time()
@@ -62,6 +75,12 @@ def print_tarr(a, sqa, nc, ss):
 h_arr = []
 h_sq_arr = []
 
+nrc_h_arr = []
+nrc_h_sq_arr = []
+
+ob_h_arr = []
+ob_h_sq_arr = []
+
 face_count = 0
 face_h_arr = []
 face_h_sq_arr = []
@@ -73,8 +92,54 @@ if __name__ == "__main__":
 	nt = int(sys.argv[2])
 	cv2.setNumThreads(nt)
 	print cv2.getNumThreads(), ":cv num threads, #cores : ", cv2.getNumberOfCPUs()
+	# reading .avi video :
+	#cap = cv2.VideoCapture('/home/ubuntu/catkin_ws/nrc_iit_face_videos/00-1.avi')
+	cap = cv2.VideoCapture('/home/ubuntu/catkin_ws/vw_face_videos/vid.avi')
+	fcount = 0
+	while(cap.isOpened()):
+		try:
+			ret, frame = cap.read()
+			print fcount
+			t1 = time.time()
+			#print frame.shape[:2]
+			frame = cv2.resize(frame, (0,0), fx=0.5, fy=0.5)
+			#print frame.shape[:2]
+			do_haar(frame)
+			#cv2.imwrite('vw_face_vid7_imgs/img_' + str(fcount) + '.png', frame)
+			fcount += 1
+			tt = time.time() - t1
+			nrc_h_arr.append(tt)
+			nrc_h_sq_arr.append(tt*tt)
+			if fcount > 1000:
+				cap.release()
+		except:
+			print fcount, "ERRORRRR"
+	print_tarr(nrc_h_arr, nrc_h_sq_arr, nc, "Haar on nrc iit face video")
+	do_haar(cv2.imread('vw_face_vid7_imgs/img_17.png'))
+	'''
+	ob_track_fpath = "/home/ubuntu/catkin_ws/obj_track_imgs/"
+	print "Processing files in folder : ", ob_track_fpath
+	for i in [1, 11, 341, 415]:
+		print "For i : ", i
+		do_haar_ob_track(i)
+	for fil in os.listdir(ob_track_fpath):
+		fname = ob_track_fpath + fil
+		print "Doing file ", fname
+		t1 = time.time()
+		cv_file = cv2.FileStorage(fname, cv2.FILE_STORAGE_READ)
+		img = cv_file.getNode("img").mat()
+		cv2.imshow('image',img)
+		cv2.waitKey(100)
+		cv2.destroyAllWindows() 
+		do_haar(img)
+		cv_file.release()
+		tt = time.time() - t1
+		ob_h_arr.append(tt)
+		ob_h_sq_arr.append(tt*tt)
+	print_tarr(ob_h_arr, ob_h_sq_arr, nc, "Haar on obj track scene imgs")
+	'''
 	for file in os.listdir(fpath):
-		do_random_haar()
+		#do_random_haar()
 		fname = fpath + file
 		image = cv2.imread(fname)
 		# print "Processing ", fname
