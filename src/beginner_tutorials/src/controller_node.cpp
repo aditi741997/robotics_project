@@ -40,6 +40,7 @@ class FreqController
     double change_rate;
     double max_change_rate;
     double freq_threshold;
+    double right_freq_thresh;
     double eps;
 
     ros::NodeHandle nh;
@@ -84,6 +85,7 @@ public:
         change_rate = 1.0;
 	eps = epsilon;
         freq_threshold = thresh;
+	right_freq_thresh = thresh - 0.01;
 
 	offline_durn = offln_durn;
 	offline_freq = offln_freq;
@@ -198,9 +200,9 @@ ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_ra
             		new_freq = std::min(1.0/m, new_freq);
 
         	// if [this freq is very different [1.5x ?] AND last_freq_change-now >= 1/max_change_rate] from current freq, notify cv
-        	if ( (std::abs((new_freq - eps) - current_freq) >= (freq_threshold*current_freq) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
+        	if ( ( (std::abs((new_freq - eps) - current_freq) >= (freq_threshold*current_freq) ) || ( (new_freq - eps) <= ((1.0-right_freq_thresh)*current_freq) ) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
         	{
-            		ROS_INFO("L-UPDATE : NEED to change frequency! Got msg %s %f, current_freq %f, new_freq %f", topic.c_str(), update, current_freq, new_freq);
+            		ROS_INFO("L-UPDATE : NEED to change frequency! Got msg %s, current_freq %f, new_freq %f", msg->frame_id, current_freq, new_freq);
             		updateFrequency(new_freq);
         	}
 
