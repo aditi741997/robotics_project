@@ -318,7 +318,7 @@ if __name__ == '__main__':
                 f1.write('%i %i 10RunAvg RxnTime 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_rxn[ind[f]], perc_rxn[ind[f]], med_rxn[ind[f]], mean_rxn[ind[f]]))
                 f1.write('%i %i 10RunAvg RxnTime w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, td_p9_rxn[ind[f]], td_perc_rxn[ind[f]], td_med_rxn[ind[f]], td_mean_rxn[ind[f]]))
                 f1.write('%i %i 10RunAvg Perf Rel. Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m[ind[f]], perc_m[ind[f]], med_m[ind[f]], mean_m[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Rel. Metric1 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m[ind[f]], perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Rel. Metric1 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_newm1[ind[f]], perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
                 f1.write('%i %i 10RunAvg Perf Abs Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m1[ind[f]], perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
 
         abs_deg_arr.append(perc_m1)
