@@ -6,8 +6,8 @@ import math
 farr = [12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
 farr = [10, 15, 21, 23, 25, 30, 33, 38, 45, 80, 100] # Smallc1 1c
 farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2c
-farr = [9, 16, 23, 24, 25, 30, 55, 80]
 farr = [10, 14, 15, 16, 20, 30, 60]
+farr = [9, 16, 23, 24, 25, 30, 55, 80]
 
 pre = ''
 
@@ -73,7 +73,7 @@ if __name__ == '__main__':
     pre = sys.argv[2]
     cpp = int(sys.argv[5])
     need_actual_freq = (int(sys.argv[7]) == 1) # we dont need new_freq for RTC and DynamicAlgo.
-    #farr = farr if need_actual_freq else [15]
+    farr = farr if need_actual_freq else [15]
     fname = sys.argv[8]
 
     ind = {}
@@ -156,10 +156,17 @@ if __name__ == '__main__':
         td_mean_rxn = [0.0 for x in farr]
 	td_p9_rxn = [0.0 for x in farr]
 
-        runs = [4,5,6,7,8,9]        
+        runs = [4,5,1,2,3] #, 6, 7, 8, 9, 10]        
         for f in farr:
+	    actual_run_count = 0
             for r in runs:
                 # read tracker log to find metric vals.
+		# first check the hit rate in vision file.
+		hr = 0.0
+		with open('%s_vision_node_%i.%i.%i.out'%(pre, r, f, t), 'r') as fil:
+		    for l in fil.readlines():
+			if cpp == 1 and "Hit rate :" in l:
+				hr = float(l.split(' ')[7][:-1])
                 with open('%s_tracker_node_%i.%i.%i.out'%(pre, r, f, t), 'r') as fil:
                     print "Reading for : ", f, t, r
                     for l in fil.readlines():
@@ -219,88 +226,93 @@ if __name__ == '__main__':
 				td_p9rxn = float(larr[28][:-1])
                 (a,b) = read_actual_metric_file('%s_perf_%i.%i.%i.out'%(pre, r, f, t))
                 # add the value of this run to the metric arr of len(farr)
-                mean_lat[ind[f]] += meanlat
-                med_lat[ind[f]] += medlat
-                perc_lat[ind[f]] += perclat
-		p9_lat[ind[f]] += p9lat
+                if hr > 0.5:
+			actual_run_count += 1
+			mean_lat[ind[f]] += meanlat
+			med_lat[ind[f]] += medlat
+			perc_lat[ind[f]] += perclat
+			p9_lat[ind[f]] += p9lat
 
-                td_mean_lat[ind[f]] += td_meanlat
-                td_med_lat[ind[f]] += td_medlat
-                td_perc_lat[ind[f]] += td_perclat
-		td_p9_lat[ind[f]] += td_p9lat
+			td_mean_lat[ind[f]] += td_meanlat
+			td_med_lat[ind[f]] += td_medlat
+			td_perc_lat[ind[f]] += td_perclat
+			td_p9_lat[ind[f]] += td_p9lat
 
-                mean_rxn[ind[f]] += meanrxn
-                med_rxn[ind[f]] += medrxn
-                perc_rxn[ind[f]] += percrxn
-		p9_rxn[ind[f]] += p9rxn
+			mean_rxn[ind[f]] += meanrxn
+			med_rxn[ind[f]] += medrxn
+			perc_rxn[ind[f]] += percrxn
+			p9_rxn[ind[f]] += p9rxn
 
-                td_mean_rxn[ind[f]] += td_meanrxn
-                td_med_rxn[ind[f]] += td_medrxn
-                td_perc_rxn[ind[f]] += td_percrxn
-		td_p9_rxn[ind[f]] += td_p9rxn		
+			td_mean_rxn[ind[f]] += td_meanrxn
+			td_med_rxn[ind[f]] += td_medrxn
+			td_perc_rxn[ind[f]] += td_percrxn
+			td_p9_rxn[ind[f]] += td_p9rxn		
 
-                mean_tput[ind[f]] += meantput
-                med_tput[ind[f]] += medtput
-                perc_tput[ind[f]] += perctput
-		p9_tput[ind[f]] += p9tput
+			mean_tput[ind[f]] += meantput
+			med_tput[ind[f]] += medtput
+			perc_tput[ind[f]] += perctput
+			p9_tput[ind[f]] += p9tput
 
-                mean_m[ind[f]] += m_mean
-                med_m[ind[f]] += m_med
-                perc_m[ind[f]] += m_perc
-		p9_m[ind[f]] += m_p9
+			mean_m[ind[f]] += m_mean
+			med_m[ind[f]] += m_med
+			perc_m[ind[f]] += m_perc
+			p9_m[ind[f]] += m_p9
 
-                mean_newm1[ind[f]] += meannewm1
-                med_newm1[ind[f]] += mednewm1
-                perc_newm1[ind[f]] += percnewm1
-		p9_newm1[ind[f]] += p9newm1
+			mean_newm1[ind[f]] += meannewm1
+			med_newm1[ind[f]] += mednewm1
+			perc_newm1[ind[f]] += percnewm1
+			p9_newm1[ind[f]] += p9newm1
 
-                perc_m1[ind[f]] += b[0]
-                med_m1[ind[f]] += b[1]
-                mean_m1[ind[f]] += b[2]
-		p9_m1[ind[f]] += b[3]
+			perc_m1[ind[f]] += b[0]
+			med_m1[ind[f]] += b[1]
+			mean_m1[ind[f]] += b[2]
+			p9_m1[ind[f]] += b[3]
+		else:
+			print "Rejecting run ", r, " for freq, t : ", f, t, pre
             # Divide all metric by len(runs)
-            mean_m[ind[f]] /= len(runs)
-            med_m[ind[f]] /= len(runs)
-            perc_m[ind[f]] /= len(runs)
-	    p9_m[ind[f]] /= len(runs)
+            mean_m[ind[f]] /= actual_run_count
+            med_m[ind[f]] /= actual_run_count
+            perc_m[ind[f]] /= actual_run_count
+	    p9_m[ind[f]] /= actual_run_count
 
-            mean_rxn[ind[f]] /= len(runs)
-            med_rxn[ind[f]] /= len(runs)
-            perc_rxn[ind[f]] /= len(runs)
-	    p9_rxn[ind[f]] /= len(runs)
+            mean_rxn[ind[f]] /= actual_run_count
+            med_rxn[ind[f]] /= actual_run_count
+            perc_rxn[ind[f]] /= actual_run_count
+	    p9_rxn[ind[f]] /= actual_run_count
 
-            mean_tput[ind[f]] /= len(runs)
-            med_tput[ind[f]] /= len(runs)
-            perc_tput[ind[f]] /= len(runs)
-	    p9_tput[ind[f]] /= len(runs)
+            mean_tput[ind[f]] /= actual_run_count
+            med_tput[ind[f]] /= actual_run_count
+            perc_tput[ind[f]] /= actual_run_count
+	    p9_tput[ind[f]] /= actual_run_count
 
-            mean_newm1[ind[f]] /= len(runs)
-            med_newm1[ind[f]] /= len(runs)
-            perc_newm1[ind[f]] /= len(runs)
-	    p9_newm1[ind[f]] /= len(runs)
+            mean_newm1[ind[f]] /= actual_run_count
+            med_newm1[ind[f]] /= actual_run_count
+            perc_newm1[ind[f]] /= actual_run_count
+	    p9_newm1[ind[f]] /= actual_run_count
 
-            mean_lat[ind[f]] /= len(runs)
-            med_lat[ind[f]] /= len(runs)
-            perc_lat[ind[f]] /= len(runs)
-	    p9_lat[ind[f]] /= len(runs)
+            mean_lat[ind[f]] /= actual_run_count
+            med_lat[ind[f]] /= actual_run_count
+            perc_lat[ind[f]] /= actual_run_count
+	    p9_lat[ind[f]] /= actual_run_count
 
-            td_mean_lat[ind[f]] /= len(runs)
-            td_med_lat[ind[f]] /= len(runs)
-            td_perc_lat[ind[f]] /= len(runs)
-	    td_p9_lat[ind[f]] /= len(runs)
+            td_mean_lat[ind[f]] /= actual_run_count
+            td_med_lat[ind[f]] /= actual_run_count
+            td_perc_lat[ind[f]] /= actual_run_count
+	    td_p9_lat[ind[f]] /= actual_run_count
 
-            td_mean_rxn[ind[f]] /= len(runs)
-            td_med_rxn[ind[f]] /= len(runs)
-            td_perc_rxn[ind[f]] /= len(runs)
-	    td_p9_rxn[ind[f]] /= len(runs)
+            td_mean_rxn[ind[f]] /= actual_run_count
+            td_med_rxn[ind[f]] /= actual_run_count
+            td_perc_rxn[ind[f]] /= actual_run_count
+	    td_p9_rxn[ind[f]] /= actual_run_count
 
-            perc_m1[ind[f]] /= len(runs)
-            med_m1[ind[f]] /= len(runs)
-            mean_m1[ind[f]] /= len(runs)
-	    p9_m1[ind[f]] /= len(runs)
+            perc_m1[ind[f]] /= actual_run_count
+            med_m1[ind[f]] /= actual_run_count
+            mean_m1[ind[f]] /= actual_run_count
+	    p9_m1[ind[f]] /= actual_run_count
 
             with open(fname, 'a') as f1:
-                f1.write('%i %i 10RunAvg N3Latency 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_lat[ind[f]], perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
+                f1.write('%i %i Averaging over %i runs out of 10 #\n'%(f, t, actual_run_count))
+		f1.write('%i %i 10RunAvg N3Latency 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_lat[ind[f]], perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
                 f1.write('%i %i 10RunAvg N3Latency w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, td_p9_lat[ind[f]], td_perc_lat[ind[f]], td_med_lat[ind[f]], td_mean_lat[ind[f]]))
                 f1.write('%i %i 10RunAvg Tput 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_tput[ind[f]], perc_tput[ind[f]], med_tput[ind[f]], mean_tput[ind[f]]))
                 f1.write('%i %i 10RunAvg RxnTime 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_rxn[ind[f]], perc_rxn[ind[f]], med_rxn[ind[f]], mean_rxn[ind[f]]))
