@@ -6,7 +6,13 @@ import math
 import random
 
 cascade = "/home/ubuntu/catkin_ws/src/rbx/data/haar_detectors/haarcascade_frontalface_alt2.xml"
+cascade2 = "/home/ubuntu/catkin_ws/src/rbx/data/haar_detectors/haarcascade_frontalface_alt.xml"
+cascade3 = "/home/ubuntu/catkin_ws/src/rbx/data/haar_detectors/haarcascade_profileface.xml"
+
 cs1 = cv2.CascadeClassifier(cascade)
+cs2 = cv2.CascadeClassifier(cascade2)
+cs3 = cv2.CascadeClassifier(cascade3)
+
 haar_scaleFactor = 1.4
 haar_minNeighbors = 3
 haar_minSize = 30
@@ -36,16 +42,18 @@ def do_haar_ob_track(ind):
 	img = cv_file.getNode("img").mat()
 	do_haar(img)
 
-def do_haar_vw_img(ind):
+def do_haar_vw_img(ind, twice):
 	#ind must be in 0-999
 	fpath = "/home/ubuntu/catkin_ws/vw_face_vid7_imgs/img_" + str(ind) + ".png"
-	do_haar(cv2.imread(fpath))
+	do_haar(cv2.imread(fpath), twice)
 
-def do_haar(image):
+def do_haar(image, twice):
 	t1 = time.time()
 	(h, w) = image.shape[:2]
 	if cs1:
 		faces = cs1.detectMultiScale(image, **haar_params)
+	if (twice > 0) and cs2:
+		faces = cs2.detectMultiScale(image, **haar_params)
 	# if len(faces) == 0 and cs3:
 	# 	faces = cs3.detectMultiScale(image, **haar_params)
 	#if len(faces) == 0 and cs2:
@@ -104,7 +112,7 @@ if __name__ == "__main__":
 			#print frame.shape[:2]
 			frame = cv2.resize(frame, (0,0), fx=0.5, fy=0.5)
 			#print frame.shape[:2]
-			do_haar(frame)
+			do_haar(frame, True)
 			#cv2.imwrite('vw_face_vid7_imgs/img_' + str(fcount) + '.png', frame)
 			fcount += 1
 			tt = time.time() - t1
@@ -115,7 +123,7 @@ if __name__ == "__main__":
 		except:
 			print fcount, "ERRORRRR"
 	print_tarr(nrc_h_arr, nrc_h_sq_arr, nc, "Haar on nrc iit face video")
-	do_haar(cv2.imread('vw_face_vid7_imgs/img_17.png'))
+	do_haar(cv2.imread('vw_face_vid7_imgs/img_17.png'), False)
 	'''
 	ob_track_fpath = "/home/ubuntu/catkin_ws/obj_track_imgs/"
 	print "Processing files in folder : ", ob_track_fpath
@@ -138,13 +146,14 @@ if __name__ == "__main__":
 		ob_h_sq_arr.append(tt*tt)
 	print_tarr(ob_h_arr, ob_h_sq_arr, nc, "Haar on obj track scene imgs")
 	'''
+	fpath = '/home/ubuntu/catkin_ws/vw_face_vid7_imgs/'
 	for file in os.listdir(fpath):
 		#do_random_haar()
 		fname = fpath + file
 		image = cv2.imread(fname)
 		# print "Processing ", fname
 		start = time.time()
-		fb = do_haar(image)
+		fb = do_haar(image, True)
 		tt = time.time() - start
 		h_arr.append(tt)
 		h_sq_arr.append(tt*tt)
