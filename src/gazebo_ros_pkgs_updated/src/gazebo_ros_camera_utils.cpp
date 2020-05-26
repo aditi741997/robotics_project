@@ -614,7 +614,7 @@ void GazeboRosCameraUtils::Init()
   this->img_pub_freq_sum = 0.0;
 
   this->img_ready = false;
-  this->timer_driven_pub = false; //  CHANGE THIS to toggle
+  this->timer_driven_pub = true; //  CHANGE THIS to toggle
   this->started_ed_pub = false;
   this->kick_started = false;
   if (this->timer_driven_pub)
@@ -649,9 +649,14 @@ void GazeboRosCameraUtils::PutCameraData(const unsigned char *_src)
   }
 
 // update data in class for our publish Thread.
+  boost::mutex::scoped_lock lock(this->lock_);
   this->img_ready = true;
   this->img = _src;
-    
+   
+// copy from src to image_msg_
+  fillImage(this->image_msg_, this->type_, this->height_, this->width_,
+          this->skip_*this->width_, reinterpret_cast<const void*>(this->img));
+
   // need to publish first img if event driven publishing.
   if ( (!(this->timer_driven_pub)) && (!(this->started_ed_pub)) )
   {
@@ -740,11 +745,7 @@ void GazeboRosCameraUtils::PublishCameraImg()
       this->image_msg_.header.stamp.sec = this->sensor_update_time_.sec;
       this->image_msg_.header.stamp.nsec = this->sensor_update_time_.nsec;
 
-      // copy from src to image_msg_
-      fillImage(this->image_msg_, this->type_, this->height_, this->width_,
-          this->skip_*this->width_, reinterpret_cast<const void*>(this->img));
-
-      this->image_pub_.publish(this->image_msg_);
+            this->image_pub_.publish(this->image_msg_);
 
       double d = (ros::Time::now().toSec() - this->last_img_pub);
 
