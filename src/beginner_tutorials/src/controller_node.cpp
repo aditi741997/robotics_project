@@ -132,7 +132,7 @@ public:
 	current_freq = offline_freq;
 	updateFrequency(current_freq);
 
-ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_rate %f, max_change_rate %f, freq_thresh %f", num_cores, num_nodes, current_freq, change_rate, max_change_rate, freq_threshold);
+ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_rate %f, max_change_rate %f, freq_thresh %f, freq eps %f", num_cores, num_nodes, current_freq, change_rate, max_change_rate, freq_threshold, eps);
 
 	// v2 : after one minute, set freq based on all stats arrived.
         ct = nh.createTimer(ros::Duration(offline_durn), &FreqController::controllerFunc, this, true);  
@@ -182,7 +182,7 @@ ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_ra
         	    		// find M
             			m = std::max(m, med_cb_times_L[i]);
             			// find Sigma
-            			sig += tail_cb_times_L[i];
+            			sig += med_cb_times_L[i];
         		}
 		}
 		else
@@ -202,7 +202,7 @@ ROS_INFO("Finished controller init. Params : k %i, m %i, curr_freq %f, change_ra
         	// if [this freq is very different [1.5x ?] AND last_freq_change-now >= 1/max_change_rate] from current freq, notify cv
         	if ( ( (std::abs((new_freq - eps) - current_freq) >= (freq_threshold*current_freq) ) || ( (new_freq - eps) <= ((1.0-right_freq_thresh)*current_freq) ) ) && ( (ros::Time::now().toSec() - last_freq_change_time) >= (1.0/max_change_rate) ) )
         	{
-            		ROS_INFO("L-UPDATE : NEED to change frequency! Got msg %s, current_freq %f, new_freq %f", msg->frame_id, current_freq, new_freq);
+            		ROS_INFO("L-UPDATE : NEED to change frequency! Got msg %s, current_freq %f, new_freq %f", msg->frame_id.c_str(), current_freq, new_freq);
             		updateFrequency(new_freq);
         	}
 
