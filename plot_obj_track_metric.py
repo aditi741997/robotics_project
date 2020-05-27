@@ -8,6 +8,7 @@ farr = [10, 15, 21, 23, 25, 30, 33, 38, 45, 80, 100] # Smallc1 1c
 farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2c
 farr = [10, 14, 15, 16, 20, 30, 60]
 farr = [9, 16, 23, 24, 25, 30, 55, 80]
+farr = [10, 20, 30, 32, 34, 36, 60] 
 
 pre = ''
 
@@ -46,7 +47,7 @@ def read_actual_metric_file(fname):
                 print "ERRORRR!! ", hpp
     sarr = sorted(arr_m1)
     sarr2 = sorted(arr_m2)
-    ans = (sarr[(95*len(sarr))/100], sarr[len(sarr)/2], sum(sarr)/len(sarr))
+    ans = (sarr[(95*len(sarr))/100], sarr[len(sarr)/2], sum(sarr)/len(sarr), sarr[(99*len(sarr))/100])
     ans2 = (sarr2[(95*len(sarr2))/100], sarr2[len(sarr2)/2], sum(sarr2)/len(sarr2), sarr2[(99*len(sarr2))/100])
     print (ans, ans2)
     return (ans, ans2)
@@ -267,6 +268,12 @@ if __name__ == '__main__':
 			med_m1[ind[f]] += b[1]
 			mean_m1[ind[f]] += b[2]
 			p9_m1[ind[f]] += b[3]
+
+			perc_m2[ind[f]] += a[0]
+			med_m2[ind[f]] += a[1]
+			mean_m2[ind[f]] += a[2]
+			p9_m2[ind[f]] += a[3]
+
 		else:
 			print "Rejecting run ", r, " for freq, t : ", f, t, pre
             # Divide all metric by len(runs)
@@ -310,8 +317,13 @@ if __name__ == '__main__':
             mean_m1[ind[f]] /= actual_run_count
 	    p9_m1[ind[f]] /= actual_run_count
 
+	    perc_m2[ind[f]] /= actual_run_count
+            med_m2[ind[f]] /= actual_run_count
+            mean_m2[ind[f]] /= actual_run_count
+	    p9_m2[ind[f]] /= actual_run_count
+
             with open(fname, 'a') as f1:
-                f1.write('%i %i Averaging over %i runs out of 10 #\n'%(f, t, actual_run_count))
+                f1.write('%i %i Averaging over %i runs out of 5 #\n'%(f, t, actual_run_count))
 		f1.write('%i %i 10RunAvg N3Latency 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_lat[ind[f]], perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
                 f1.write('%i %i 10RunAvg N3Latency w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, td_p9_lat[ind[f]], td_perc_lat[ind[f]], td_med_lat[ind[f]], td_mean_lat[ind[f]]))
                 f1.write('%i %i 10RunAvg Tput 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_tput[ind[f]], perc_tput[ind[f]], med_tput[ind[f]], mean_tput[ind[f]]))
@@ -319,7 +331,8 @@ if __name__ == '__main__':
                 f1.write('%i %i 10RunAvg RxnTime w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, td_p9_rxn[ind[f]], td_perc_rxn[ind[f]], td_med_rxn[ind[f]], td_mean_rxn[ind[f]]))
                 f1.write('%i %i 10RunAvg Perf Rel. Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m[ind[f]], perc_m[ind[f]], med_m[ind[f]], mean_m[ind[f]]))
                 f1.write('%i %i 10RunAvg Perf Rel. Metric1 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_newm1[ind[f]], perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Abs Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m1[ind[f]], perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Abs Deg Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m1[ind[f]], perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
+                f1.write('%i %i 10RunAvg Perf Abs Distance Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m2[ind[f]], perc_m2[ind[f]], med_m2[ind[f]], mean_m2[ind[f]]))
 
         abs_deg_arr.append(perc_m1)
 
@@ -343,6 +356,28 @@ if __name__ == '__main__':
         plt.xlabel('Publisher Frequency')
         plt.ylabel('Rel Metric1 (offset)')
         plt.ylim(0.0, 1.0)
+        plt.legend()
+        plt.show()
+
+	p1 = plt.plot(new_farr, perc_m1, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m1, 'y^:', label='99ile')
+	plt.plot(new_farr, med_m1, 'g.:', label='Median')
+        plt.plot(new_farr, mean_m1, 'b*--', label='Mean')
+        plt.title('Absolute Deg Diff at displacement time : %f'%(t))
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('Abs Metric (offset)')
+        plt.ylim(0, 3.2)
+        plt.legend()
+        plt.show()
+
+        p1 = plt.plot(new_farr, perc_m2, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m2, 'y^:', label='99ile')
+        plt.plot(new_farr, med_m2, 'g.:', label='Median')
+        plt.plot(new_farr, mean_m2, 'b*--', label='Mean')
+        plt.title('Absolute Distance b/w Cam & Obj at displacement time : %f'%(t))
+        plt.xlabel('Publisher Frequency')
+        plt.ylabel('Abs Metric : Distance Diff')
+        plt.ylim(0, 5)
         plt.legend()
         plt.show()
 
@@ -460,27 +495,7 @@ if __name__ == '__main__':
         plt.xlim(0, 0.25)
         plt.show()
         '''
-        p1 = plt.plot(new_farr, perc_m1, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m1, 'y^:', label='99ile')
-	plt.plot(new_farr, med_m1, 'g.:', label='Median')
-        plt.plot(new_farr, mean_m1, 'b*--', label='Mean')
-        plt.title('Absolute Deg Diff at displacement time : %f'%(t))
-        plt.xlabel('Publisher Frequency')
-        plt.ylabel('Abs Metric (offset)')
-        plt.ylim(0, 3.2)
-        plt.legend()
-        plt.show()
-
-        p1 = plt.plot(new_farr, perc_m2, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, med_m2, 'g.:', label='Median')
-        plt.plot(new_farr, mean_m2, 'b*--', label='Mean')
-        plt.title('Absolute Distance b/w Cam & Obj at displacement time : %f'%(t))
-        plt.xlabel('Publisher Frequency')
-        plt.ylabel('Abs Metric : Distance Diff')
-        plt.ylim(0, 10)
-        plt.legend()
-        plt.show()
-
+        
         #rel_perf_tail_improv_wrt_low_freq.append(perc_m[ind[10]]/perc_m[ind[opt_freq]])
         # abs_perf_tail_improv_wrt_low_freq.append(perc_m1[ind[10]]/perc_m1[ind[opt_freq]])
 
