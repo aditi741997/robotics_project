@@ -57,6 +57,8 @@ class ObjDetector
     cv::CascadeClassifier hcascade1;
     cv::CascadeClassifier hcascade2;
 
+    bool write_imgs_to_file = false;
+
 public:
     ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim)
     {
@@ -84,7 +86,7 @@ public:
         }
 
         img_sub = nh.subscribe(sub_topic, sub_queue_len, &ObjDetector::objDetectCB, this, ros::TransportHints().tcpNoDelay(), true);
-	//cv::setNumThreads(2);
+	cv::setNumThreads(1);
         std::cout << "Subscribed to images, about to call ros::spin, cv numThreads : " << cv::getNumThreads() << ", " << cv::getNumberOfCPUs() << std::endl;
         // cv::namedWindow(OPENCV_WINDOW);
 	if( !hcascade1.load( haar_cascade1 ) ){ ROS_INFO("ERROR Loading haar cascade1"); };
@@ -155,7 +157,10 @@ public:
 
     void py_haar(bool run_twice)
     {
-	PyRun_SimpleString("import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_random_haar()");
+	// PyRun_SimpleString("import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_random_haar()");
+	// std::string s = "import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_haar_ob_track(" + get_string((total%449) + 1) + ")";
+	std::string s = "import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_haar_vw_img(" + get_string((total%1000)) + ", " + get_string((int)run_twice) + ")";
+	PyRun_SimpleString(s.c_str());
     }
 
    void objDetectCB(const sensor_msgs::Image::ConstPtr& msg)
@@ -204,7 +209,7 @@ public:
           return;
         }
 	// haar(cv_ptr->image, false);
-        // py_haar(false);
+        py_haar(false);
 	std::vector<std::vector<cv::Point> > v;
         total += 1;
         cv::Rect best_boundingrect;
@@ -213,6 +218,14 @@ public:
 	clock_gettime(CLOCK_MONOTONIC, &cb_only_end);
 	
 	cv::Mat frame_hsv;
+	if (write_imgs_to_file)
+	{
+		// save to new file
+		
+		cv::FileStorage fs("/home/ubuntu/catkin_ws/obj_track_imgs/img_" + get_string(total) + ".xml", cv::FileStorage::WRITE);
+		fs << "img" << cv_ptr->image;
+		fs.release();	
+	}
         cv::cvtColor( cv_ptr->image, frame_hsv, cv::COLOR_BGR2HSV );
 
         cv::Mat img_threshold;
