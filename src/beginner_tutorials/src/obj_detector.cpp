@@ -11,6 +11,10 @@
 #include <time.h>
 #include <Python.h>
 #include <bits/stdc++.h>
+#include <sys/times.h>
+
+#include <dynamic_reconfigure/server.h>
+#include <beginner_tutorials/BinSizeConfig.h>
 
 std::string pub_topic = "";
 ros::Publisher roi_pub;
@@ -59,8 +63,12 @@ class ObjDetector
 
     bool write_imgs_to_file = false;
 
+    // For changing bin size (#cores allowed to use) at RunTime:
+    int num_cores, bin_size;
+    dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig> dyn_server;
+
 public:
-    ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim)
+    ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim, int nc)
     {
         // ros::NodeHandle nh;
         publish = pub;
@@ -86,7 +94,7 @@ public:
         }
 
         img_sub = nh.subscribe(sub_topic, sub_queue_len, &ObjDetector::objDetectCB, this, ros::TransportHints().tcpNoDelay(), true);
-	cv::setNumThreads(1);
+	cv::setNumThreads(0);
         std::cout << "Subscribed to images, about to call ros::spin, cv numThreads : " << cv::getNumThreads() << ", " << cv::getNumberOfCPUs() << std::endl;
         // cv::namedWindow(OPENCV_WINDOW);
 	if( !hcascade1.load( haar_cascade1 ) ){ ROS_INFO("ERROR Loading haar cascade1"); };
@@ -118,6 +126,12 @@ public:
         }
         Py_Finalize();
 	*/
+
+	num_cores = nc;
+	bin_size = 1;
+	// dyn_server = new dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig>(nh);
+	dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig>::CallbackType f = boost::bind(&ObjDetector::configCallback, this, _1, _2);
+	dyn_server.setCallback(f);
     }
 
     ~ObjDetector()
@@ -126,6 +140,21 @@ public:
 	
         ROS_INFO("IN destructor of ObjDetector!!!");
         print_stats();
+    }
+
+    void configCallback(beginner_tutorials::BinSizeConfig &config, uint32_t level)
+    {
+    	ROS_INFO("RECONFIGURE request : IN config callback in ObjDetector node. Current bin size : %i, New bin size : %i", bin_size, config.bin_size);
+	if (config.bin_size < num_cores)
+	{
+		cv::setNumThreads(config.bin_size);
+		ROS_INFO("Updated bin sz param and cv #threads : %i", cv::getNumThreads());
+	}
+	else
+	{
+		cv::setNumThreads(-1); // to set it to default
+	}
+	bin_size = config.bin_size;
     }
 
     std::string get_string(int x)
@@ -159,7 +188,11 @@ public:
     {
 	// PyRun_SimpleString("import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_random_haar()");
 	// std::string s = "import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_haar_ob_track(" + get_string((total%449) + 1) + ")";
-	std::string s = "import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_haar_vw_img(" + get_string((total%1000)) + ", " + get_string((int)run_twice) + ")";
+	std::string num_c = "";
+	if (bin_size < num_cores)
+		num_c = "cv2.setNumThreads(" + get_string(bin_size) + ");";
+
+	std::string s = "import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;import haar_detector;" + num_c + "haar_detector.do_haar_vw_img(" + get_string((total%1000)) + ", " + get_string((int)run_twice) + ")"; // cv2.setNumThreads(1);
 	PyRun_SimpleString(s.c_str());
     }
 
@@ -412,7 +445,7 @@ int main(int argc, char **argv)
     ROS_INFO("Init node %s, pub queue len %d, sub_queue_len %d, num_msgs %d, pub %d, doheavy %d, limit %d", node_name.c_str(), pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);
 
     ros::init(argc, argv, node_name);
-    ObjDetector od(pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);
+    ObjDetector od(pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim, 2);
     ros::spin();
 
     return 0;

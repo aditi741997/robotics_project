@@ -2,13 +2,16 @@ cmake_minimum_required(VERSION 2.8.3)
 project(beginner_tutorials)
 
 ## Find catkin and any catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs cv_bridge sensor_msgs genmsg)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs cv_bridge sensor_msgs genmsg dynamic_reconfigure)
 
 find_package(OpenCV REQUIRED)
 find_package(PythonLibs REQUIRED)
 
 ## Generate added messages and services
 generate_messages(DEPENDENCIES std_msgs sensor_msgs)
+
+generate_dynamic_reconfigure_options(
+cfg/BinSize.cfg)
 
 ## Declare a catkin package
 catkin_package()
@@ -33,7 +36,7 @@ add_executable(objdetector src/obj_detector.cpp)
 target_link_libraries(objdetector ${catkin_LIBRARIES}
 ${OpenCV_LIBRARIES}
 ${PYTHON_LIBRARIES})
-add_dependencies(objdetector beginner_tutorials_generate_messages_cpp)
+add_dependencies(objdetector beginner_tutorials_generate_messages_cpp ${PROJECT_NAME}_gencfg)
 
 add_executable(objtracker src/obj_tracker.cpp)
 target_link_libraries(objtracker ${catkin_LIBRARIES})
