@@ -7,6 +7,7 @@
 #include "geometry_msgs/Twist.h"
 #include <algorithm>
 #include <cstdlib>
+#include <fstream>
 
 class ObjTracker
 {
@@ -62,10 +63,14 @@ class ObjTracker
     bool rtc_event_driven;
     ros::Publisher rtc_pub;
 
+    int num_cores;
+    std::string suffix;
+
+    int offline_durn;
     bool dyn_algo;
     double expt_start_time;
 public:
-    ObjTracker(double max_rot, bool ed, bool da, double x_thr)
+    ObjTracker(double max_rot, bool ed, bool da, double x_thr, int off_durn, int nc, std::string suff)
     {
         img_width = 640;
         img_height = 480;
@@ -80,6 +85,10 @@ public:
 	dyn_algo = da;
 	expt_start_time = 0.0;	
 
+	offline_durn = off_durn;
+	num_cores = nc;
+	suffix = suff;
+
 	if (rtc_event_driven)
 	{
 		// this node will publish a msg which will trigger the gz_ros_pkg camera_util to publish
@@ -92,6 +101,50 @@ public:
 	}
 
         std::cout << "Subscribed to roi, about to call ros::spin \n" << "rtc?" << rtc_event_driven << ", dyn?" << dyn_algo << std::endl;
+    }
+
+    ~ObjTracker()
+    {
+	std::cout << "SHUTTING DOWN OBJTRACKER!" << std::endl;
+	std::ofstream outfile;
+	std::string fname = "New_Expt2_" + get_string(num_cores) + "c_" + get_algo() + "_Logs" + suffix;
+        outfile.open(fname.c_str());
+    	// need to write rxn Time arr, rel metric, rel metric 1
+	// lets remove the first 500 data.
+	std::cout << "Writing rxn time, Ignoring 1percent of sz " << rxn_time_arr.size() << std::endl;
+	outfile << "RxnTime, ";
+	for(int i = rxn_time_arr.size()/100; i < rxn_time_arr.size(); i++)
+		outfile << rxn_time_arr[i] << ", ";
+	outfile << "\n";	
+
+	std::cout << "Writing rel metric, Ignoring 1percent of sz " << metric_arr.size() << std::endl;
+	outfile << "RelMetric, ";
+	for(int i = metric_arr.size()/100; i < metric_arr.size(); i++)
+		outfile << metric_arr[i] << ", ";
+	outfile << "\n";
+	
+	std::cout << "Writing rel metric1, Ignoring 1percent of sz " << metric1_arr.size() << std::endl;
+	outfile << "RelMetric1, ";
+	for(int i = metric1_arr.size()/100; i < metric1_arr.size(); i++)
+		outfile << metric1_arr[i] << ", ";
+	outfile << "\n";
+    }
+
+    std::string get_string(int x)
+    {
+        std::stringstream ss;
+        ss << x;
+        return ss.str();
+    }
+ 
+    std::string get_algo()
+    {
+	if (rtc_event_driven)
+		return "RTC";
+	else if (dyn_algo)
+		return "Dyn";
+	else
+		return "Default";
     }
 
     void print_stats()
@@ -134,7 +187,7 @@ public:
 	if (!dyn_algo)
 		return true;
 	else
-		return ((ros::Time::now().toSec() - expt_start_time) > 59.0); 
+		return ((ros::Time::now().toSec() - expt_start_time) > offline_durn); 
     }
 
     void move_robot(const std_msgs::Header::ConstPtr& msg)
@@ -274,10 +327,13 @@ int main(int argc, char** argv)
     bool event_driven = (atoi(argv[2]) == 1);
     // if this is true, start measuring stats after 60sec.
     bool dyn_algo = (atoi(argv[3]) == 1);
+    int offline_durn = atoi(argv[4]);
+    int nc = atoi(argv[5]);
+    std::string suffix = argv[6];
     std::string node_name = "objecttracker";
     ROS_INFO("Init node name %s, max rot %f", node_name.c_str(), max_rot);
     ros::init(argc, argv, node_name);
-    ObjTracker ot(max_rot, event_driven, dyn_algo, 0.1);
+    ObjTracker ot(max_rot, event_driven, dyn_algo, 0.1, offline_durn, nc, suffix);
     ros::spin();
 
     return 0;
