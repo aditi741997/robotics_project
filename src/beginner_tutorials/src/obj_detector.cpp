@@ -65,7 +65,7 @@ class ObjDetector
 
     // For changing bin size (#cores allowed to use) at RunTime:
     int num_cores, bin_size;
-    dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig> *dyn_server;
+    dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig> dyn_server;
 
 public:
     ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim, int nc)
@@ -129,6 +129,9 @@ public:
 
 	num_cores = nc;
 	bin_size = 1;
+	// dyn_server = new dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig>(nh);
+	dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig>::CallbackType f = boost::bind(&ObjDetector::configCallback, this, _1, _2);
+	dyn_server.setCallback(f);
     }
 
     ~ObjDetector()
@@ -141,7 +144,7 @@ public:
 
     void configCallback(beginner_tutorials::BinSizeConfig &config, uint32_t level)
     {
-    	ROS_INFO("IN config callback in ObjDetector node. New bin size : %i", config.bin_size);
+    	ROS_INFO("RECONFIGURE request : IN config callback in ObjDetector node. Current bin size : %i, New bin size : %i", bin_size, config.bin_size);
 	if (config.bin_size < num_cores)
 	{
 		cv::setNumThreads(config.bin_size);
