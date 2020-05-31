@@ -46,3 +46,6 @@ add_executable(controller src/controller_node.cpp)
 target_link_libraries(controller ${catkin_LIBRARIES})
 add_dependencies(controller beginner_tutorials_generate_messages_cpp)
 
+add_executable(newcontroller src/new_controller_node.cpp)
+target_link_libraries(newcontroller ${catkin_LIBRARIES})
+add_dependencies(newcontroller beginner_tutorials_generate_messages_cpp)

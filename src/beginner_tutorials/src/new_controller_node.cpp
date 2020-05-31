@@ -11,6 +11,7 @@
 #include <boost/enable_shared_from_this.hpp>
 #include <boost/thread/condition_variable.hpp>
 #include <bits/stdc++.h>
+#include <utility>
 
 class NewFreqController
 {
@@ -47,6 +48,7 @@ class NewFreqController
     double freq_threshold;
     double mult_eps;
     bool use_median;
+    double last_update_time;
 
     double offline_durn;
 
@@ -73,18 +75,19 @@ public:
         for (int i = 0; i < cb_topics.size(); i++)
         {
             // subcribe to all the topics.
-            ros::Subscriber si = nh.subscribe<std_msgs::Header>(cb_topics[i], 1, &FreqController::updateStats, this, ros::TransportHints().tcpNoDelay());
+            ros::Subscriber si = nh.subscribe<std_msgs::Header>(cb_topics[i], 1, &NewFreqController::updateStats, this, ros::TransportHints().tcpNoDelay());
             cb_topics_subs.push_back(si);
             topic_map[cb_topics[i]] = i;
         }
         ROS_INFO("Subscribed to all the topics! About to read from file");
-        mean_cb_times = std::vector<double> (max_qi, std::vector<double> (num_nodes, 0.0));
-        med_cb_times = std::vector<double> (max_qi, std::vector<double> (num_nodes, 0.0));
-        tail_cb_times = std::vector<double> (max_qi, std::vector<double> (num_nodes, 0.0));
 
-        mean_cb_times_L = std::vector<double> (max_qi, std::vector<double> (num_nodes, 0.0));
-        med_cb_times_L = std::vector<double> (max_qi, std::vector<double> (num_nodes, 0.0));
-        tail_cb_times_L = std::vector<double> (max_qi, std::vector<double> (num_nodes, 0.0));
+        mean_cb_times = std::vector<std::vector<double> > (max_qi, std::vector<double> (num_nodes, 0.0));
+        med_cb_times = std::vector<std::vector<double> > (max_qi, std::vector<double> (num_nodes, 0.0));
+        tail_cb_times = std::vector<std::vector<double> > (max_qi, std::vector<double> (num_nodes, 0.0));
+
+        mean_cb_times_L = std::vector<std::vector<double> > (max_qi, std::vector<double> (num_nodes, 0.0));
+        med_cb_times_L = std::vector<std::vector<double> > (max_qi, std::vector<double> (num_nodes, 0.0));
+        tail_cb_times_L = std::vector<std::vector<double> > (max_qi, std::vector<double> (num_nodes, 0.0));
 
         cb_topics_msg_count = std::vector<int> (num_nodes, 0);
 
@@ -111,8 +114,8 @@ public:
         else
         {
             // All qi's have been covered. Time to find the best bin_Sz, freq.
-            std::tuple<double, int> best_freq_binsz = schedAlgo();
-            updateParams(std::get<1>(best_freq_binsz), std::get<0>(best_freq_binsz));
+            std::pair<double, int> best_freq_binsz = schedAlgo();
+            updateParams((best_freq_binsz.second), (best_freq_binsz.first));
         }
     }
 
@@ -176,9 +179,9 @@ public:
 
             // check if we need to change freq.
             // If bin size needs to change OR if for same bin sz the freq is diff by more than threshold.
-            std::tuple<double, int> new_sched = schedAlgo();
-            int bs = std::get<1>(new_sched);
-            double fr = std::get<0>(new_sched);
+            std::pair<double, int> new_sched = schedAlgo();
+            int bs = (new_sched.second);
+            double fr = (new_sched.first);
             if ( ( (bs != current_bin_sz) || (std::abs( ((1.0-mult_eps)*fr) - current_freq) >= (freq_threshold*current_freq) ) ) && ( (ros::Time::now().toSec() - last_update_time) >= 1.0/max_change_rate) )
             {
                 ROS_INFO("L-UPDATE NEED to change schedule! Got msg %s, current_bin_sz %i, current_freq %f, NEW bin_sz : %i, NEW freq : %f", msg->frame_id.c_str(), current_bin_sz, current_freq, bs, fr);
@@ -198,8 +201,8 @@ public:
         }
     }
 
-    // Returns freq, rxnTime tuple by using the single chain optimal frequency formula.
-    std::tuple<double, double> bestFreq(std::vector<double>& cb_times, int k)
+    // Returns freq, rxnTime pair by using the single chain optimal frequency formula.
+    std::pair<double, double> bestFreq(std::vector<double>& cb_times, int k)
     {
         // can be used for any bin sz : we give k as num_Cores/binsz and the cb_times_arr[binsz]
         double m = 0.0;
@@ -213,7 +216,7 @@ public:
         if (m > 0.0)
             new_freq = std::min(1.0/m, new_freq);
         double rxn_time = sig + 1.0/new_freq;
-        return std::make_tuple(new_freq, rxn_time);
+        return std::make_pair(new_freq, rxn_time);
     }
 
     std::string get_string(double x)
@@ -232,11 +235,11 @@ public:
 
     // Returns best freq, bin_sz combo
     // obtained by iterating over all possible bin sizes.
-    std::tuple<double, int> schedAlgo()
+    std::pair<double, int> schedAlgo()
     {
         int bin_sz = 1;
         double freq = 1.0;
-        std::tuple<double, double> freq_rt;
+        std::pair<double, double> freq_rt;
 
         if (num_cores >= sum_qi)
         {
@@ -249,7 +252,7 @@ public:
                 freq_rt = bestFreq(tail_cb_times_L[max_qi-1], num_nodes);
             
             bin_sz = max_qi;
-            freq = std::get<0>(freq_rt);
+            freq = (freq_rt.first);
             ROS_INFO("SCHED_ALGO : Have sufficient cores, hence bin sz : %i, freq : %f", bin_sz, freq);
         }
         else
@@ -257,7 +260,7 @@ public:
             double rxntm = 5.0; // need to find the best bin sz.
             double best_freq = 1.0;
             int best_binsz = 1;
-            for (binsz = 1; binsz <= (std::min(max_qi, num_cores)); binsz++)
+            for (int binsz = 1; binsz <= (std::min(max_qi, num_cores)); binsz++)
             {
                 int num_bins = num_cores/binsz;
                 if (use_median)
@@ -265,10 +268,10 @@ public:
                 else
                     freq_rt = bestFreq(tail_cb_times_L[binsz-1], num_bins);
                 
-                if (std::get<1>(freq_rt) < rxntm)
+                if ((freq_rt.second) < rxntm)
                 {
-                    best_freq = std::get<0>(freq_rt);
-                    rxntm = std::get<1>(freq_rt);
+                    best_freq = (freq_rt.first);
+                    rxntm = (freq_rt.second);
                     best_binsz = binsz;
                 }
             }
@@ -278,7 +281,7 @@ public:
         }
         // bin_sz = max_qi essentially means that each node will get qi cores whenever its running.
         // (since we choose the freq accordingly at every bin_sz)
-        return std::make_tuple(freq, bin_sz);
+        return std::make_pair(freq, bin_sz);
     }
 };
 
