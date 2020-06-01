@@ -148,13 +148,14 @@ public:
 	if (config.bin_size < num_cores)
 	{
 		cv::setNumThreads(config.bin_size);
-		ROS_INFO("Updated bin sz param and cv #threads : %i", cv::getNumThreads());
 	}
 	else
 	{
 		cv::setNumThreads(-1); // to set it to default
 	}
 	bin_size = config.bin_size;
+	nh.changeBinSize(config.bin_size); // 
+	ROS_INFO("Updated bin sz param and cv #threads : %i", cv::getNumThreads());
     }
 
     std::string get_string(int x)
@@ -432,6 +433,7 @@ int main(int argc, char **argv)
     bool publish = atoi(argv[5]) == 1;
     bool doheavy = atoi(argv[6]) == 1;
     int lim = atoi(argv[7]);
+    int nc = atoi(argv[8]);
 
   PyObject* pInt;
 
@@ -445,7 +447,7 @@ int main(int argc, char **argv)
     ROS_INFO("Init node %s, pub queue len %d, sub_queue_len %d, num_msgs %d, pub %d, doheavy %d, limit %d", node_name.c_str(), pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);
 
     ros::init(argc, argv, node_name);
-    ObjDetector od(pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim, 2);
+    ObjDetector od(pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim, nc);
     ros::spin();
 
     return 0;

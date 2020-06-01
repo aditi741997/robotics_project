@@ -183,6 +183,10 @@ public:
 
   void headerReceived(const PublisherLinkPtr& link, const Header& h);
 
+  // Adding overloaded function for TopicMgr to get a SubQuePtr.
+  bool addCallback(const SubscriptionCallbackHelperPtr& helper, const std::string& md5sum, CallbackQueueInterface* queue, int32_t queue_size, const VoidConstPtr& tracked_object, bool allow_concurrent_callbacks, SubscriptionQueuePtr& sub_q_ptr, ros::Publisher cb_T_p = ros::Publisher());
+  
+
 private:
   Subscription(const Subscription &); // not copyable
   Subscription &operator =(const Subscription &); // nor assignable

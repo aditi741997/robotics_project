@@ -43,7 +43,7 @@ class NewFreqController
     int num_nodes;
 
     double current_freq;
-    double current_bin_sz;
+    int current_bin_sz;
     double max_change_rate;
     double freq_threshold;
     double mult_eps;
@@ -56,7 +56,7 @@ class NewFreqController
     ros::Timer ct, ct2;
 
 public:
-    NewFreqController(std::vector<std::string>& cb_topics, std::vector<int> cores_i, int k, double mcr, double thresh, double epsilon, bool use_med)
+    NewFreqController(std::vector<std::string>& cb_topics, std::vector<int> cores_i, int k, double mcr, double thresh, double epsilon, bool use_med, double offln_durn, double offln_freq)
     {
         node_cb_topics = cb_topics;
         num_nodes = cb_topics.size();
@@ -98,23 +98,28 @@ public:
 
         // Start with binsz = 1 & low freq.
         current_bin_sz = 1;
-        current_freq = 10;
+        current_freq = offln_freq;
+	offline_durn = offln_durn;
         updateParams(current_bin_sz, current_freq);
         // Timer for 40sec : Switch to binsz = 2.
         ct = nh.createTimer(ros::Duration(offline_durn+1.0), &NewFreqController::offlineEval, this, true);
         // Another timer to finish offline eval and determine best schedule.
         // TODO:Later : if qi > 2: we will use a for loop to make qi timers.
-        ct = nh.createTimer(ros::Duration(2*offline_durn+1.0), &NewFreqController::offlineEval, this, true);
+        ct2 = nh.createTimer(ros::Duration((2*offline_durn)+1.0), &NewFreqController::offlineEval, this, true);
     }
 
     void offlineEval(const ros::TimerEvent& event)
     {
+	ROS_INFO("offlineEval!!!!!!!!!!!!!!!!!!!!!!!!!!!!!, current bin sz : %i, max qi : %i", current_bin_sz, max_qi);
         if (current_bin_sz < max_qi)
+	{
             updateBinSz(current_bin_sz+1);
+	}
         else
         {
             // All qi's have been covered. Time to find the best bin_Sz, freq.
-            std::pair<double, int> best_freq_binsz = schedAlgo();
+            ROS_INFO("In final stage of eval : About to find best schedule");
+	    std::pair<double, int> best_freq_binsz = schedAlgo();
             updateParams((best_freq_binsz.second), (best_freq_binsz.first));
         }
     }
@@ -130,9 +135,11 @@ public:
     {
         // scale down by a factor :
         double new_new_freq = (1.0-mult_eps)*new_freq;
+	ROS_INFO("updateFreq : new_Freq : %f, current_Freq : %f, new_new_freq : %f", new_freq, current_freq, new_new_freq);
         // Since the compute values will be inflated due to resource contention,
         // we don't directly move to new_freq.
-        new_new_freq = current_freq*0.2 + new_freq*(1.0-0.2);
+        new_new_freq = current_freq*0.2 + new_new_freq*(1.0-0.2);
+	ROS_INFO("updateFreq : new_Freq : %f, current_Freq : %f, new_new_freq : %f", new_freq, current_freq, new_new_freq);
         std::string cmd = "rosrun dynamic_reconfigure dynparam set /camera \"{'camera_update_rate': ";
         cmd += get_string(new_new_freq);
         cmd += ", 'imager_rate': 0.0}\"";
@@ -150,9 +157,9 @@ public:
         cmd += "}\"";
         system(cmd.c_str());
 
-        ROS_INFO("Changed bin size to %i, usimg cmd %s", bin_sz, cmd.c_str());
         current_bin_sz = bin_sz;
         last_update_time = ros::Time::now().toSec();
+        ROS_INFO("Changed bin size to %i, usimg cmd %s", current_bin_sz, cmd.c_str());
     }
 
     void updateStats(const std_msgs::Header::ConstPtr& msg)
@@ -160,8 +167,8 @@ public:
         std::stringstream ss(msg->frame_id);
         std::string topic, stage;
         double update, update2;
-
         ss >> topic;
+	ss >> stage;
         ss >> update; // med
         ss >> update2; // 95% tail
 
@@ -174,8 +181,8 @@ public:
             cb_topics_msg_count[ind] += 1;
 
             // update L stats.
-            med_cb_times_L[current_bin_sz][ind] = update;
-            tail_cb_times_L[current_bin_sz][ind] = update2;
+            med_cb_times_L[current_bin_sz-1][ind] = update;
+            tail_cb_times_L[current_bin_sz-1][ind] = update2;
 
             // check if we need to change freq.
             // If bin size needs to change OR if for same bin sz the freq is diff by more than threshold.
@@ -185,19 +192,18 @@ public:
             if ( ( (bs != current_bin_sz) || (std::abs( ((1.0-mult_eps)*fr) - current_freq) >= (freq_threshold*current_freq) ) ) && ( (ros::Time::now().toSec() - last_update_time) >= 1.0/max_change_rate) )
             {
                 ROS_INFO("L-UPDATE NEED to change schedule! Got msg %s, current_bin_sz %i, current_freq %f, NEW bin_sz : %i, NEW freq : %f", msg->frame_id.c_str(), current_bin_sz, current_freq, bs, fr);
-                // TODO: update the schedule!
+		updateParams(bs, fr);
             }
         }
         else
         {
             // offline eval stage.
-            // if t<40 & [TODO:within 20% of current value] then Stage1
-            // else Stage2
-            med_cb_times[current_bin_sz][ind] = update;
-            med_cb_times_L[current_bin_sz][ind] = update;
+	    ROS_INFO("Received an E update : %s, median of %s [ind:%i] is %f & tail is %f, current bin sz : %i, current stats of this node : %f,%f", msg->frame_id.c_str(), topic.c_str(), ind, update, update2, current_bin_sz, med_cb_times_L[current_bin_sz-1][ind], tail_cb_times_L[current_bin_sz-1][ind]);
+            med_cb_times[current_bin_sz-1][ind] = update;
+            med_cb_times_L[current_bin_sz-1][ind] = update;
 
-            tail_cb_times[current_bin_sz][ind] = update2;
-            tail_cb_times_L[current_bin_sz][ind] = update2;
+            tail_cb_times[current_bin_sz-1][ind] = update2;
+            tail_cb_times_L[current_bin_sz-1][ind] = update2;
         }
     }
 
@@ -253,7 +259,7 @@ public:
             
             bin_sz = max_qi;
             freq = (freq_rt.first);
-            ROS_INFO("SCHED_ALGO : Have sufficient cores, hence bin sz : %i, freq : %f", bin_sz, freq);
+            // ROS_INFO("SCHED_ALGO : Have sufficient cores, hence bin sz : %i, freq : %f", bin_sz, freq);
         }
         else
         {
@@ -277,7 +283,7 @@ public:
             }
             bin_sz = best_binsz;
             freq = best_freq;
-            ROS_INFO("SCHED_ALGO : Insufficient cores, found best bin sz : %i, freq : %f", bin_sz, freq);
+            // ROS_INFO("SCHED_ALGO : Insufficient cores, found best bin sz : %i, freq : %f", bin_sz, freq);
         }
         // bin_sz = max_qi essentially means that each node will get qi cores whenever its running.
         // (since we choose the freq accordingly at every bin_sz)
@@ -296,10 +302,17 @@ int main(int argc, char **argv)
     double offln_freq = atof(argv[6]);
     bool use_med = (atoi(argv[7]) == 1);
 
-    ROS_INFO("Init node name %s, num_cores %i, num ndoes %i, offline durn %f, offline freq %f", node_name.c_str(), k, m, offln_durn, offln_freq);
+    ROS_INFO("Init node name %s, num_cores %i, num ndoes %i, offline durn %f, offline freq %f, freq_thresh %f, epsi %f", node_name.c_str(), k, m, offln_durn, offln_freq, freq_thresh, epsi);
     ros::init(argc, argv, node_name);
     std::vector<std::string> topic_list (m);
     for (int i = 0; i < m; i++)
         topic_list[i] = argv[8+i];
+
+    std::vector<int> cores_i (m);
+    for (int i = 0; i < m; i++)
+        cores_i[i] = atoi(argv[8+m+i]);
+
+    NewFreqController nf(topic_list, cores_i, k, 10.0, freq_thresh, epsi, use_med, offln_durn, offln_freq);
+    ros::spin();
     return 0;
 }
