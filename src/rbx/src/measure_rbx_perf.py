@@ -13,7 +13,7 @@ from collections import deque
 # from rbx1_vision.msg import roi_time
 
 class MeasureObjectTrackPerf(object):
-    def __init__(self, name, fname, dyn):
+    def __init__(self, name, fname, dyn, offln_dur):
         self.node_name = name
 
         rospy.init_node(name)
@@ -26,6 +26,7 @@ class MeasureObjectTrackPerf(object):
         self.arr_posn = deque([], 100000)
 	self.dyn_algo = (dyn == "1")
 	self.start_time = 0.0
+	self.offline_durn = float(offln_dur)
 	print "Initialized measure_rbx_perf with params:", self.write_to_file, self.dyn_algo, self.start_time
 
     def state_cb(self, msg):
@@ -33,8 +34,8 @@ class MeasureObjectTrackPerf(object):
 		self.start_time = rospy.get_time()
         human_index = msg.name.index("hooman")
         tb3_index = msg.name.index("turtlebot3_waffle_pi")
-	if ( (not (self.dyn_algo)) or (self.dyn_algo and ( (rospy.get_time() - self.start_time) > 60.0 ) ) ):
-        	self.arr_posn.append((msg.pose[human_index].position.y, msg.pose[tb3_index].orientation))
+	if ( (not (self.dyn_algo)) or (self.dyn_algo and ( (rospy.get_time() - self.start_time) > self.offline_durn ) ) ):
+        	self.arr_posn.append((msg.pose[human_index].position.y, msg.pose[tb3_index].orientation.z, msg.pose[tb3_index].orientation.w))
         # sleep for a while to drop msgs
         time.sleep(0.01)
 
@@ -42,10 +43,10 @@ class MeasureObjectTrackPerf(object):
         rospy.loginfo("Shutting down Measure node")
         with open(self.write_to_file, 'w') as wf:
             new_arr = list(self.arr_posn)
-            wf.write("\n".join('h_p %s \nt_p %s ' % x for x in new_arr))
+            wf.write("\n".join('h_p %s \nt_p z %s \nt_p w %s ' % x for x in new_arr))
 
 
 if __name__ == '__main__':
     node_name = "measure_perf"
-    MeasureObjectTrackPerf(node_name, sys.argv[1], sys.argv[2])
+    MeasureObjectTrackPerf(node_name, sys.argv[1], sys.argv[2], sys.argv[3])
     rospy.spin()
