@@ -99,7 +99,7 @@ public:
         // Start with binsz = 1 & low freq.
         current_bin_sz = 1;
         current_freq = offln_freq;
-	offline_durn = offln_durn;
+	offline_durn = offln_durn/max_qi; // we divide the offlien durn into max_qi stages.
         updateParams(current_bin_sz, current_freq);
         // Timer for 40sec : Switch to binsz = 2.
         ct = nh.createTimer(ros::Duration(offline_durn+1.0), &NewFreqController::offlineEval, this, true);

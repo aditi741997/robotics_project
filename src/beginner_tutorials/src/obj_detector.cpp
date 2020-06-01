@@ -65,10 +65,11 @@ class ObjDetector
 
     // For changing bin size (#cores allowed to use) at RunTime:
     int num_cores, bin_size;
+    
     dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig> dyn_server;
 
 public:
-    ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim, int nc)
+    ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim, int nc, int init_bs)
     {
         // ros::NodeHandle nh;
         publish = pub;
@@ -128,7 +129,8 @@ public:
 	*/
 
 	num_cores = nc;
-	bin_size = 1;
+	bin_size = init_bs;
+	changeBinSize(bin_size); // init bs : 1 for Dyn, nc for RTC/Def.
 	// dyn_server = new dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig>(nh);
 	dynamic_reconfigure::Server<beginner_tutorials::BinSizeConfig>::CallbackType f = boost::bind(&ObjDetector::configCallback, this, _1, _2);
 	dyn_server.setCallback(f);
@@ -145,17 +147,22 @@ public:
     void configCallback(beginner_tutorials::BinSizeConfig &config, uint32_t level)
     {
     	ROS_INFO("RECONFIGURE request : IN config callback in ObjDetector node. Current bin size : %i, New bin size : %i", bin_size, config.bin_size);
-	if (config.bin_size < num_cores)
-	{
-		cv::setNumThreads(config.bin_size);
-	}
-	else
-	{
-		cv::setNumThreads(-1); // to set it to default
-	}
-	bin_size = config.bin_size;
-	nh.changeBinSize(config.bin_size); // 
-	ROS_INFO("Updated bin sz param and cv #threads : %i", cv::getNumThreads());
+    	changeBinSize(config.bin_size);
+    }
+
+    void changeBinSize(int bs)
+    {
+	bin_size = bs;
+	if (bs < num_cores)
+        {
+                cv::setNumThreads(bs);
+        }
+        else
+        {
+                cv::setNumThreads(-1); // to set it to default
+        }
+	nh.changeBinSize(bs); // changing the bin size in subQueue : to store stats accordingly. 
+        ROS_INFO("Updated bin sz param and cv #threads : %i", cv::getNumThreads());
     }
 
     std::string get_string(int x)
@@ -434,6 +441,7 @@ int main(int argc, char **argv)
     bool doheavy = atoi(argv[6]) == 1;
     int lim = atoi(argv[7]);
     int nc = atoi(argv[8]);
+    int init_bs = atoi(argv[9]);
 
   PyObject* pInt;
 
@@ -447,7 +455,7 @@ int main(int argc, char **argv)
     ROS_INFO("Init node %s, pub queue len %d, sub_queue_len %d, num_msgs %d, pub %d, doheavy %d, limit %d", node_name.c_str(), pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);
 
     ros::init(argc, argv, node_name);
-    ObjDetector od(pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim, nc);
+    ObjDetector od(pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim, nc, init_bs);
     ros::spin();
 
     return 0;
