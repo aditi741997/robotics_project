@@ -68,10 +68,6 @@ public:
   V_SrvCImpl srv_cs_;
 
   boost::mutex mutex_;
-
-  // keep shared_ptrs to these managers to avoid assertions. Fixes #838
-  TopicManagerPtr keep_alive_topic_manager = TopicManager::instance();
-  ServiceManagerPtr keep_alive_service_manager = ServiceManager::instance();
 };
 
 NodeHandle::NodeHandle(const std::string& ns, const M_string& remappings)
@@ -321,7 +317,7 @@ Publisher NodeHandle::advertise(AdvertiseOptions& ops)
 
 Subscriber NodeHandle::subscribe(SubscribeOptions& ops)
 {
-  ROS_INFO("In node handle::subscribe, param : %i", ops.publish_cb_time);
+  ROS_INFO("In node handle::subscribe, param : %i", (int)(ops.publish_cb_time));
   ops.topic = resolveName(ops.topic);
   if (ops.callback_queue == 0)
   {
@@ -335,17 +331,16 @@ Subscriber NodeHandle::subscribe(SubscribeOptions& ops)
     }
   }
   ros::Publisher cb_time_pub;
-  if (ops.publish_cb_time)
+  if (int(ops.publish_cb_time) == 1)
   {
     std::string t = ops.topic + "_cb_time";
     cb_time_pub = advertise<std_msgs::Header>(t, 1);
     ROS_INFO("Made a pub on topic %s", t.c_str());
   }
-  // std::cout << "duh NH1\n";
   if (TopicManager::instance()->subscribe(ops, cb_time_pub))
   {
     Subscriber sub(ops.topic, *this, ops.helper);
-      // std::cout << "duh NH2\n";
+
     {
       boost::mutex::scoped_lock lock(collection_->mutex_);
       collection_->subs_.push_back(sub.impl_);
@@ -355,6 +350,11 @@ Subscriber NodeHandle::subscribe(SubscribeOptions& ops)
   }
 
   return Subscriber();
+}
+
+void NodeHandle::changeBinSize(int binsz)
+{
+  TopicManager::instance()->changeBinSize(binsz);	
 }
 
 ServiceServer NodeHandle::advertiseService(AdvertiseServiceOptions& ops)

@@ -678,6 +678,87 @@ uint32_t Subscription::handleMessage(const SerializedMessage& m, bool ser, bool 
   return drops;
 }
 
+bool Subscription::addCallback(const SubscriptionCallbackHelperPtr& helper, const std::string& md5sum, CallbackQueueInterface* queue, int32_t queue_size, const VoidConstPtr& tracked_object, bool allow_concurrent_callbacks, SubscriptionQueuePtr& sub_q_ptr, ros::Publisher cb_T_p)
+{
+  ROS_ASSERT(helper);
+  ROS_ASSERT(queue);
+
+  statistics_.init(helper);
+
+  // Decay to a real type as soon as we have a subscriber with a real type
+  {
+    boost::mutex::scoped_lock lock(md5sum_mutex_);
+    if (md5sum_ == "*" && md5sum != "*")
+    {
+
+      md5sum_ = md5sum;
+    }
+  }
+
+  if (md5sum != "*" && md5sum != this->md5sum())
+  {
+    return false;
+  }
+
+  {
+    boost::mutex::scoped_lock lock(callbacks_mutex_);
+
+    CallbackInfoPtr info(boost::make_shared<CallbackInfo>());
+    info->helper_ = helper;
+    info->callback_queue_ = queue;
+    info->subscription_queue_ = boost::make_shared<SubscriptionQueue>(name_, queue_size, allow_concurrent_callbacks, cb_T_p);
+    info->tracked_object_ = tracked_object;
+    info->has_tracked_object_ = false;
+    if (tracked_object)
+    {
+      info->has_tracked_object_ = true;
+    }
+
+    if (!helper->isConst())
+    {
+      ++nonconst_callbacks_;
+    }
+
+    callbacks_.push_back(info);
+    cached_deserializers_.reserve(callbacks_.size());
+
+    // Need to put SUbQueue to the reference passed.
+    sub_q_ptr = info->subscription_queue_;
+
+    // if we have any latched links, we need to immediately schedule callbacks
+    if (!latched_messages_.empty())
+    {
+      boost::mutex::scoped_lock lock(publisher_links_mutex_);
+
+      V_PublisherLink::iterator it = publisher_links_.begin();
+      V_PublisherLink::iterator end = publisher_links_.end();
+      for (; it != end;++it)
+      {
+        const PublisherLinkPtr& link = *it;
+        if (link->isLatched())
+        {
+          M_PublisherLinkToLatchInfo::iterator des_it = latched_messages_.find(link);
+          if (des_it != latched_messages_.end())
+          {
+            const LatchInfo& latch_info = des_it->second;
+
+            MessageDeserializerPtr des(boost::make_shared<MessageDeserializer>(helper, latch_info.message, latch_info.connection_header));
+            bool was_full = false;
+            info->subscription_queue_->push(info->helper_, des, info->has_tracked_object_, info->tracked_object_, true, latch_info.receipt_time, &was_full);
+            if (!was_full)
+            {
+              info->callback_queue_->addCallback(info->subscription_queue_, (uint64_t)info.get());
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return true;
+
+} 
+
 bool Subscription::addCallback(const SubscriptionCallbackHelperPtr& helper, const std::string& md5sum, CallbackQueueInterface* queue, int32_t queue_size, const VoidConstPtr& tracked_object, bool allow_concurrent_callbacks, ros::Publisher cb_T_p)
 {
   ROS_ASSERT(helper);

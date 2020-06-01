@@ -39,6 +39,9 @@
 #include <boost/thread/mutex.hpp>
 #include <boost/thread/recursive_mutex.hpp>
 
+#include "subscription_queue.h"
+#include "subscription.h"
+
 namespace ros
 {
 
@@ -132,6 +135,7 @@ public:
 
   void incrementSequence(const std::string &_topic);
   bool isLatched(const std::string& topic);
+  void changeBinSize(int binsz);
 
 private:
   /** if it finds a pre-existing subscription to the same topic and of the
@@ -233,6 +237,9 @@ private:
   PollManagerPtr poll_manager_;
   ConnectionManagerPtr connection_manager_;
   XMLRPCManagerPtr xmlrpc_manager_;
+
+  // used for ros::nodes to pass info from main node to subscription que (which publishes the cb time stats)
+  SubscriptionQueuePtr node_sub_que_ptr; 
 };
 
 } // namespace ros

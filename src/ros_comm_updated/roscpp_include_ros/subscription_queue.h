@@ -84,14 +84,21 @@ public:
   virtual bool ready();
   bool full();
 
+  void changeBinSize(int binsz);
+
   // store stats since t=0
   double cb_eval_start_time;
   double cb_eval_durn;
   bool cb_eval_init;
+  int cb_eval_num_stages;
+  std::vector<bool> cb_eval_restart; // used if multiple stages in offline eval. We clear up the arr, sum after every stage : PROBABLY Don't need this now cuz the change bin sz function can do this...
+  std::vector<double> med_cb_arr;
+  std::vector<double> tail_cb_arr;
+  int current_bin_size; // denotes bin sz or stage
 
   double sum_cb_time;
   std::vector<double> arr_cb_time;
-  double mean_cb, med_cb, tail_cb;
+  // double mean_cb, med_cb, tail_cb;
   long int total_count;
   long int max_count;
 
@@ -116,6 +123,7 @@ private:
   int32_t size_;
   bool full_;
 
+  boost::mutex bin_sz_mutex;
   boost::mutex queue_mutex_;
   D_Item queue_;
   uint32_t queue_size_;

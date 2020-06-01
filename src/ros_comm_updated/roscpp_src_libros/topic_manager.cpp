@@ -40,7 +40,7 @@
 #include "ros/init.h"
 #include "ros/file_log.h"
 #include "ros/subscribe_options.h"
-
+#include "ros/subscription.h"
 #include "xmlrpcpp/XmlRpc.h"
 
 #include <ros/console.h>
@@ -97,10 +97,9 @@ void TopicManager::shutdown()
   }
 
   {
-    boost::lock(subs_mutex_, advertised_topics_mutex_);
+    boost::recursive_mutex::scoped_lock lock1(advertised_topics_mutex_);
+    boost::mutex::scoped_lock lock2(subs_mutex_);
     shutting_down_ = true;
-    subs_mutex_.unlock();
-    advertised_topics_mutex_.unlock();
   }
 
   // actually one should call poll_manager_->removePollThreadListener(), but the connection is not stored above
@@ -246,7 +245,6 @@ bool TopicManager::addSubCallback(const SubscribeOptions& ops)
 bool TopicManager::subscribe(const SubscribeOptions& ops, ros::Publisher cb_T_p)
 {
   boost::mutex::scoped_lock lock(subs_mutex_);
-  // std::cout << "duh TM 1\n";
 
   if (addSubCallback(ops))
   {
@@ -272,14 +270,21 @@ bool TopicManager::subscribe(const SubscribeOptions& ops, ros::Publisher cb_T_p)
   {
     throw InvalidParameterException("Subscribing to topic [" + ops.topic + "] without a callback");
   }
-  // std::cout << "duh TM 2\n";
+
   const std::string& md5sum = ops.md5sum;
   std::string datatype = ops.datatype;
 
   SubscriptionPtr s(boost::make_shared<Subscription>(ops.topic, md5sum, datatype, ops.transport_hints));
-  // std::cout << "duh TM 3\n";
-  s->addCallback(ops.helper, ops.md5sum, ops.callback_queue, ops.queue_size, ops.tracked_object, ops.allow_concurrent_callbacks, cb_T_p);
-  std::cout << "Created SubQueue \n";
+  if (!(cb_T_p.getTopic().empty()))
+  {
+	// need to save the susbcription que
+  	s->addCallback(ops.helper, ops.md5sum, ops.callback_queue, ops.queue_size, ops.tracked_object, ops.allow_concurrent_callbacks, node_sub_que_ptr, cb_T_p);
+	ROS_INFO("TopicMgr got subQueue ref. pub_cb_time? %i", node_sub_que_ptr->publish_cb_time);
+  }
+  else
+  {
+	s->addCallback(ops.helper, ops.md5sum, ops.callback_queue, ops.queue_size, ops.tracked_object, ops.allow_concurrent_callbacks, cb_T_p);
+  } 
 
   if (!registerSubscriber(s, ops.datatype))
   {
@@ -287,10 +292,16 @@ bool TopicManager::subscribe(const SubscribeOptions& ops, ros::Publisher cb_T_p)
     s->shutdown();
     return false;
   }
-  // std::cout << "duh TM 5\n";
-  subscriptions_.push_back(s);
 
-  return true;
+  subscriptions_.push_back(s);
+  
+   return true;
+}
+
+void TopicManager::changeBinSize(int binsz)
+{
+  ROS_INFO("In TopicMgr changeBinSz");
+  node_sub_que_ptr->changeBinSize(binsz);
 }
 
 bool TopicManager::advertise(const AdvertiseOptions& ops, const SubscriberCallbacksPtr& callbacks)
@@ -342,9 +353,6 @@ bool TopicManager::advertise(const AdvertiseOptions& ops, const SubscriberCallba
 
     if (pub)
     {
-      if (ops.topic.find("image_raw") != std::string::npos)
-        ROS_INFO("In topic_manager::Advertise, pub is true : got publication wdout lock");
-
       if (pub->getMD5Sum() != ops.md5sum)
       {
         ROS_ERROR("Tried to advertise on topic [%s] with md5sum [%s] and datatype [%s], but the topic is already advertised as md5sum [%s] and datatype [%s]",
@@ -392,7 +400,6 @@ bool TopicManager::advertise(const AdvertiseOptions& ops, const SubscriberCallba
 
   if(found)
   {
-    ROS_INFO("Adding local connection to a local subscriber, nodelet (i think)");
     sub->addLocalConnection(pub);
   }
 
@@ -710,6 +717,7 @@ bool TopicManager::requestTopic(const string &topic,
 
 void TopicManager::publish(const std::string& topic, const boost::function<SerializedMessage(void)>& serfunc, SerializedMessage& m)
 {
+  ros::Time st = ros::Time::now();
   boost::recursive_mutex::scoped_lock lock(advertised_topics_mutex_);
 
   if (isShuttingDown())
@@ -718,6 +726,7 @@ void TopicManager::publish(const std::string& topic, const boost::function<Seria
   }
 
   PublicationPtr p = lookupPublicationWithoutLock(topic);
+  ros::Time st1 = ros::Time::now();
   if (p->hasSubscribers() || p->isLatching())
   {
     ROS_DEBUG_NAMED("superdebug", "Publishing message on topic [%s] with sequence number [%d]", p->getName().c_str(), p->getSequence());
@@ -742,6 +751,9 @@ void TopicManager::publish(const std::string& topic, const boost::function<Seria
       m.message.reset();
       m.type_info = 0;
     }
+	double b4_ser_time = (ros::Time::now() - st1).toSec();
+	if ((b4_ser_time > 0.0009) && (topic.find("camera1") != std::string::npos))
+	  ROS_INFO("%s st1 to b4 serial took more than 1ms %f", topic.c_str(), b4_ser_time);
 
     if (serialize || p->isLatching())
     {
@@ -749,10 +761,15 @@ void TopicManager::publish(const std::string& topic, const boost::function<Seria
       m.buf = m2.buf;
       m.num_bytes = m2.num_bytes;
       m.message_start = m2.message_start;
+      double ser_time = (ros::Time::now() - st1).toSec();
+	/* if ((ser_time > 0.0009) && (topic.find("camera1") != std::string::npos))
+	  ROS_INFO("%s serial took more than 1ms %f", topic.c_str(), ser_time); */
     }
 
     p->publish(m);
-
+    double ser_pub_time = (ros::Time::now() - st1).toSec();
+   /* if ((ser_pub_time > 0.0009) && (topic.find("camera1") != std::string::npos))
+	ROS_INFO("%s serial+pub took more than 1ms %f", topic.c_str(), ser_pub_time); */
     // If we're not doing a serialized publish we don't need to signal the pollset.  The write()
     // call inside signal() is actually relatively expensive when doing a nocopy publish.
     if (serialize)
@@ -763,6 +780,11 @@ void TopicManager::publish(const std::string& topic, const boost::function<Seria
   else
   {
     p->incrementSequence();
+  }
+  double t = (ros::Time::now() - st).toSec();
+  if ((t > 0.004) && (topic.find("camera1") != std::string::npos))
+  {
+    ROS_INFO("TopicMgr publish takes almost 1ms %f", t);
   }
 }
 
@@ -1007,6 +1029,8 @@ void TopicManager::getPublications(XmlRpcValue &pubs)
 
   }
 }
+
+extern std::string console::g_last_error_message;
 
 void TopicManager::pubUpdateCallback(XmlRpc::XmlRpcValue& params, XmlRpc::XmlRpcValue& result)
 {
