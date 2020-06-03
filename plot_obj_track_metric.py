@@ -9,15 +9,19 @@ farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2
 farr = [10, 14, 15, 16, 20, 30, 60]
 farr = [9, 16, 23, 24, 25, 30, 55, 80]
 farr = [10, 20, 30, 32, 34, 36, 60] 
+farr = [9,13,16,20,30,60]
 
 pre = ''
 
-def read_actual_metric_file(fname):
+def read_actual_metric_file(fname,c3):
     # m1 is human.y div by 3*2*t.oz*t.ow/(2*t.ow*t.ow - 1)
     print "File : ", fname
     arr_m1 = []
     arr_m2 = [] # angle difference in radians
-    c = 5 #18 (num of lines for each model state)
+    if c3:
+	c = 3
+    else:
+	c = 5
     with open(fname, 'r') as fm:
         fml = fm.readlines()
         for i in range((len(fml)/c)):
@@ -29,14 +33,20 @@ def read_actual_metric_file(fname):
                 
                 # tb3 cos theta/2
                 # tc = float(fml[hpp+17].split(' ')[-2])
-                tc = float(fml[hpp+4].split(' ')[-2])
+                if c3:
+		    tc = float(fml[hpp+2].split(' ')[-2])
+		else:
+		    tc = float(fml[hpp+4].split(' ')[-2])
 
                 # tb3 sin theta/2
                 # ts = float(fml[hpp+16].split(' ')[-1][:-1])
-                ts = float(fml[hpp+3].split(' ')[-1][:-1])
+                if c3:
+		    ts = float(fml[hpp+1].split(' ')[-2])
+		else:
+		    ts = float(fml[hpp+3].split(' ')[-1][:-1])
                 
                 ty = ts*float((3.0*2*tc)/((2*tc*tc) - 1.0))
-                arr_m1.append(abs(ty-hy))
+		arr_m1.append(abs(ty-hy))
                 h_theta = math.atan(hy/3.0)
                 t_theta = 2*math.atan(ts/tc)
                 t_theta1 = math.atan(ty/3.0)
@@ -44,12 +54,15 @@ def read_actual_metric_file(fname):
             #if i%500 == 3:
                 #print i, hpp, hy, tc, ts, ty, arr_m2[-1]
             except:
-                print "ERRORRR!! ", hpp
+                print "ERRORRR!! ", c3, hpp, fml[hpp].split(' '), fml[hpp+2].split(' '), fml[hpp+1].split(' ')
+		return (1,1)
+    arr_m1 = arr_m1[(len(arr_m1)/50):]
+    arr_m2 = arr_m2[(len(arr_m2)/50):]
     sarr = sorted(arr_m1)
     sarr2 = sorted(arr_m2)
     ans = (sarr[(95*len(sarr))/100], sarr[len(sarr)/2], sum(sarr)/len(sarr), sarr[(99*len(sarr))/100])
     ans2 = (sarr2[(95*len(sarr2))/100], sarr2[len(sarr2)/2], sum(sarr2)/len(sarr2), sarr2[(99*len(sarr2))/100])
-    print (ans, ans2)
+    print "Ignored the first 2% of data." , (ans, ans2)
     return (ans, ans2)
 
 # read_actual_metric_file("2c_max5_new_perf_1008.out")
@@ -74,7 +87,7 @@ if __name__ == '__main__':
     pre = sys.argv[2]
     cpp = int(sys.argv[5])
     need_actual_freq = (int(sys.argv[7]) == 1) # we dont need new_freq for RTC and DynamicAlgo.
-    farr = farr if need_actual_freq else [15]
+    #farr = farr if need_actual_freq else [15]
     fname = sys.argv[8]
 
     ind = {}
@@ -157,18 +170,21 @@ if __name__ == '__main__':
         td_mean_rxn = [0.0 for x in farr]
 	td_p9_rxn = [0.0 for x in farr]
 
-        runs = [4,5,1,2,3] #, 6, 7, 8, 9, 10]        
+        runs = [1,2,3,4,5] #,6, 7, 8] #, , 9, 10,11,12,13,14,15,16,17,18]        
         for f in farr:
 	    actual_run_count = 0
             for r in runs:
                 # read tracker log to find metric vals.
 		# first check the hit rate in vision file.
 		hr = 0.0
-		with open('%s_vision_node_%i.%i.%i.out'%(pre, r, f, t), 'r') as fil:
+		with open('%s_vision_node_%i.%i.%s.out'%(pre, r, f, str(t)), 'r') as fil:
 		    for l in fil.readlines():
 			if cpp == 1 and "Hit rate :" in l:
 				hr = float(l.split(' ')[7][:-1])
-                with open('%s_tracker_node_%i.%i.%i.out'%(pre, r, f, t), 'r') as fil:
+		#if (f == 6):
+			#print "Fixing hr for f 6"
+			#hr = 0.7 # since at 6Hz for exp2_2c : always out of frame
+                with open('%s_tracker_node_%i.%i.%s.out'%(pre, r, f, str(t)), 'r') as fil:
                     print "Reading for : ", f, t, r
                     for l in fil.readlines():
                         larr = l.split(' ')
@@ -225,7 +241,8 @@ if __name__ == '__main__':
                                 td_medrxn = float(larr[13])
                                 td_percrxn = float(larr[14])
 				td_p9rxn = float(larr[28][:-1])
-                (a,b) = read_actual_metric_file('%s_perf_%i.%i.%i.out'%(pre, r, f, t))
+		rrr = True
+                (a,b) = read_actual_metric_file('%s_perf_%i.%i.%s.out'%(pre, r, f, str(t)), rrr)
                 # add the value of this run to the metric arr of len(farr)
                 if hr > 0.5:
 			actual_run_count += 1
@@ -337,10 +354,10 @@ if __name__ == '__main__':
         abs_deg_arr.append(perc_m1)
 
         print new_farr
-        p1 = plt.plot(new_farr, perc_m, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m, 'y^:', label='99ile')
-	plt.plot(new_farr, med_m, 'g.:', label='Median')
-        plt.plot(new_farr, mean_m, 'b*--', label='Mean')
+        p1 = plt.plot(new_farr, perc_m, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m, 'y^:', markersize=9, linewidth=3, label='99ile')
+	plt.plot(new_farr, med_m, 'g.:', markersize=9, linewidth=3, label='Median')
+        plt.plot(new_farr, mean_m, 'b*--', markersize=9, linewidth=3, label='Mean')
         plt.title('Metric at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('Rel Metric (offset)')
@@ -348,10 +365,10 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        p5 = plt.plot(new_farr, perc_newm1, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_newm1, 'y^:', label='99ile')
-	plt.plot(new_farr, med_newm1, 'g.:', label='Median')
-        plt.plot(new_farr, mean_newm1, 'b*--', label='Mean')
+        p5 = plt.plot(new_farr, perc_newm1, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_newm1, 'y^:', markersize=9, linewidth=3, label='99ile')
+	plt.plot(new_farr, med_newm1, 'g.:', markersize=9, linewidth=3, label='Median')
+        plt.plot(new_farr, mean_newm1, 'b*--', markersize=9, linewidth=3, label='Mean')
         plt.title('Metric1 at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('Rel Metric1 (offset)')
@@ -359,10 +376,10 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-	p1 = plt.plot(new_farr, perc_m1, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m1, 'y^:', label='99ile')
-	plt.plot(new_farr, med_m1, 'g.:', label='Median')
-        plt.plot(new_farr, mean_m1, 'b*--', label='Mean')
+	p1 = plt.plot(new_farr, perc_m1, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m1, 'y^:', markersize=9, linewidth=3, label='99ile')
+	plt.plot(new_farr, med_m1, 'g.:', markersize=9, linewidth=3, label='Median')
+        plt.plot(new_farr, mean_m1, 'b*--', markersize=9, linewidth=3, label='Mean')
         plt.title('Absolute Deg Diff at displacement time : %f'%(t))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('Abs Metric (offset)')
@@ -381,10 +398,10 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        p2 = plt.plot(new_farr, perc_rxn, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_rxn, 'y^:', label='99ile')
-	plt.plot(new_farr, med_rxn, 'g.:', label='Median')
-        plt.plot(new_farr, mean_rxn, 'b*--', label='Mean')
+        p2 = plt.plot(new_farr, perc_rxn, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_rxn, 'y^:', markersize=9, linewidth=3, label='99ile')
+	plt.plot(new_farr, med_rxn, 'g.:', markersize=9, linewidth=3, label='Median')
+        plt.plot(new_farr, mean_rxn, 'b*--', markersize=9, linewidth=3, label='Mean')
         plt.title('RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('RxnTime')
@@ -392,10 +409,10 @@ if __name__ == '__main__':
         plt.legend()
         plt.show()
 
-        p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, td_p9_rxn, 'y^:', label='99ile')
-	plt.plot(new_farr, td_med_rxn, 'g.:', label='Median')
-        plt.plot(new_farr, td_mean_rxn, 'b*--', label='Mean')
+        p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, td_p9_rxn, 'y^:', markersize=9, linewidth=3, label='99ile')
+	plt.plot(new_farr, td_med_rxn, 'g.:', markersize=9, linewidth=3, label='Median')
+        plt.plot(new_farr, td_mean_rxn, 'b*--', markersize=9, linewidth=3, label='Mean')
         plt.title('TD RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency')
         plt.ylabel('RxnTime')

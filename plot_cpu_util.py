@@ -4,6 +4,7 @@ import sys
 import matplotlib.pyplot as plt
 
 fr = [7, 11, 16, 20, 30, 60]
+fr = [9,13,16,20,30,60]
 t = int(sys.argv[2])
 
 mean_sub = [0.0 for f in fr]
@@ -26,6 +27,7 @@ with open(sys.argv[1], 'r') as f:
 			mean_det[ind[freq]] += float(la[9])
 			mean_track[ind[freq]] += float(la[10])
 
+print "Counts : ", ct
 mean_total = [0.0 for f in fr]
 for f in fr:
 	count = ct[ind[f]]
@@ -35,10 +37,10 @@ for f in fr:
 	mean_total[ind[f]] = mean_sub[ind[f]] + mean_det[ind[f]] + mean_track[ind[f]]
 
 # PLOT!
-plt.plot(fr, mean_sub, 'b*--', label='Node1')
-plt.plot(fr, mean_det, 'g^-.', label='Node2')
-plt.plot(fr, mean_track, 'yo--', label='Node3')
-plt.plot(fr, mean_total, 'r.-', label='Total')
+plt.plot(fr, mean_sub, 'b*--', markersize=9, linewidth=2, label='Node1')
+plt.plot(fr, mean_det, 'g^-.', markersize=9, linewidth=2, label='Node2')
+plt.plot(fr, mean_track, 'yo--', markersize=9, linewidth=2, label='Node3')
+plt.plot(fr, mean_total, 'r.-', markersize=9, linewidth=2, label='Total')
 plt.title('CPU Util of Nodes w.r.t. Freq for %s'%(sys.argv[3]))
 plt.xlabel('Freq')
 plt.ylabel('CPU %age')
