@@ -124,13 +124,13 @@ int main (int argc, char **argv)
 
     int msg_size = atoi(argv[1]);
     int pub_queue_len = atoi(argv[2]);
-    int ros_rate = atoi(argv[3]);
+    float ros_rate = atof(argv[3]);
     int num_msgs = atoi(argv[4]);
     int64_t limit = atoi(argv[5]);
-    int sub_count = atoi(argv[7]);
-    std::string node_name = argv[8];
+    int sub_count = atoi(argv[6]);
+    std::string node_name = argv[7];
 //    std::string topic = "/camera1/image_raw";
-    std::string topic = "chatter";
+    std::string topic = (argv[8]);
     ROS_INFO("Starting publisher with node name %s, topic %s", node_name.c_str(), topic.c_str());
 
     ros::init(argc, argv, node_name);
