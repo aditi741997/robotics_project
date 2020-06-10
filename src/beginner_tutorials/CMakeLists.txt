@@ -49,3 +49,13 @@ add_dependencies(controller beginner_tutorials_generate_messages_cpp)
 add_executable(newcontroller src/new_controller_node.cpp)
 target_link_libraries(newcontroller ${catkin_LIBRARIES})
 add_dependencies(newcontroller beginner_tutorials_generate_messages_cpp)
+
+add_executable(dsubscriber src/dummy_subscriber.cpp)
+target_link_libraries(dsubscriber ${catkin_LIBRARIES})
+add_dependencies(dsubscriber beginner_tutorials_generate_messages_cpp)
+
+add_executable(localplanner src/local_planner.cpp)
+target_link_libraries(localplanner ${catkin_LIBRARIES})
+add_dependencies(localplanner beginner_tutorials_generate_messages_cpp)
+
+
