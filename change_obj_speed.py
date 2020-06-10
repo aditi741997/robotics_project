@@ -11,17 +11,25 @@ with open(fname, 'r') as fr:
 
 if sys.argv[2] == '1':
     # human moving at fixed speed, TODO : change pose as well
+    # square path now. change 8lines :
+    t_arr = [29, 33, 37, 41, 45, 49, 53, 57, 61]
+    for i in range(len(t_arr)):
+        data[t_arr[i]] = "            <time>" + str(tf*(i)) + "</time>\n"
+        print t_arr[i], data[t_arr[i]]
+
+    '''
     data[33] = "            <time>" + new_var + "</time>\n"
     print "Point 2 Reach Time", data[33]
 
-    data[37] = "            <time>" + str(tf+0.5) + "</time>\n"
+    data[37] = "            <time>" + str(tf+0.25) + "</time>\n"
     print "Point 2 Leave Time", data[37]
 
-    data[41] = "            <time>" + str(0.5+2*tf) + "</time>\n"
+    data[41] = "            <time>" + str(0.25+2*tf) + "</time>\n"
     print "Point 1 Reach Time", data[41]
 
-    data[45] = "            <time>" + str(2*tf+1.0) + "</time>\n"
+    data[45] = "            <time>" + str(2*tf+0.5) + "</time>\n"
     print "Point 1 Leave Again Time", data[45]
+    '''
 
 elif sys.argv[2] == '2':
     # jumping human : tf is half of length jumped, should be <2
