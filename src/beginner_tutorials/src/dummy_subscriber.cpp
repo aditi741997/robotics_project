@@ -211,7 +211,7 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
 		ROS_INFO("Subscriber: pub time more than 4ms");
     }
 
-    if (msg_count%80 == 72)
+    if (msg_count%50 == 42)
     {
 	print_smt(sum_latency, latencies, "Latency at " + node_name);
 	print_smt(compute_rt_sum, compute_rt_arr, "RT Compute time at " + node_name);
@@ -367,7 +367,7 @@ int main (int argc, char **argv)
 	n.changeBinSize(2); // to denote that we should drop every other msg.
     
     threaded = (atoi(argv[15]) == 1);
-
+    ROS_INFO("Node %s threaded? %i", node_name.c_str(), threaded);
     std::cout << "chatter subscribed, about to call spin \n";
     ros::spin();
 
