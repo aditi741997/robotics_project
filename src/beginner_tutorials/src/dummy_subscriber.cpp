@@ -13,7 +13,7 @@
 #include <sys/time.h>
 #include <stdlib.h>
 // For adding a heavy thread :
-// #include <thread>
+#include <thread>
 #include <cstdlib>
 #include <stdint.h>
 
@@ -66,6 +66,7 @@ int percentile = 95;
 
 int64_t limit;
 bool stop_thread = false;
+bool threaded = false;
 
 bool to_publish = false;
 std::string expt;
@@ -99,6 +100,19 @@ void calc_primes(int64_t limit, bool duh)
     }
     if (duh)
         ROS_INFO("Found %i primes", primes);
+}
+
+void exec(int64_t limit)
+{
+	if (threaded)
+	{
+		std::thread t1(calc_primes, limit, true);
+		std::thread t2(calc_primes, limit, true);
+		t1.join();
+		t2.join();
+	}
+	else
+		calc_primes(limit, true);
 }
 
 void print_smt(double m_sum, std::vector<double> m_arr, std::string m)
@@ -142,8 +156,8 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
         ros::Time heavy_start = ros::Time::now();
         // Single heavy function :
         // sieve(limit);
-        calc_primes(limit, true);
-
+        //calc_primes(limit, true);
+	exec(limit);
         // Adding 2 threads :
         // std::thread t1(sieve, limit);
         // std::thread t2(sieve, limit);
@@ -342,11 +356,18 @@ int main (int argc, char **argv)
         ros::Duration(1.5).sleep();
     }
 
+    
      // creating a thread
     // std::thread t1(thread_func, limit);
     
   // ros::Subscriber sub = n.subscribe("/camera/rgb/image_raw", 1, chatterImgCallBack, ros::TransportHints().tcpNoDelay(), true);
-      ros::Subscriber sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay());
+      ros::Subscriber sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay(), true);
+    // arg14 denotes the algorithm. if 1: RTC, i.e. nothing is dropped. if 0 : drop & hence changeBinSize.
+    if ( (publish_topic.find("gcmp") != std::string::npos) && (atoi(argv[14]) == 0) )
+	n.changeBinSize(2); // to denote that we should drop every other msg.
+    
+    threaded = (atoi(argv[15]) == 1);
+
     std::cout << "chatter subscribed, about to call spin \n";
     ros::spin();
 

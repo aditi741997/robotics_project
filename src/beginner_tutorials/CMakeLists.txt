@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 2.8.3)
+SET(CMAKE_CXX_FLAGS "-std=c++11")
 project(beginner_tutorials)
 
 ## Find catkin and any catkin packages
@@ -58,4 +59,6 @@ add_executable(localplanner src/local_planner.cpp)
 target_link_libraries(localplanner ${catkin_LIBRARIES})
 add_dependencies(localplanner beginner_tutorials_generate_messages_cpp)
 
-
+add_executable(globalcmptd src/globalcmp_td.cpp)
+target_link_libraries(globalcmptd ${catkin_LIBRARIES})
+add_dependencies(globalcmptd beginner_tutorials_generate_messages_cpp)
