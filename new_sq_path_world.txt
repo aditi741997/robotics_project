@@ -1,0 +1,91 @@
+<sdf version="1.4">
+  <world name="default">
+
+    <scene>
+      <ambient>0.4 0.4 0.4 1</ambient>
+      <background>0.7 0.7 0.7 1</background>
+      <shadows>true</shadows>
+    </scene>
+
+    <!-- A global light source -->
+    <include>
+      <uri>model://sun</uri>
+    </include>
+
+    <!-- A ground plane -->
+    <include>
+      <uri>model://ground_plane</uri>
+    </include>
+
+    <actor name="hooman">
+      <skin>
+        <filename>walk.dae</filename>
+      </skin>
+      <animation name="walking">
+        <filename>walk.dae</filename>
+      </animation>
+      <script>
+       <trajectory id="0" type="walking">
+          <waypoint>
+            <time>0.0</time>
+            <pose>4 4 -0.4 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>1.5</time>
+            <pose>4 -4 -0.4 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>3.0</time>
+            <pose>-4 -4 -0.4 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>4.5</time>
+            <pose>4 -4 -0.4 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>6.0</time>
+            <pose>4 4 -0.4 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>7.5</time>
+            <pose>-4 4 -0.4 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>9.0</time>
+            <pose>-4 -4 -0.4 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>10.5</time>
+            <pose>-4 4 -0.4 0 0 0</pose>
+          </waypoint>
+          <waypoint>
+            <time>12.0</time>
+            <pose>4 4 -0.4 0 0 0</pose>
+          </waypoint>
+       </trajectory>
+      </script>
+    </actor>
+
+    <physics type="ode">
+      <real_time_update_rate>250.0</real_time_update_rate>
+      <max_step_size>0.004</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <ode>
+        <solver>
+          <type>quick</type>
+          <iters>150</iters>
+          <precon_iters>0</precon_iters>
+          <sor>1.400000</sor>
+          <use_dynamic_moi_rescaling>1</use_dynamic_moi_rescaling>
+        </solver>
+        <constraints>
+          <cfm>0.00001</cfm>
+          <erp>0.2</erp>
+          <contact_max_correcting_vel>2000.000000</contact_max_correcting_vel>
+          <contact_surface_layer>0.01000</contact_surface_layer>
+        </constraints>
+      </ode>
+    </physics>
+  </world>
+
+</sdf>
