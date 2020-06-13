@@ -2,6 +2,7 @@
 #include "std_msgs/String.h"
 #include "std_msgs/Header.h"
 #include <sstream>
+#include <fstream>
 #include <time.h>
 #include <bits/stdc++.h>
 #include <sys/times.h>
@@ -232,7 +233,7 @@ public:
         compute_ros_arr.push_back(ros_ci);
         compute_ros_sum += ros_ci;
 
-        if (total_exec_count%3 == 1)
+        if (total_exec_count%9 == 7)
         {
 	    std::cout << "compute ros sum : " << compute_ros_sum << std::endl;
             print_smt(compute_ros_sum, compute_ros_arr, "Local Planner Exec ROS time");
