@@ -2,6 +2,7 @@ import sys
 import os
 import matplotlib.pyplot as plt
 import math
+import plot_cdf
 
 farr = [12, 15, 17, 19, 21, 23, 30, 45, 67, 80, 100] #Largec1
 farr = [10, 15, 21, 23, 25, 30, 33, 38, 45, 80, 100] # Smallc1 1c
@@ -242,9 +243,13 @@ if __name__ == '__main__':
                                 td_percrxn = float(larr[14])
 				td_p9rxn = float(larr[28][:-1])
 		rrr = True
-                (a,b) = read_actual_metric_file('%s_perf_%i.%i.%s.out'%(pre, r, f, str(t)), rrr)
-                # add the value of this run to the metric arr of len(farr)
-                if hr > 0.5:
+                #(a,b) = read_actual_metric_file('%s_perf_%i.%i.%s.out'%(pre, r, f, str(t)), rrr)
+                m_arr = plot_cdf.read_new_abs_deg_metric('%s_perf_%i.%i.%s.out'%(pre, r, f, str(t)))
+                sm_arr = sorted(m_arr)
+                lsm_arr = len(sm_arr)
+                b = (sm_arr[(95*lsm_arr)/100], sm_arr[lsm_arr/2], sum(sm_arr)/lsm_arr, sm_arr[(99*lsm_arr)/100])
+		# add the value of this run to the metric arr of len(farr)
+                if hr > 0.0:
 			actual_run_count += 1
 			mean_lat[ind[f]] += meanlat
 			med_lat[ind[f]] += medlat
@@ -286,11 +291,12 @@ if __name__ == '__main__':
 			mean_m1[ind[f]] += b[2]
 			p9_m1[ind[f]] += b[3]
 
+			'''
 			perc_m2[ind[f]] += a[0]
 			med_m2[ind[f]] += a[1]
 			mean_m2[ind[f]] += a[2]
 			p9_m2[ind[f]] += a[3]
-
+			'''
 		else:
 			print "Rejecting run ", r, " for freq, t : ", f, t, pre
             # Divide all metric by len(runs)
@@ -354,68 +360,72 @@ if __name__ == '__main__':
         abs_deg_arr.append(perc_m1)
 
         print new_farr
-        p1 = plt.plot(new_farr, perc_m, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m, 'y^:', markersize=9, linewidth=3, label='99ile')
-	plt.plot(new_farr, med_m, 'g.:', markersize=9, linewidth=3, label='Median')
-        plt.plot(new_farr, mean_m, 'b*--', markersize=9, linewidth=3, label='Mean')
-        plt.title('Metric at displacement time : %f, %s'%(t, sys.argv[4]))
-        plt.xlabel('Publisher Frequency')
-        plt.ylabel('Rel Metric (offset)')
+	lw = 4
+	fs = 16
+        tailpc='m^-.'
+	xaxis='Frequency'
+	p1 = plt.plot(new_farr, perc_m, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m, tailpc, markersize=9, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_m, 'g.:', markersize=9, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_m, 'b*--', markersize=9, linewidth=lw, label='Mean')
+        #plt.title('Metric at displacement time : %f, %s'%(t, sys.argv[4]))
+        plt.xlabel(xaxis, fontsize=fs)
+        plt.ylabel('Rel Metric (offset)', fontsize=fs)
         plt.ylim(0.0, 1.0)
         plt.legend()
         plt.show()
 
-        p5 = plt.plot(new_farr, perc_newm1, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_newm1, 'y^:', markersize=9, linewidth=3, label='99ile')
-	plt.plot(new_farr, med_newm1, 'g.:', markersize=9, linewidth=3, label='Median')
-        plt.plot(new_farr, mean_newm1, 'b*--', markersize=9, linewidth=3, label='Mean')
-        plt.title('Metric1 at displacement time : %f, %s'%(t, sys.argv[4]))
-        plt.xlabel('Publisher Frequency')
-        plt.ylabel('Rel Metric1 (offset)')
+        p5 = plt.plot(new_farr, perc_newm1, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_newm1, tailpc, markersize=9, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_newm1, 'g.:', markersize=9, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_newm1, 'b*--', markersize=9, linewidth=lw, label='Mean')
+        #plt.title('Metric1 at displacement time : %f, %s'%(t, sys.argv[4]))
+        plt.xlabel(xaxis, fontsize=fs)
+        plt.ylabel('Rel Metric1 (offset)', fontsize=fs)
         plt.ylim(0.0, 1.0)
         plt.legend()
         plt.show()
 
-	p1 = plt.plot(new_farr, perc_m1, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m1, 'y^:', markersize=9, linewidth=3, label='99ile')
-	plt.plot(new_farr, med_m1, 'g.:', markersize=9, linewidth=3, label='Median')
-        plt.plot(new_farr, mean_m1, 'b*--', markersize=9, linewidth=3, label='Mean')
-        plt.title('Absolute Deg Diff at displacement time : %f'%(t))
-        plt.xlabel('Publisher Frequency')
-        plt.ylabel('Abs Metric (offset)')
+	p1 = plt.plot(new_farr, perc_m1, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m1, tailpc, markersize=9, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_m1, 'g.:', markersize=9, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_m1, 'b*--', markersize=9, linewidth=lw, label='Mean')
+        #plt.title('Absolute Deg Diff at displacement time : %f'%(t))
+        plt.xlabel(xaxis, fontsize=fs)
+        plt.ylabel('Abs Degree Metric (rad)', fontsize=fs)
         plt.ylim(0, 3.2)
         plt.legend()
         plt.show()
 
         p1 = plt.plot(new_farr, perc_m2, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m2, 'y^:', label='99ile')
+        plt.plot(new_farr, p9_m2, tailpc, label='99ile')
         plt.plot(new_farr, med_m2, 'g.:', label='Median')
         plt.plot(new_farr, mean_m2, 'b*--', label='Mean')
-        plt.title('Absolute Distance b/w Cam & Obj at displacement time : %f'%(t))
-        plt.xlabel('Publisher Frequency')
-        plt.ylabel('Abs Metric : Distance Diff')
+        #plt.title('Absolute Distance b/w Cam & Obj at displacement time : %f'%(t))
+        plt.xlabel(xaxis, fontsize=fs)
+        plt.ylabel('Abs Metric : Distance Diff', fontsize=fs)
         plt.ylim(0, 5)
         plt.legend()
         plt.show()
 
-        p2 = plt.plot(new_farr, perc_rxn, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_rxn, 'y^:', markersize=9, linewidth=3, label='99ile')
-	plt.plot(new_farr, med_rxn, 'g.:', markersize=9, linewidth=3, label='Median')
-        plt.plot(new_farr, mean_rxn, 'b*--', markersize=9, linewidth=3, label='Mean')
-        plt.title('RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
-        plt.xlabel('Publisher Frequency')
-        plt.ylabel('RxnTime')
+        p2 = plt.plot(new_farr, perc_rxn, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_rxn, tailpc, markersize=9, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_rxn, 'g.:', markersize=9, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_rxn, 'b*--', markersize=9, linewidth=lw, label='Mean')
+        #plt.title('RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
+        plt.xlabel(xaxis, fontsize=fs)
+        plt.ylabel('RT (sec)', fontsize=fs)
         plt.ylim(0, 0.35)
         plt.legend()
         plt.show()
 
-        p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', markersize=9, linewidth=3, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, td_p9_rxn, 'y^:', markersize=9, linewidth=3, label='99ile')
-	plt.plot(new_farr, td_med_rxn, 'g.:', markersize=9, linewidth=3, label='Median')
-        plt.plot(new_farr, td_mean_rxn, 'b*--', markersize=9, linewidth=3, label='Mean')
-        plt.title('TD RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
-        plt.xlabel('Publisher Frequency')
-        plt.ylabel('RxnTime')
+        p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, td_p9_rxn, tailpc, markersize=9, linewidth=lw, label='99ile')
+	plt.plot(new_farr, td_med_rxn, 'g.:', markersize=9, linewidth=lw, label='Median')
+        plt.plot(new_farr, td_mean_rxn, 'b*--', markersize=9, linewidth=lw, label='Mean')
+        #plt.title('TD RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
+        plt.xlabel('Publisher Frequency', fontsize=fs)
+        plt.ylabel('TD RxnTime', fontsize=fs)
         plt.ylim(0, 0.35)
         plt.legend()
         plt.show()
