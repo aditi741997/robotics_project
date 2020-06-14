@@ -362,15 +362,16 @@ if __name__ == '__main__':
 
         print new_farr
 	lw = 4.5
-	fs = 18
+	fs = 23
+	mas=10
         tailpc='m^-.'
 	xaxis='Frequency'
 	legloc='lower right'
-	legsz=14
-	p1 = plt.plot(new_farr, perc_m, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m, tailpc, markersize=9, linewidth=lw, label='99ile')
-	plt.plot(new_farr, med_m, 'g.:', markersize=9, linewidth=lw, label='Median')
-        plt.plot(new_farr, mean_m, 'b*--', markersize=9, linewidth=lw, label='Mean')
+	legsz=22
+	p1 = plt.plot(new_farr, perc_m, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m, tailpc, markersize=mas, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_m, 'g.:', markersize=mas, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_m, 'b*--', markersize=mas, linewidth=lw, label='Mean')
         #plt.title('Metric at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel(r'$\Delta$ Rel Metric (offset)', fontsize=fs)
@@ -378,12 +379,13 @@ if __name__ == '__main__':
 	plt.xticks(fontsize=fs)
 	plt.yticks(fontsize=fs)
         plt.legend(loc=legloc, prop={"size":legsz})
+	plt.tight_layout()
         plt.show()
 
-        p5 = plt.plot(new_farr, perc_newm1, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_newm1, tailpc, markersize=9, linewidth=lw, label='99ile')
-	plt.plot(new_farr, med_newm1, 'g.:', markersize=9, linewidth=lw, label='Median')
-        plt.plot(new_farr, mean_newm1, 'b*--', markersize=9, linewidth=lw, label='Mean')
+        p5 = plt.plot(new_farr, perc_newm1, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_newm1, tailpc, markersize=mas, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_newm1, 'g.:', markersize=mas, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_newm1, 'b*--', markersize=mas, linewidth=lw, label='Mean')
         #plt.title('Metric1 at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel('Rel Metric1 (offset)', fontsize=fs)
@@ -391,12 +393,13 @@ if __name__ == '__main__':
         plt.xticks(fontsize=fs)
 	plt.yticks(fontsize=fs)
         plt.legend(loc=legloc, prop={"size":legsz})
-        plt.show()
+        plt.tight_layout()
+	plt.show()
 
-	p1 = plt.plot(new_farr, perc_m1, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m1, tailpc, markersize=9, linewidth=lw, label='99ile')
-	plt.plot(new_farr, med_m1, 'g.:', markersize=9, linewidth=lw, label='Median')
-        plt.plot(new_farr, mean_m1, 'b*--', markersize=9, linewidth=lw, label='Mean')
+	p1 = plt.plot(new_farr, perc_m1, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m1, tailpc, markersize=mas, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_m1, 'g.:', markersize=mas, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_m1, 'b*--', markersize=mas, linewidth=lw, label='Mean')
         #plt.title('Absolute Deg Diff at displacement time : %f'%(t))
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel(r'$\Delta$ Degree Metric (rad)', fontsize=fs)
@@ -404,7 +407,8 @@ if __name__ == '__main__':
 	plt.xticks(fontsize=fs)
 	plt.yticks(fontsize=fs)
         plt.legend(loc=legloc, prop={"size":legsz})       
-        plt.show()
+        plt.tight_layout()
+	plt.show()
 
         p1 = plt.plot(new_farr, perc_m2, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, p9_m2, tailpc, label='99ile')
@@ -419,17 +423,18 @@ if __name__ == '__main__':
         plt.legend(loc=legloc, prop={"size":legsz})
         plt.show()
 
-        p2 = plt.plot(new_farr, perc_rxn, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_rxn, tailpc, markersize=9, linewidth=lw, label='99ile')
-	plt.plot(new_farr, med_rxn, 'g.:', markersize=9, linewidth=lw, label='Median')
-        plt.plot(new_farr, mean_rxn, 'b*--', markersize=9, linewidth=lw, label='Mean')
+        p2 = plt.plot(new_farr, perc_rxn, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_rxn, tailpc, markersize=mas, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_rxn, 'g.:', markersize=mas, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_rxn, 'b*--', markersize=mas, linewidth=lw, label='Mean')
         #plt.title('RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
-        plt.xlabel(xaxis, fontsize=fs)
-        plt.ylabel('RT (sec)', fontsize=fs)
+        plt.xlabel(xaxis, fontsize=fs+1.5)
+        plt.ylabel('RT (sec)', fontsize=fs+1.5)
         plt.ylim(0, 0.45)
         plt.xticks(fontsize=fs)
         plt.yticks(fontsize=fs)
-        plt.legend(loc=legloc, prop={"size":legsz})
+        plt.legend(loc=legloc, prop={"size":legsz+1})
+	plt.tight_layout()
 	plt.show()
 
         p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
