@@ -1,3 +1,4 @@
+# This Python file uses the following encoding: utf-8
 import sys
 import os
 import matplotlib.pyplot as plt
@@ -10,7 +11,7 @@ farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2
 farr = [10, 14, 15, 16, 20, 30, 60]
 farr = [9, 16, 23, 24, 25, 30, 55, 80]
 farr = [10, 20, 30, 32, 34, 36, 60] 
-farr = [9,13,16,20,30,60]
+farr = [7,11,16,20,30,60]
 
 pre = ''
 
@@ -360,19 +361,23 @@ if __name__ == '__main__':
         abs_deg_arr.append(perc_m1)
 
         print new_farr
-	lw = 4
-	fs = 16
+	lw = 4.5
+	fs = 18
         tailpc='m^-.'
 	xaxis='Frequency'
+	legloc='lower right'
+	legsz=14
 	p1 = plt.plot(new_farr, perc_m, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, p9_m, tailpc, markersize=9, linewidth=lw, label='99ile')
 	plt.plot(new_farr, med_m, 'g.:', markersize=9, linewidth=lw, label='Median')
         plt.plot(new_farr, mean_m, 'b*--', markersize=9, linewidth=lw, label='Mean')
         #plt.title('Metric at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel(xaxis, fontsize=fs)
-        plt.ylabel('Rel Metric (offset)', fontsize=fs)
+        plt.ylabel(r'$\Delta$ Rel Metric (offset)', fontsize=fs)
         plt.ylim(0.0, 1.0)
-        plt.legend()
+	plt.xticks(fontsize=fs)
+	plt.yticks(fontsize=fs)
+        plt.legend(loc=legloc, prop={"size":legsz})
         plt.show()
 
         p5 = plt.plot(new_farr, perc_newm1, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
@@ -383,7 +388,9 @@ if __name__ == '__main__':
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel('Rel Metric1 (offset)', fontsize=fs)
         plt.ylim(0.0, 1.0)
-        plt.legend()
+        plt.xticks(fontsize=fs)
+	plt.yticks(fontsize=fs)
+        plt.legend(loc=legloc, prop={"size":legsz})
         plt.show()
 
 	p1 = plt.plot(new_farr, perc_m1, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
@@ -392,9 +399,11 @@ if __name__ == '__main__':
         plt.plot(new_farr, mean_m1, 'b*--', markersize=9, linewidth=lw, label='Mean')
         #plt.title('Absolute Deg Diff at displacement time : %f'%(t))
         plt.xlabel(xaxis, fontsize=fs)
-        plt.ylabel('Abs Degree Metric (rad)', fontsize=fs)
+        plt.ylabel(r'$\Delta$ Degree Metric (rad)', fontsize=fs)
         plt.ylim(0, 3.2)
-        plt.legend()
+	plt.xticks(fontsize=fs)
+	plt.yticks(fontsize=fs)
+        plt.legend(loc=legloc, prop={"size":legsz})       
         plt.show()
 
         p1 = plt.plot(new_farr, perc_m2, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
@@ -405,7 +414,9 @@ if __name__ == '__main__':
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel('Abs Metric : Distance Diff', fontsize=fs)
         plt.ylim(0, 5)
-        plt.legend()
+        plt.xticks(fontsize=fs)
+        plt.yticks(fontsize=fs)
+        plt.legend(loc=legloc, prop={"size":legsz})
         plt.show()
 
         p2 = plt.plot(new_farr, perc_rxn, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
@@ -415,9 +426,11 @@ if __name__ == '__main__':
         #plt.title('RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel('RT (sec)', fontsize=fs)
-        plt.ylim(0, 0.35)
-        plt.legend()
-        plt.show()
+        plt.ylim(0, 0.45)
+        plt.xticks(fontsize=fs)
+        plt.yticks(fontsize=fs)
+        plt.legend(loc=legloc, prop={"size":legsz})
+	plt.show()
 
         p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, td_p9_rxn, tailpc, markersize=9, linewidth=lw, label='99ile')
@@ -426,9 +439,11 @@ if __name__ == '__main__':
         #plt.title('TD RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel('Publisher Frequency', fontsize=fs)
         plt.ylabel('TD RxnTime', fontsize=fs)
-        plt.ylim(0, 0.35)
-        plt.legend()
-        plt.show()
+        plt.ylim(0, 0.45)
+        plt.xticks(fontsize=fs)
+        plt.yticks(fontsize=fs)
+        plt.legend(loc=legloc, prop={"size":legsz})
+	plt.show()
 
         new_perc_rxn = subtract_min(perc_rxn)
         new_med_rxn = subtract_min(med_rxn)
