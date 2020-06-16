@@ -362,14 +362,16 @@ if __name__ == '__main__':
 
         print new_farr
 	lw = 4.5
-	fs = 28
+	fs = 27
 	mas=10
         tailpc='m^-.'
 	xaxis='Frequency'
 	legloc='lower right'
 	legsz=25
-	legcolsp=0.5
-	legtextpad=0.25
+	legcolsp=0.4
+	legtextpad=0.2
+	#plt.figure(figsize=(3,1))
+	'''
 	p1 = plt.plot(new_farr, perc_m, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, p9_m, tailpc, markersize=mas, linewidth=lw, label='99ile')
 	plt.plot(new_farr, med_m, 'g.:', markersize=mas, linewidth=lw, label='Median')
@@ -383,8 +385,11 @@ if __name__ == '__main__':
         plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)
 	plt.tight_layout()
 	fig = plt.gcf()
-        fig.set_size_inches(2.,1.5)
-	print fig.get_size_inches()
+        print plt.rcParams["figure.figsize"]
+	plt.rcParams["figure.figsize"][0] = 3.
+	plt.rcParams["figure.figsize"][1] = 1.
+	#fig.set_size_inches(5.,1.)
+	print fig.get_size_inches(), plt.rcParams["figure.figsize"]
 	plt.show()
 	fig.savefig('Final_RelMetric_Default_O4.pdf')
 
@@ -401,23 +406,44 @@ if __name__ == '__main__':
         plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)
         plt.tight_layout()
 	plt.show()
+	'''
 
-	p1 = plt.plot(new_farr, perc_m1, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+	'''
+	fig = plt.figure(1)
+	axes = fig.add_subplot(111)
+	fig.tight_layout()
+	#fig,axes=plt.subplots(nrows=1, ncols=1,figsize=(4,3))
+	'''
+	print plt.rcParams["legend.handlelength"], "legend handle len, see if can be reduced a bit"
+	plt.figure(figsize=(8.,4.5),dpi=120)
+	plt.plot(new_farr, perc_m1, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, p9_m1, tailpc, markersize=mas, linewidth=lw, label='99ile')
 	plt.plot(new_farr, med_m1, 'g.:', markersize=mas, linewidth=lw, label='Median')
         plt.plot(new_farr, mean_m1, 'b*--', markersize=mas, linewidth=lw, label='Mean')
         #plt.title('Absolute Deg Diff at displacement time : %f'%(t))
         plt.xlabel(xaxis, fontsize=fs)
-        plt.ylabel(r'$\Delta$ Degree Metric (rad)', fontsize=fs)
+        plt.ylabel(r'$\Delta$ Degree (rad)', fontsize=fs)
         plt.ylim(0, 3.2)
-	plt.xticks(fontsize=fs-1)
-	plt.yticks(fontsize=fs-1)
-        plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)       
-        plt.tight_layout()
+	#axes.axis(ymin=0.,ymax=3.2)
+	#axes.tick_params(axis="x",labelsize=fs-3)
+	#axes.tick_params(axis="y", labelsize=fs-3)
+        xloc, xlab = plt.xticks(fontsize=fs-1)
+	plt.yticks(fontsize=fs-3)
+	plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, handlelength=1.5, columnspacing=legcolsp, handletextpad=legtextpad)       
+	plt.grid()
+	plt_arrow = plt.arrow(opt_freq,1.5, 0,-0.5, head_width=1, head_length=0.2, length_includes_head=True, fc='k',ec='k')
+	#print plt_arrow.shape, plt_arrow.head_length, plt_arrow.head_width
+	plt.tight_layout()
+        #fig.tight_layout()
+	#fig.subplots_adjust(bottom = 0)
+	#fig.subplots_adjust(top = 1)
+	'''
 	fig = plt.gcf()
-        fig.set_size_inches(2.,1.5)
+        fig.set_size_inches(2.,.6)
         print fig.get_size_inches()
-        plt.show()
+        '''
+	fig=plt.gcf()
+	plt.show()
         fig.savefig('Final_AbsDegMetric_Default_O4.pdf')
 
         p1 = plt.plot(new_farr, perc_m2, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
@@ -430,9 +456,10 @@ if __name__ == '__main__':
         plt.ylim(0, 5)
         plt.xticks(fontsize=fs)
         plt.yticks(fontsize=fs)
-        plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)
+        plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, handlelength=1.5, columnspacing=legcolsp, handletextpad=legtextpad)
         plt.show()
 
+	plt.figure(figsize=(8.,4.5),dpi=120)
         p2 = plt.plot(new_farr, perc_rxn, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, p9_rxn, tailpc, markersize=mas, linewidth=lw, label='99ile')
 	plt.plot(new_farr, med_rxn, 'g.:', markersize=mas, linewidth=lw, label='Median')
@@ -442,14 +469,20 @@ if __name__ == '__main__':
         plt.ylabel('RT (sec)', fontsize=fs)
         plt.ylim(0, 0.45)
         plt.xticks(fontsize=fs-1)
-        plt.yticks(fontsize=fs-1)
-        plt.legend(loc=legloc, prop={"size":legsz+1}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)
+        plt.yticks(fontsize=fs-2)
+        plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)
+	plt.grid()
+	plt_arrow = plt.arrow(opt_freq,0.35, 0,-0.08, head_width=1, head_length=0.03, length_includes_head=True, fc='k',ec='k')
+
 	plt.tight_layout()
+	'''
 	fig = plt.gcf()
-        fig.set_size_inches(2.,1.5)
+        fig.set_size_inches(2.,.6)
         print fig.get_size_inches()
-        plt.show()
-        fig.savefig('Final_RxnTime_Default_O4.pdf')
+        '''
+        fig=plt.gcf()
+	plt.show()
+	fig.savefig('Final_RxnTime_Default_O4.pdf')
 
         p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, td_p9_rxn, tailpc, markersize=9, linewidth=lw, label='99ile')
@@ -463,7 +496,7 @@ if __name__ == '__main__':
         plt.yticks(fontsize=fs)
         plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)
 	fig = plt.gcf()
-        fig.set_size_inches(2.,1.5)
+        fig.set_size_inches(2.,1.)
         print fig.get_size_inches()
         plt.show()
         fig.savefig('Final_TDRxnTime_Default_O4.pdf')
