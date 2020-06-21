@@ -11,7 +11,7 @@ farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2
 farr = [10, 14, 15, 16, 20, 30, 60]
 farr = [9, 16, 23, 24, 25, 30, 55, 80]
 farr = [10, 20, 30, 32, 34, 36, 60] 
-farr = [7,11,16,20,30,60]
+farr = [9,13,16,18,20,30,60]
 
 pre = ''
 
@@ -85,12 +85,30 @@ def subtract_min(x):
     else:
         return x
 
+def plot_tarr(a, nf, ta, sa, st):
+    fs=30
+    legsz=27
+    legloc='lower right'
+    legcolsp=0.4
+    legtextpad=0.2
+    for i in range(len(ta)):
+	plt.plot(nf, a[i], sa[i], markersize=4, linewidth=11, label='S' + str(8.0/ta[i]))
+    plt.title(st + ' $\Delta$ Degree w.r.t. Freq')
+    plt.xlabel('Frequency', fontsize=fs)
+    plt.ylabel('$\Delta$ Degree', fontsize=fs)
+    plt.ylim(0, 3.2)
+    plt.xticks(fontsize=fs)
+    plt.yticks(fontsize=fs)
+    plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, handlelength=1.5, columnspacing=legcolsp, handletextpad=legtextpad)
+    plt.show()
+
 if __name__ == '__main__':
     pre = sys.argv[2]
     cpp = int(sys.argv[5])
     need_actual_freq = (int(sys.argv[7]) == 1) # we dont need new_freq for RTC and DynamicAlgo.
     #farr = farr if need_actual_freq else [15]
     fname = sys.argv[8]
+    folder = sys.argv[9]
 
     ind = {}
     for i in range(len(farr)):
@@ -103,10 +121,16 @@ if __name__ == '__main__':
     abs_perf_med_improv_wrt_low_freq = []
 
     # human_speed_arr = [dist/24, dist/20, dist/16, dist/12, dist/8, dist/4, dist/3, dist/2]
-    t_arr = [int(sys.argv[9])]
-    t_ind = {t_arr[0] : 0}
+    #t_arr = [int(sys.argv[9])]
+    t_arr = [1.5, 2.3, 4, 8]
+    t_ind = {}
+    for i in range(len(t_arr)):
+	t_ind[t_arr[i]] = i
 
-    abs_deg_arr = []
+
+    abs_deg_95p_arr = [] # an arr for each t-value
+    abs_deg_99p_arr = [] # an arr for each t-value
+    abs_deg_med_arr = [] # an arr for each t-value
 
     for t in t_arr:
         perc_m = [0.0 for x in farr]
@@ -179,14 +203,14 @@ if __name__ == '__main__':
                 # read tracker log to find metric vals.
 		# first check the hit rate in vision file.
 		hr = 0.0
-		with open('%s_vision_node_%i.%i.%s.out'%(pre, r, f, str(t)), 'r') as fil:
+		with open('%s/O%s/Default/%s_vision_node_%i.%i.%s.out'%(folder, str(t), pre, r, f, str(t)), 'r') as fil:
 		    for l in fil.readlines():
 			if cpp == 1 and "Hit rate :" in l:
 				hr = float(l.split(' ')[7][:-1])
 		#if (f == 6):
 			#print "Fixing hr for f 6"
 			#hr = 0.7 # since at 6Hz for exp2_2c : always out of frame
-                with open('%s_tracker_node_%i.%i.%s.out'%(pre, r, f, str(t)), 'r') as fil:
+                with open('%s/O%s/Default/%s_tracker_node_%i.%i.%s.out'%(folder, str(t), pre, r, f, str(t)), 'r') as fil:
                     print "Reading for : ", f, t, r
                     for l in fil.readlines():
                         larr = l.split(' ')
@@ -245,7 +269,7 @@ if __name__ == '__main__':
 				td_p9rxn = float(larr[28][:-1])
 		rrr = True
                 #(a,b) = read_actual_metric_file('%s_perf_%i.%i.%s.out'%(pre, r, f, str(t)), rrr)
-                m_arr = plot_cdf.read_new_abs_deg_metric('%s_perf_%i.%i.%s.out'%(pre, r, f, str(t)))
+                m_arr = plot_cdf.read_new_abs_deg_metric('%s/O%s/Default/%s_perf_%i.%i.%s.out'%(folder, str(t), pre, r, f, str(t)))
                 sm_arr = sorted(m_arr)
                 lsm_arr = len(sm_arr)
                 b = (sm_arr[(95*lsm_arr)/100], sm_arr[lsm_arr/2], sum(sm_arr)/lsm_arr, sm_arr[(99*lsm_arr)/100])
@@ -347,27 +371,25 @@ if __name__ == '__main__':
 	    p9_m2[ind[f]] /= actual_run_count
 
             with open(fname, 'a') as f1:
-                f1.write('%i %i Averaging over %i runs out of 5 #\n'%(f, t, actual_run_count))
-		f1.write('%i %i 10RunAvg N3Latency 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_lat[ind[f]], perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
-                f1.write('%i %i 10RunAvg N3Latency w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, td_p9_lat[ind[f]], td_perc_lat[ind[f]], td_med_lat[ind[f]], td_mean_lat[ind[f]]))
-                f1.write('%i %i 10RunAvg Tput 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_tput[ind[f]], perc_tput[ind[f]], med_tput[ind[f]], mean_tput[ind[f]]))
-                f1.write('%i %i 10RunAvg RxnTime 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_rxn[ind[f]], perc_rxn[ind[f]], med_rxn[ind[f]], mean_rxn[ind[f]]))
-                f1.write('%i %i 10RunAvg RxnTime w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, td_p9_rxn[ind[f]], td_perc_rxn[ind[f]], td_med_rxn[ind[f]], td_mean_rxn[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Rel. Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m[ind[f]], perc_m[ind[f]], med_m[ind[f]], mean_m[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Rel. Metric1 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_newm1[ind[f]], perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Abs Deg Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m1[ind[f]], perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
-                f1.write('%i %i 10RunAvg Perf Abs Distance Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, t, p9_m2[ind[f]], perc_m2[ind[f]], med_m2[ind[f]], mean_m2[ind[f]]))
-
-        abs_deg_arr.append(perc_m1)
+                f1.write('%i %s Averaging over %i runs out of 5 #\n'%(f, str(t), actual_run_count))
+		f1.write('%i %s 10RunAvg N3Latency 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), p9_lat[ind[f]], perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
+                f1.write('%i %s 10RunAvg N3Latency w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), td_p9_lat[ind[f]], td_perc_lat[ind[f]], td_med_lat[ind[f]], td_mean_lat[ind[f]]))
+                f1.write('%i %s 10RunAvg Tput 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), p9_tput[ind[f]], perc_tput[ind[f]], med_tput[ind[f]], mean_tput[ind[f]]))
+                f1.write('%i %s 10RunAvg RxnTime 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), p9_rxn[ind[f]], perc_rxn[ind[f]], med_rxn[ind[f]], mean_rxn[ind[f]]))
+                f1.write('%i %s 10RunAvg RxnTime w.r.t. TDNode 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), td_p9_rxn[ind[f]], td_perc_rxn[ind[f]], td_med_rxn[ind[f]], td_mean_rxn[ind[f]]))
+                f1.write('%i %s 10RunAvg Perf Rel. Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), p9_m[ind[f]], perc_m[ind[f]], med_m[ind[f]], mean_m[ind[f]]))
+                f1.write('%i %s 10RunAvg Perf Rel. Metric1 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), p9_newm1[ind[f]], perc_newm1[ind[f]], med_newm1[ind[f]], mean_newm1[ind[f]]))
+                f1.write('%i %s 10RunAvg Perf Abs Deg Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), p9_m1[ind[f]], perc_m1[ind[f]], med_m1[ind[f]], mean_m1[ind[f]]))
+                f1.write('%i %s 10RunAvg Perf Abs Distance Metric 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), p9_m2[ind[f]], perc_m2[ind[f]], med_m2[ind[f]], mean_m2[ind[f]]))
 
         print new_farr
 	lw = 4.5
 	fs = 27
-	mas=10
+	mas=9
         tailpc='m^-.'
 	xaxis='Frequency'
 	legloc='lower right'
-	legsz=25
+	legsz=18
 	legcolsp=0.4
 	legtextpad=0.2
 	#plt.figure(figsize=(3,1))
@@ -416,10 +438,10 @@ if __name__ == '__main__':
 	'''
 	print plt.rcParams["legend.handlelength"], "legend handle len, see if can be reduced a bit"
 	plt.figure(figsize=(8.,4.5),dpi=120)
-	plt.plot(new_farr, perc_m1, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m1, tailpc, markersize=mas, linewidth=lw, label='99ile')
-	plt.plot(new_farr, med_m1, 'g.:', markersize=mas, linewidth=lw, label='Median')
-        plt.plot(new_farr, mean_m1, 'b*--', markersize=mas, linewidth=lw, label='Mean')
+	plt.plot(new_farr, perc_m1, 'ro-', markersize=mas, markeredgewidth=0,linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m1, tailpc, markersize=mas, markeredgewidth=0, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_m1, 'g.:', markersize=mas, markeredgewidth=0, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_m1, 'b*--', markersize=mas, markeredgewidth=0, linewidth=lw, label='Mean')
         #plt.title('Absolute Deg Diff at displacement time : %f'%(t))
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel(r'$\Delta$ Degree (rad)', fontsize=fs)
@@ -429,9 +451,9 @@ if __name__ == '__main__':
 	#axes.tick_params(axis="y", labelsize=fs-3)
         xloc, xlab = plt.xticks(fontsize=fs-1)
 	plt.yticks(fontsize=fs-3)
-	plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, handlelength=1.5, columnspacing=legcolsp, handletextpad=legtextpad)       
+	plt.legend(loc='center right', prop={"size":legsz}, ncol=2, handlelength=1.5, columnspacing=legcolsp, handletextpad=legtextpad)       
 	plt.grid()
-	plt_arrow = plt.arrow(opt_freq,1.5, 0,-0.5, head_width=1, head_length=0.2, length_includes_head=True, fc='k',ec='k')
+	#plt_arrow = plt.arrow(opt_freq,0.8, 0,-0.5, head_width=1, head_length=0.2, length_includes_head=True, fc='k',ec='k')
 	#print plt_arrow.shape, plt_arrow.head_length, plt_arrow.head_width
 	plt.tight_layout()
         #fig.tight_layout()
@@ -444,7 +466,11 @@ if __name__ == '__main__':
         '''
 	fig=plt.gcf()
 	plt.show()
-        fig.savefig('Final_AbsDegMetric_Default_O4.pdf')
+        fig.savefig('Final_AbsDegMetric_Default_O' + str(t) + '.pdf')
+
+	abs_deg_95p_arr.append(perc_m1)
+	abs_deg_99p_arr.append(p9_m1)
+	abs_deg_med_arr.append(med_m1)
 
         p1 = plt.plot(new_farr, perc_m2, 'ro-', label='99ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, p9_m2, tailpc, label='99ile')
@@ -460,19 +486,20 @@ if __name__ == '__main__':
         plt.show()
 
 	plt.figure(figsize=(8.,4.5),dpi=120)
-        p2 = plt.plot(new_farr, perc_rxn, 'ro-', markersize=mas, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_rxn, tailpc, markersize=mas, linewidth=lw, label='99ile')
-	plt.plot(new_farr, med_rxn, 'g.:', markersize=mas, linewidth=lw, label='Median')
-        plt.plot(new_farr, mean_rxn, 'b*--', markersize=mas, linewidth=lw, label='Mean')
+        p2 = plt.plot(new_farr, perc_rxn, 'ro-', markersize=mas, markeredgewidth=0, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_rxn, tailpc, markersize=mas, markeredgewidth=0, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_rxn, 'g.:', markersize=mas, markeredgewidth=0, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_rxn, 'b*--', markersize=mas, markeredgewidth=0, linewidth=lw, label='Mean')
         #plt.title('RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel('RT (sec)', fontsize=fs)
-        plt.ylim(0, 0.45)
+        plt.ylim(0, 0.35)
         plt.xticks(fontsize=fs-1)
         plt.yticks(fontsize=fs-2)
         plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)
-	plt.grid()
-	plt_arrow = plt.arrow(opt_freq,0.35, 0,-0.08, head_width=1, head_length=0.03, length_includes_head=True, fc='k',ec='k')
+	plt_grd = plt.grid()
+	#print plt_grd.linewidth
+	plt_arrow = plt.arrow(opt_freq,0.30, 0,-0.08, head_width=1, head_length=0.03, length_includes_head=True, fc='k',ec='k')
 
 	plt.tight_layout()
 	'''
@@ -482,7 +509,7 @@ if __name__ == '__main__':
         '''
         fig=plt.gcf()
 	plt.show()
-	fig.savefig('Final_RxnTime_Default_O4.pdf')
+	fig.savefig('Final_RxnTime_Default_O' + str(t) + '.pdf')
 
         p2 = plt.plot(new_farr, td_perc_rxn, 'ro-', markersize=9, linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
         plt.plot(new_farr, td_p9_rxn, tailpc, markersize=9, linewidth=lw, label='99ile')
@@ -499,8 +526,9 @@ if __name__ == '__main__':
         fig.set_size_inches(2.,1.)
         print fig.get_size_inches()
         plt.show()
-        fig.savefig('Final_TDRxnTime_Default_O4.pdf')
+        fig.savefig('Final_TDRxnTime_Default_O' + str(t) + '.pdf')
 
+	'''
         new_perc_rxn = subtract_min(perc_rxn)
         new_med_rxn = subtract_min(med_rxn)
         new_mean_rxn = subtract_min(mean_rxn)
@@ -567,6 +595,7 @@ if __name__ == '__main__':
         plt.ylim(0, 0.14)
         plt.legend()
         plt.show()
+	'''
 
         '''
         x = zip(med_rxn, med_m)
@@ -599,7 +628,13 @@ if __name__ == '__main__':
 
         #rel_perf_med_improv_wrt_low_freq.append(med_m[ind[10]]/med_m[ind[opt_freq]])
         # abs_perf_med_improv_wrt_low_freq.append(med_m1[ind[10]]/med_m1[ind[opt_freq]])
-    # s_arr = ['o--', '*--', '^:', '<:', '>--']
+    #s_arr = ['o--', '*--', '^:', '<:', '>--']
+    s_arr = ['ro-', 'm^-.', 'g.:', 'b*--']
+
+    plot_tarr(abs_deg_95p_arr, new_farr, t_arr, s_arr, '95p')
+    plot_tarr(abs_deg_99p_arr, new_farr, t_arr, s_arr, '99p')
+    plot_tarr(abs_deg_med_arr, new_farr, t_arr, s_arr, 'Median')
+    
     # for t in sorted(t_ind.keys()):
     #     plt.plot(new_farr, abs_deg_arr[t_ind[t]], s_arr[t_ind[t]], label='Speed:'+str(t/8.0))
     #     plt.title('Perf(Abs DegDiff) w.r.t diff obj speeds at cam speed %s'%(sys.argv[6]))
