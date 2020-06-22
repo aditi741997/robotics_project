@@ -11,7 +11,7 @@ farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2
 farr = [10, 14, 15, 16, 20, 30, 60]
 farr = [9, 16, 23, 24, 25, 30, 55, 80]
 farr = [10, 20, 30, 32, 34, 36, 60] 
-farr = [9,13,16,18,20,30,60]
+farr = [7, 9, 11, 13, 16,20,30,60]
 
 pre = ''
 
@@ -87,20 +87,25 @@ def subtract_min(x):
 
 def plot_tarr(a, nf, ta, sa, st):
     fs=30
-    legsz=27
-    legloc='lower right'
+    legsz=24
+    legloc='center right'
     legcolsp=0.4
     legtextpad=0.2
+    plt.figure(figsize=(8.,5.),dpi=120)
     for i in range(len(ta)):
-	plt.plot(nf, a[i], sa[i], markersize=4, linewidth=11, label='S' + str(8.0/ta[i]))
+	plt.plot(nf, a[i], sa[i], markersize=9, linewidth=5, label='S' + str(8.0/ta[i]))
     plt.title(st + ' $\Delta$ Degree w.r.t. Freq')
     plt.xlabel('Frequency', fontsize=fs)
-    plt.ylabel('$\Delta$ Degree', fontsize=fs)
+    plt.ylabel('$\Delta$ Angle', fontsize=fs)
     plt.ylim(0, 3.2)
     plt.xticks(fontsize=fs)
     plt.yticks(fontsize=fs)
     plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, handlelength=1.5, columnspacing=legcolsp, handletextpad=legtextpad)
+    plt.grid()
+    plt.tight_layout()
+    fig=plt.gcf()
     plt.show()
+    fig.savefig('Final_AllSpeeds_AbsDegMetric_%s.pdf'%(st))
 
 if __name__ == '__main__':
     pre = sys.argv[2]
@@ -196,7 +201,7 @@ if __name__ == '__main__':
         td_mean_rxn = [0.0 for x in farr]
 	td_p9_rxn = [0.0 for x in farr]
 
-        runs = [1,2,3,4,5] #,6, 7, 8] #, , 9, 10,11,12,13,14,15,16,17,18]        
+        runs = [1,2,3,4,5,6, 7, 8] #, , 9, 10,11,12,13,14,15,16,17,18]        
         for f in farr:
 	    actual_run_count = 0
             for r in runs:
@@ -493,7 +498,7 @@ if __name__ == '__main__':
         #plt.title('RxnTime at displacement time : %f, %s'%(t, sys.argv[4]))
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel('RT (sec)', fontsize=fs)
-        plt.ylim(0, 0.35)
+        plt.ylim(0, 0.45)
         plt.xticks(fontsize=fs-1)
         plt.yticks(fontsize=fs-2)
         plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)
