@@ -11,7 +11,7 @@ farr = [10, 15, 17, 20, 23, 26, 28, 30, 32, 33, 35, 40, 60, 80, 100] # Smallc1 2
 farr = [10, 14, 15, 16, 20, 30, 60]
 farr = [9, 16, 23, 24, 25, 30, 55, 80]
 farr = [10, 20, 30, 32, 34, 36, 60] 
-farr = [7, 9, 11, 13, 16,20,30,60]
+farr = [9, 13, 16,18, 20,30,40]
 
 pre = ''
 
@@ -127,7 +127,7 @@ if __name__ == '__main__':
 
     # human_speed_arr = [dist/24, dist/20, dist/16, dist/12, dist/8, dist/4, dist/3, dist/2]
     #t_arr = [int(sys.argv[9])]
-    t_arr = [1.5, 2.3, 4, 8]
+    t_arr = [1, 1.5, 2.3, 4, 8]
     t_ind = {}
     for i in range(len(t_arr)):
 	t_ind[t_arr[i]] = i
@@ -201,10 +201,20 @@ if __name__ == '__main__':
         td_mean_rxn = [0.0 for x in farr]
 	td_p9_rxn = [0.0 for x in farr]
 
-        runs = [1,2,3,4,5,6, 7, 8] #, , 9, 10,11,12,13,14,15,16,17,18]        
-        for f in farr:
+	perc_m1_full = [0.0 for x in farr]
+        med_m1_full = [0.0 for x in farr]
+        mean_m1_full = [0.0 for x in farr]
+        p9_m1_full = [0.0 for x in farr]
+
+        runs = [1,2,3,4,5,6,7,8] #, , 9, 10,11,12,13,14,15,16,17,18]        
+	for f in farr:
+            m_full_arr = []
 	    actual_run_count = 0
-            for r in runs:
+	    if (t == 8):
+		runs1 = runs
+	    else:
+		runs1 = [1,2,3,4,5]
+            for r in runs1:
                 # read tracker log to find metric vals.
 		# first check the hit rate in vision file.
 		hr = 0.0
@@ -275,11 +285,14 @@ if __name__ == '__main__':
 		rrr = True
                 #(a,b) = read_actual_metric_file('%s_perf_%i.%i.%s.out'%(pre, r, f, str(t)), rrr)
                 m_arr = plot_cdf.read_new_abs_deg_metric('%s/O%s/Default/%s_perf_%i.%i.%s.out'%(folder, str(t), pre, r, f, str(t)))
-                sm_arr = sorted(m_arr)
+                m_full_arr += m_arr
+		sm_arr = sorted(m_arr)
                 lsm_arr = len(sm_arr)
                 b = (sm_arr[(95*lsm_arr)/100], sm_arr[lsm_arr/2], sum(sm_arr)/lsm_arr, sm_arr[(99*lsm_arr)/100])
 		# add the value of this run to the metric arr of len(farr)
-                if hr > 0.0:
+                if f == 30:
+			print b, "for run ", r
+		if hr > 0.0:
 			actual_run_count += 1
 			mean_lat[ind[f]] += meanlat
 			med_lat[ind[f]] += medlat
@@ -375,6 +388,13 @@ if __name__ == '__main__':
             mean_m2[ind[f]] /= actual_run_count
 	    p9_m2[ind[f]] /= actual_run_count
 
+	    sm1_full = sorted(m_full_arr)
+	    lsm1_full = len(sm1_full)
+	    perc_m1_full[ind[f]] = sm1_full[(95*lsm1_full)/100]
+	    p9_m1_full[ind[f]] = sm1_full[(99*lsm1_full)/100]
+	    med_m1_full[ind[f]] = sm1_full[lsm1_full/2]
+	    mean_m1_full[ind[f]] = sum(sm1_full)/lsm1_full
+	   
             with open(fname, 'a') as f1:
                 f1.write('%i %s Averaging over %i runs out of 5 #\n'%(f, str(t), actual_run_count))
 		f1.write('%i %s 10RunAvg N3Latency 99p : %f Tail, Med, Mean : %f %f %f #\n'%(f, str(t), p9_lat[ind[f]], perc_lat[ind[f]], med_lat[ind[f]], mean_lat[ind[f]]))
@@ -441,12 +461,14 @@ if __name__ == '__main__':
 	fig.tight_layout()
 	#fig,axes=plt.subplots(nrows=1, ncols=1,figsize=(4,3))
 	'''
+	print perc_m1, "Avg of 95p of 8 runs"
+	print perc_m1_full, "95p of combined 8 runs"
 	print plt.rcParams["legend.handlelength"], "legend handle len, see if can be reduced a bit"
 	plt.figure(figsize=(8.,4.5),dpi=120)
-	plt.plot(new_farr, perc_m1, 'ro-', markersize=mas, markeredgewidth=0,linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
-        plt.plot(new_farr, p9_m1, tailpc, markersize=mas, markeredgewidth=0, linewidth=lw, label='99ile')
-	plt.plot(new_farr, med_m1, 'g.:', markersize=mas, markeredgewidth=0, linewidth=lw, label='Median')
-        plt.plot(new_farr, mean_m1, 'b*--', markersize=mas, markeredgewidth=0, linewidth=lw, label='Mean')
+	plt.plot(new_farr, perc_m1_full, 'ro-', markersize=mas, markeredgewidth=0,linewidth=lw, label='95ile') #, farr, med_c1, 'g:', label='Median', farr, mean_c1, 'b--', label='Mean')
+        plt.plot(new_farr, p9_m1_full, tailpc, markersize=mas, markeredgewidth=0, linewidth=lw, label='99ile')
+	plt.plot(new_farr, med_m1_full, 'g.:', markersize=mas, markeredgewidth=0, linewidth=lw, label='Median')
+        plt.plot(new_farr, mean_m1_full, 'b*--', markersize=mas, markeredgewidth=0, linewidth=lw, label='Mean')
         #plt.title('Absolute Deg Diff at displacement time : %f'%(t))
         plt.xlabel(xaxis, fontsize=fs)
         plt.ylabel(r'$\Delta$ Degree (rad)', fontsize=fs)
@@ -504,7 +526,7 @@ if __name__ == '__main__':
         plt.legend(loc=legloc, prop={"size":legsz}, ncol=2, columnspacing=legcolsp, handletextpad=legtextpad)
 	plt_grd = plt.grid()
 	#print plt_grd.linewidth
-	plt_arrow = plt.arrow(opt_freq,0.30, 0,-0.08, head_width=1, head_length=0.03, length_includes_head=True, fc='k',ec='k')
+	plt_arrow = plt.arrow(opt_freq,0.30, 0,-0.09, head_width=1.5, width=0.5, head_length=0.03, length_includes_head=True, fc='k',ec='k')
 
 	plt.tight_layout()
 	'''
