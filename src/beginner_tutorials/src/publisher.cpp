@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include <std_msgs/Header.h>
@@ -6,6 +7,8 @@
 #include <string.h>
 #include <vector>
 #include <fstream>
+#include <sched.h>
+// include sched_stuff.h
 
 /* inline std::string convert_to_str(double d, int len)
 {
@@ -72,7 +75,13 @@ public:
 		msg.stamp = ros::Time::now();
 		execute(limit);
 		chatter_pub.publish(msg);
+		ROS_INFO("PUBLISHED");
 		sent_count += 1;
+
+		if (sent_count%100 == 71)
+		{
+			ROS_INFO("Avg cb time : %f", cb_sum/(cb_arr.size()));
+		}
 
 		if (sent_count == num_msgs)
 		{
@@ -122,6 +131,8 @@ int main (int argc, char **argv)
         return 0;
     }
 
+    //sched_setscheduler(0, );
+
     int msg_size = atoi(argv[1]);
     int pub_queue_len = atoi(argv[2]);
     float ros_rate = atof(argv[3]);
@@ -131,6 +142,14 @@ int main (int argc, char **argv)
     std::string node_name = argv[7];
 //    std::string topic = "/camera1/image_raw";
     std::string topic = (argv[8]);
+    bool use_sched_ddl = (atoi(argv[9]) == 1);
+    int ci, period, deadline;
+    if (use_sched_ddl)
+    {
+	    ci = atoi(argv[10]);
+	    deadline = atoi(argv[11]);
+	    period = atoi(argv[12]);
+    }
     ROS_INFO("Starting publisher with node name %s, topic %s", node_name.c_str(), topic.c_str());
 
     ros::init(argc, argv, node_name);
@@ -176,10 +195,32 @@ int main (int argc, char **argv)
     */
 
     pub.checkSubscriberCount();
-
+   
     ROS_INFO("Starting timer with duration %f", 1.0/ros_rate);
+
     ros::Timer publish_timer = n.createTimer(ros::Duration(1.0/ros_rate), &NewPublisher::publishMsg, &pub);
- 
+    
+    // if we need to set sched deadline :
+    ROS_INFO("NOw setting sched policy :");
+    if (use_sched_ddl)
+    {
+      struct sched_attr attr;
+      attr.size = sizeof(attr);
+	attr.sched_flags = 0;
+	attr.sched_nice = 0;
+	attr.sched_priority = 0;
+      int policy = SCHED_DEADLINE;
+      attr.sched_policy = SCHED_DEADLINE;
+      attr.sched_runtime = ci*1000*1000; // nanosec
+      attr.sched_period = period*1000*1000;
+      attr.sched_deadline = deadline*1000*1000;
+      unsigned int flags = 0;
+      int a = sched_setattr(0, &attr, flags);
+	ROS_INFO("Output of sched_setattr of MAIN thread : %i, Set ci %i, period %i, deadline %i ms", a, ci, period, deadline);
+    //ros::Duration((period)/1000).sleep();
+
+    }
+    ROS_INFO("About to spin");
     ros::spin();
     // Code to check ros::Time format :
     //ros::Time x = ros::Time::now();

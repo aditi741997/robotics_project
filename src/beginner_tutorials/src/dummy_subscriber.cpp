@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include "ros/ros.h"
 #include "std_msgs/String.h"
 #include "std_msgs/Header.h"
@@ -16,6 +17,7 @@
 #include <thread>
 #include <cstdlib>
 #include <stdint.h>
+// #include "sched_stuff.h"
 
 double sum_latency = 0.0;
 double sum_latency_sq = 0.0;
@@ -137,7 +139,7 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
     double lat = (recv_time - msg->stamp).toSec();
     recv_delta_arr.push_back(recv_delta);
     latencies.push_back(lat);
-    if (msg_count%200 == 5)
+    if (lat > 0.005)
     	ROS_INFO("sent time : [%f], recv_time : [%f], msg count : %i, msg id : %i", msg->stamp.toSec(), recv_time.toSec(), msg_count, msg->seq);
 
     msg_count += 1;
@@ -216,6 +218,7 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
 	print_smt(sum_latency, latencies, "Latency at " + node_name);
 	print_smt(compute_rt_sum, compute_rt_arr, "RT Compute time at " + node_name);
 	print_smt(avg_heavy_time, heavy_times, "Ros::Time Compute time at " + node_name);
+    	print_smt(sum_op_delta, op_delta, "Tput at " + node_name);
     }
 
     if (msg->seq >= ((num_msgs*98)/100))
@@ -330,9 +333,9 @@ int main (int argc, char **argv)
     expt = argv[11];
 
     to_publish = atoi(argv[12]) == 1;
+     	publish_topic = argv[13];
     if (to_publish)
     {
-     	publish_topic = argv[13];
     	chatter_pub = n.advertise<std_msgs::Header>(publish_topic, sub_queue_len);
     	 std::stringstream ss;
              char* message;
@@ -356,22 +359,58 @@ int main (int argc, char **argv)
         ros::Duration(1.5).sleep();
     }
 
-    
+    bool use_sched_ddl = (atoi(argv[16]) == 1);
+    int ci, period, deadline;
+    if (use_sched_ddl)
+    {
+            ci = atoi(argv[17]);
+            deadline = atoi(argv[18]);
+            period = atoi(argv[19]);
+
+	    ROS_INFO("Now setting sched policy of main thread :");
+	    struct sched_attr attr;
+	    attr.size = sizeof(attr);
+   	    attr.sched_flags = 0;
+            attr.sched_nice = 0;
+            attr.sched_priority = 0;
+	    int policy = SCHED_DEADLINE;
+      	attr.sched_policy = SCHED_DEADLINE;
+     	 attr.sched_runtime = ci*1000*1000; // nanosec
+      	attr.sched_period = period*1000*1000;
+     	 attr.sched_deadline = deadline*1000*1000;
+     	 unsigned int flags = 0;
+      	int a = sched_setattr(0, &attr, flags);
+        ROS_INFO("Output of sched_setattr of main thread : %i, Set ci %i, period %i, deadline %i ms", a, ci, period, deadline);
+
+    }
+    threaded = (atoi(argv[15]) == 1);
+
+
      // creating a thread
     // std::thread t1(thread_func, limit);
     
   // ros::Subscriber sub = n.subscribe("/camera/rgb/image_raw", 1, chatterImgCallBack, ros::TransportHints().tcpNoDelay(), true);
-      ros::Subscriber sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay(), true);
+    // Jul12 : AD-HOC : Using pub_cb_time to drop fraction.  
+    ros::Subscriber sub;
+      if (node_name.find("globalc") != std::string::npos)
+      {
+	      ROS_INFO("Pub cb is True");
+	      sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay(), true);
+      }
+      else
+      {
+	      ROS_INFO("Pub cb is False");
+	      sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay(), false);
+
+      } 
     // arg14 denotes the algorithm. if 1: RTC, i.e. nothing is dropped. if 0 : drop & hence changeBinSize.
     if ( (publish_topic.find("gcmp") != std::string::npos) && (atoi(argv[14]) == 0) )
 	n.changeBinSize(2); // to denote that we should drop every other msg.
     
-    threaded = (atoi(argv[15]) == 1);
     ROS_INFO("Node %s threaded? %i", node_name.c_str(), threaded);
     std::cout << "chatter subscribed, about to call spin \n";
     ros::spin();
 
-    stop_thread = true;
     // t1.join();
     return 0;
 }

@@ -1,4 +1,7 @@
 #include "ros/ros.h"
+#include <ros/spinner.h>
+#include <ros/callback_queue.h>
+
 #include "std_msgs/String.h"
 #include "std_msgs/Header.h"
 #include <sstream>
@@ -49,8 +52,10 @@ class LocalPlanner
     float perc3 = 99.9;
     float perc4 = 99.99; 
 
+    ros::CallbackQueue cb_q1, cb_q2;
+    ros::AsyncSpinner async_spin1, async_spin2;
 public:
-    LocalPlanner(int lim, bool algo, std::string lcmp_t, std::string odom_t, std::string gplan_t)
+    LocalPlanner(int lim, bool algo, std::string lcmp_t, std::string odom_t, std::string gplan_t, float ci, float per_loc, float per_glob)
     {
         climit = lim;
         rtc = algo;
@@ -71,12 +76,56 @@ public:
 	last_odom_out_ts = 0.0;
 	last_gplan_out_ts = 0.0;
 	last_lcmp_out_ts = 0.0;
-
+	
+	float per_spin1 = per_loc;
+	// In rtc : both periods should be equal actually.
+	// rtc variable decides which cb is heavy
+	// we need heavy cb : ci,ci,P and light cb : 1,1,P'
         // Subscribe to all 3!
-        lcmp_sub = nh.subscribe(lcmp_t, 1, &LocalPlanner::lcmpCallback, this, ros::TransportHints().tcpNoDelay(), true);
-        odom_sub = nh.subscribe(odom_t, 1, &LocalPlanner::odomCallback, this, ros::TransportHints().tcpNoDelay());
-        gplan_sub = nh.subscribe(gplan_t, 1, &LocalPlanner::gplanCallback, this, ros::TransportHints().tcpNoDelay(), true);
-        
+	// ros::SubscribeOptions odom_ops = ros::SubscribeOptions::create<std_msgs::Header>(odom_t, 1, &LocalPlanner::odomCallback, this, &cb_q2, ros::TransportHints().tcpNoDelay(), false);
+	if (rtc)
+	{
+		// async_spin1 : lcmp cb, async_spin2 : odom cb
+		lcmp_sub = nh.subscribe(lcmp_t, 1, &LocalPlanner::lcmpCallback, this, &cb_q1, ros::TransportHints().tcpNoDelay(), false);
+		// gplpanCB is heavy : main
+        	gplan_sub = nh.subscribe(gplan_t, 1, &LocalPlanner::gplanCallback, this, ros::TransportHints().tcpNoDelay(), false);
+		
+		per_spin1 = per_loc;
+	}
+	else
+	{
+		// lcmpCB is heavy : main
+        	lcmp_sub = nh.subscribe(lcmp_t, 1, &LocalPlanner::lcmpCallback, this, ros::TransportHints().tcpNoDelay(), false);
+		// async_spin1 : gpplan cb, async_spin2 : odom cb
+		gplan_sub = nh.subscribe(gplan_t, 1, &LocalPlanner::gplanCallback, this, &cb_q1, ros::TransportHints().tcpNoDelay(), false);
+		
+		per_spin1 = per_glob;
+	}
+        odom_sub = nh.subscribe(odom_t, 1, &LocalPlanner::odomCallback, this, &cb_q2, ros::TransportHints().tcpNoDelay(), false);
+        async_spin2  = ros::AsyncSpinner(1, &cb_q2);
+	async_spin2.start(1,1,per_loc);
+
+	async_spin1 = ros::AsyncSpinner(1, &cb_q1);
+	async_spin1.start(1,1,per_spin1);
+
+	// Main thread handles heavy cb, setting policy : 
+	if (per_loc > 0)
+	{
+		ROS_INFO("LPlan : Setting  sched policy of main thread :");
+		struct sched_attr attr;
+            	attr.size = sizeof(attr);
+            	attr.sched_flags = 0;
+            	attr.sched_nice = 0;
+            	attr.sched_priority = 0;
+            	int policy = SCHED_DEADLINE;
+        	attr.sched_policy = SCHED_DEADLINE;
+         	attr.sched_runtime = ci*1000*1000; // nanosec
+        	attr.sched_period = per_loc*1000*1000; // CHECK : rtc me both periods equal, otherwise per_loc.
+         	attr.sched_deadline = ci*1000*1000; // Non preemptive.
+         	unsigned int flags = 0;
+        	int a = sched_setattr(0, &attr, flags);
+		ROS_INFO("Output of sched policy of LPlan main thread : %i, Set ci %f, period %f, ddl %f", a, ci, per_loc, ci);
+	}	
     }
 
     void odomCallback(const std_msgs::Header::ConstPtr& msg)
@@ -151,6 +200,9 @@ public:
 
         calcPrimes();
         // TODO : publish cmd_vel.
+
+	if (lat_lcmp > 0.012)
+		ROS_INFO("Latency at LPlanner wrt LC chain : %f, using msg TS : %f", lat_lcmp, using_lcmp_ts);
 
         if (using_gplan_ts > ts_last_gplan_used)
         {
@@ -267,8 +319,11 @@ int main(int argc, char **argv)
     std::string lcmp_topic = argv[3];
     std::string odom_topic = argv[4];
     std::string gplan_topic = argv[5];
+    float heavy_ci = atof(argv[6]);
+    float period_local = atof(argv[7]);
+    float period_global = atof(argv[8]);
     ros::init(argc, argv, "dummyLPlan");
-    LocalPlanner lp(lim, rtc, lcmp_topic, odom_topic, gplan_topic);
+    LocalPlanner lp(lim, rtc, lcmp_topic, odom_topic, gplan_topic, heavy_ci, period_local, period_global);
     ros::spin();
     return 0;
 }
