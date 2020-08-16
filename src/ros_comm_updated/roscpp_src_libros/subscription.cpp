@@ -75,6 +75,8 @@ Subscription::Subscription(const std::string &name, const std::string& md5sum, c
 , shutting_down_(false)
 , transport_hints_(transport_hints)
 {
+	full_total = 0;
+	fraction_drop = 1;
 }
 
 Subscription::~Subscription()
@@ -153,6 +155,12 @@ void Subscription::drop()
 
     dropAllConnections();
   }
+}
+
+void Subscription::changeFraction(int newf)
+{
+        ROS_INFO("Subscription : Changing fraction_Drop from %i to %i", fraction_drop, newf);
+        fraction_drop = newf;
 }
 
 void Subscription::dropAllConnections()
@@ -600,6 +608,15 @@ uint32_t Subscription::handleMessage(const SerializedMessage& m, bool ser, bool 
 {
   boost::mutex::scoped_lock lock(callbacks_mutex_);
 
+  // Process a fraction of the pkts. This function is called for all incoming msgs, and puts msgs to the queue/drops if queue full.
+  if (full_total%fraction_drop != 0)
+  {
+          ROS_INFO("Subscription explicitly DROPPING. full_total : %i, fraction : %i", full_total, fraction_drop);
+          full_total += 1;
+          return 1;
+  }
+
+  full_total += 1;
   uint32_t drops = 0;
 
   // Cache the deserializers by type info.  If all the subscriptions are the same type this has the same performance as before.  If
