@@ -16,6 +16,18 @@
 #include <thread>
 #include <cstdlib>
 #include <stdint.h>
+#include <string>
+
+// For IPC - Signal for yielding
+#include <sys/types.h>
+#include <unistd.h>
+#include <csignal>
+#include <sched.h>
+#include <pthread.h>
+
+#include <unistd.h>
+#include <sys/syscall.h>
+#define gettid() syscall(SYS_gettid)
 
 double sum_latency = 0.0;
 double sum_latency_sq = 0.0;
@@ -62,7 +74,7 @@ std::vector<double> compute_rt_arr;
 double compute_ts_sum = 0.0;
 std::vector<double> compute_ts_arr;
 
-int percentile = 95;
+int percentile = 99;
 
 int64_t limit;
 bool stop_thread = false;
@@ -83,6 +95,8 @@ std::vector<double> td_latency_arr;
 
 bool add_rand_noise = false;
 
+ros::Publisher exec_start_pub;
+
 void calc_primes(int64_t limit, bool duh)
 {
     int i, num = 1, primes = 0;
@@ -95,7 +109,11 @@ void calc_primes(int64_t limit, bool duh)
             i++; 
         }
         if (i == num)
+	{
             primes++;
+	    if (primes%400 == 200)
+	    	ROS_INFO("~~ Found %i primes", primes);
+	}
         num++;
     }
     if (duh)
@@ -124,9 +142,16 @@ void print_smt(double m_sum, std::vector<double> m_arr, std::string m)
             double avg = m_sum/l;
             double med = m_arr[l/2];
             double perc = m_arr[(l*percentile)/100];
-            ROS_INFO("Mean, median, tail of %s is %f %f %f # Len : %i #", m.c_str(), avg, med, perc, l);            
+            ROS_INFO("Mean, median, %i tail of %s is %f %f %f # Len : %i #", percentile, m.c_str(), avg, med, perc, l);            
         }
     }
+
+void signal_yield(int signum)
+{
+        ROS_INFO("In signal_yield for %s, input : %i", node_name.c_str(), signum);
+        // call sched_yield
+        sched_yield();
+}
 
 void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
 {
@@ -139,6 +164,23 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
     latencies.push_back(lat);
     if (msg_count%200 == 5)
     	ROS_INFO("sent time : [%f], recv_time : [%f], msg count : %i, msg id : %i", msg->stamp.toSec(), recv_time.toSec(), msg_count, msg->seq);
+
+    // append pi, ti
+    std::stringstream ss_e;
+    ROS_INFO("Starting exec, pid : %i, tid : %i", ::getpid(), ::gettid());
+    ss_e << ::getpid() << node_name << ::gettid();
+    hdr.frame_id = ss_e.str();
+    
+    /*
+    if ( (node_name.find("globalc") != std::string::npos) || (node_name.find("nnc") != std::string::npos) )
+        exec_start_pub.publish(hdr);
+    */
+
+    // Check current priority :    
+    struct sched_param sp;
+    int sp_policy;
+    int ans = pthread_getschedparam(0, &sp_policy, &sp);
+    // ROS_INFO("Current priority : Retval : %i, policy : %i, priority : %i", ans, sp_policy, sp.sched_priority);
 
     msg_count += 1;
     sum_latency += lat;
@@ -211,7 +253,7 @@ void chatterCallBack(const std_msgs::Header::ConstPtr& msg)
 		ROS_INFO("Subscriber: pub time more than 4ms");
     }
 
-    if (msg_count%50 == 42)
+    if (msg_count%50 == 22)
     {
 	print_smt(sum_latency, latencies, "Latency at " + node_name);
 	print_smt(compute_rt_sum, compute_rt_arr, "RT Compute time at " + node_name);
@@ -355,20 +397,43 @@ int main (int argc, char **argv)
         }
         ros::Duration(1.5).sleep();
     }
-
-    
+ 
+    exec_start_pub = n.advertise<std_msgs::Header>("/exec_start_" + node_name, sub_queue_len);
+    if ( (node_name.find("globalc") != std::string::npos) || (node_name.find("nnc") != std::string::npos) )
+	{
+		while (0 == exec_start_pub.getNumSubscribers() )
+		{
+			ROS_INFO("Waiting for scheduler to sub to exec_start msgs");
+			ros::Duration(0.1).sleep();
+		}
+	}    
+    signal(SIGUSR1, signal_yield); // Need to recv signal when Controller wants us to yield.    
      // creating a thread
     // std::thread t1(thread_func, limit);
     
   // ros::Subscriber sub = n.subscribe("/camera/rgb/image_raw", 1, chatterImgCallBack, ros::TransportHints().tcpNoDelay(), true);
       ros::Subscriber sub = n.subscribe(sub_topic, sub_queue_len, chatterCallBack, ros::TransportHints().tcpNoDelay(), true);
     // arg14 denotes the algorithm. if 1: RTC, i.e. nothing is dropped. if 0 : drop & hence changeBinSize.
-    if ( (publish_topic.find("gcmp") != std::string::npos) && (atoi(argv[14]) == 0) )
-	n.changeBinSize(2); // to denote that we should drop every other msg.
-    
+
+    if (atoi(argv[14]) == 0)
+    {
+	// nc node!
+	std_msgs::Header hd;
+	hd.frame_id = std::to_string(::getpid()) + " " + node_name;
+	exec_start_pub.publish(hd);
+	
+	/*
+	ROS_INFO("Changing binSz (for fractional exec)");
+	if (node_name.find("globalcmp") != std::string::npos)
+		n.changeBinSize(12); // to denote that we should drop every other msg.
+	if (node_name.find("nncmp") != std::string::npos)
+		n.changeBinSize(3); // process every ith msg.
+    	*/
+    }
+
     threaded = (atoi(argv[15]) == 1);
     ROS_INFO("Node %s threaded? %i", node_name.c_str(), threaded);
-    std::cout << "chatter subscribed, about to call spin \n";
+    std::cout << node_name << " chatter subscribed, about to call spin \n";
     ros::spin();
 
     stop_thread = true;

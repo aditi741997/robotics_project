@@ -41,7 +41,7 @@ void execute(int64_t limit)
 class NewPublisher
 {
 public:
-	NewPublisher(ros::NodeHandle *nh, int msg_sz, int qlen, int num, int64_t lim, int subc, std::string t)
+	NewPublisher(ros::NodeHandle *nh, int msg_sz, int qlen, int num, int64_t lim, int subc, std::string t, double p_rate)
 	{
 		sent_count = 0;
 		msg_size = msg_sz;
@@ -53,6 +53,8 @@ public:
 
 		chatter_pub = nh->advertise<std_msgs::Header>(topic, que_len);
 		initMessage();
+		last_pub_time = 0.0;
+		pub_rate = p_rate;
 	}
 
 	void checkSubscriberCount()
@@ -62,12 +64,19 @@ public:
 			ROS_INFO("Waiting for subscribers to connect %i", chatter_pub.getNumSubscribers());
 			ros::Duration(0.1).sleep();
 		}
-		ros::Duration(1.5).sleep();
+		ros::Duration(4.5).sleep();
 	}
 
 	void publishMsg(const ros::TimerEvent& event)
 	{
 		ros::Time cb_s = ros::Time::now();
+		if (last_pub_time > 0.0)
+		{
+			if (std::abs(last_pub_time + (1.0)/pub_rate - cb_s.toSec()) > 0.005)
+				ROS_INFO("EXPECTED PERIOD : %f, lastPubTime : %f", pub_rate, last_pub_time);
+		}
+		last_pub_time = cb_s.toSec();		
+
 		msg.seq = sent_count;
 		msg.stamp = ros::Time::now();
 		execute(limit);
@@ -101,6 +110,9 @@ private:
 	ros::Publisher chatter_pub;
 	double cb_sum;
 	std::vector<double> cb_arr;
+	double last_pub_time;
+	double pub_rate;
+
 	void initMessage()
 	{
 		std::stringstream ss;
@@ -137,7 +149,7 @@ int main (int argc, char **argv)
 
     ros::NodeHandle n;
     
-    NewPublisher pub (&n, msg_size, pub_queue_len, num_msgs, limit, sub_count, topic);
+    NewPublisher pub (&n, msg_size, pub_queue_len, num_msgs, limit, sub_count, topic, ros_rate);
     
     // ros::Publisher chatter_pub = n.advertise<std_msgs::Header>(topic, pub_queue_len);
 

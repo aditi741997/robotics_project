@@ -6,6 +6,7 @@
 #include <time.h>
 #include <bits/stdc++.h>
 #include <sys/times.h>
+#include <string>
 
 // subscribe to odom and Lcmp and GPlan.
 // measure rxn time w.r.t. all
@@ -42,15 +43,20 @@ class LocalPlanner
     ros::Publisher cmd_vel_pub;
     ros::Subscriber lcmp_sub, odom_sub, gplan_sub;
 
+    ros::Publisher exec_end_pub; // used for scheduling nc nodes.
+
     int perc7 = 75;
     int percentile = 95;
     int perc0 = 90;
     int perc2 = 99;
     float perc3 = 99.9;
-    float perc4 = 99.99; 
+    float perc4 = 99.99;
+
+    bool sleep;
+    float sleep_time; 
 
 public:
-    LocalPlanner(int lim, bool algo, std::string lcmp_t, std::string odom_t, std::string gplan_t)
+    LocalPlanner(int lim, bool algo, std::string lcmp_t, std::string odom_t, std::string gplan_t, float sleept)
     {
         climit = lim;
         rtc = algo;
@@ -76,7 +82,15 @@ public:
         lcmp_sub = nh.subscribe(lcmp_t, 1, &LocalPlanner::lcmpCallback, this, ros::TransportHints().tcpNoDelay(), true);
         odom_sub = nh.subscribe(odom_t, 1, &LocalPlanner::odomCallback, this, ros::TransportHints().tcpNoDelay());
         gplan_sub = nh.subscribe(gplan_t, 1, &LocalPlanner::gplanCallback, this, ros::TransportHints().tcpNoDelay(), true);
-        
+       
+	exec_end_pub = nh.advertise<std_msgs::Header>("/exec_end_lplan", 1);
+ 
+    	if ( (sleept < 10.0) && (!rtc))
+	{
+		// need to do sleep at LPlan exec to do ABfCD.
+		sleep = true;
+		sleep_time = sleept;
+	}
     }
 
     void odomCallback(const std_msgs::Header::ConstPtr& msg)
@@ -136,6 +150,7 @@ public:
 
     void exec()
     {
+
         total_exec_count += 1;
 
         double ros_start = ros::Time::now().toSec();
@@ -151,12 +166,19 @@ public:
 
         calcPrimes();
         // TODO : publish cmd_vel.
+	std_msgs::Header hdr;
+	hdr.frame_id = std::to_string(::getpid());
+	exec_end_pub.publish(hdr);
+	ROS_INFO("Finished LPLAN exec, sent msg.");	
 
         if (using_gplan_ts > ts_last_gplan_used)
         {
             // Using a new GPLan : Add lat, tput rxnTm LCMP
             lat_gplan_sum += lat_gplan;
             lat_gplan_arr.push_back(lat_gplan);
+
+	    if (lat_gplan > 0.82)
+		ROS_INFO("!!!!! HIGH GC Latency : %f", lat_gplan);
 
             if (last_gplan_out_ts > 0.0)
             {
@@ -181,6 +203,9 @@ public:
         {
             lat_odom_sum += lat_odom;
             lat_odom_arr.push_back(lat_odom);
+
+	    if (lat_odom > 0.214)
+		ROS_INFO("!!!!! HIGH NN latency : %f", lat_odom);
 
             if (last_odom_out_ts > 0.0)
             {
@@ -267,8 +292,9 @@ int main(int argc, char **argv)
     std::string lcmp_topic = argv[3];
     std::string odom_topic = argv[4];
     std::string gplan_topic = argv[5];
+    float sleept = atof(argv[6]);
     ros::init(argc, argv, "dummyLPlan");
-    LocalPlanner lp(lim, rtc, lcmp_topic, odom_topic, gplan_topic);
+    LocalPlanner lp(lim, rtc, lcmp_topic, odom_topic, gplan_topic, sleept);
     ros::spin();
     return 0;
 }
