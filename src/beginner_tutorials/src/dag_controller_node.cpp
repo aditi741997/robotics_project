@@ -17,6 +17,8 @@
 #include <signal.h>
 #include <sched.h>
 
+#include <dag.h>
+
 class sendSignal
 {
 	public:
@@ -47,16 +49,23 @@ class DAGController
 	ros::Subscriber critical_exec_end_sub;
 	ros::Timer exec_prio_timer;
 
+	DAG node_dag;
+
 public:
-        DAGController(int x)
+        DAGController(int x, std::string dag_file)
         {
 		ROS_INFO("Initializing DAGController class");
+		node_dag = DAG(dag_file);
+		node_dag.fill_trigger_nodes();
+		node_dag.assign_publishing_rates();
+		node_dag.assign_src_rates();
+
                 // hard coding for testing : aug15
                 node_ci.insert({"globalcmp", 205});
                 node_ci.insert({"nncmp", 57});
 
-                node_fi.insert({"globalcmp", 12});
-                node_fi.insert({"nncmp", 3});
+                node_fi.insert({"globalcmp", 10});
+                node_fi.insert({"nncmp", 4});
 
 		exec_order.push_back("globalcmp");
 		exec_order.push_back("nncmp");
@@ -149,7 +158,7 @@ int main (int argc, char **argv)
         std::string node_name = "dagcontroller";
         ROS_INFO("Init node name %s", node_name.c_str());
         ros::init(argc, argv, node_name);
-        DAGController dagc(0);
+        DAGController dagc(0, "/home/ubuntu/catkin_ws/micaela_dag.txt");
         ros::spin();
 
         return 0;
