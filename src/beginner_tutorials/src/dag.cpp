@@ -1,11 +1,135 @@
 #include <dag.h>
 
+// This function is picked up from the example gp code in mosek fusion examples.
+// Models log(sum(exp(Ax+b))) <= 0.
+// Each row of [A b] describes one of the exp-terms
+void logsumexp(Model::t                             M,
+               std::shared_ptr<ndarray<double, 2>>  A,
+               Variable::t                          x,
+               std::shared_ptr<ndarray<double, 1>>  b)
+{
+  int k = A->size(0);
+  auto u = M->variable(k);
+  M->constraint(Expr::sum(u), Domain::equalsTo(1.0));
+  M->constraint(Expr::hstack(u,
+                             Expr::constTerm(k, 1.0),
+                             Expr::add(Expr::mul(A, x), b)), Domain::inPExpCone());
+}
+
+std::string int_vec_to_str(std::vector<int>& v)
+{
+	std::string ans = "";
+	for (int i = 0; i < v.size(); i++)
+		ans += std::to_string(v[i]) + ",";
+	return ans;
+}
+
+bool is_a_subset_of_b(std::vector<int>& a, std::vector<int>& b)
+{
+	for (int i = 0; i < a.size(); i++)
+	{
+		if (std::find(b.begin(), b.end(), a[i]) == b.end() )
+			return false; // a[i] not in b.
+	}
+	return true;
+}
+
+
+Monomial::Monomial()
+{
+}
+
+// Power for all vars in the vector is pow. 0 for others.
+Monomial::Monomial(double x, std::vector<int> vars_in_mono, int len, int pow)
+{
+	c = x;
+	powers = std::vector<int> (len, 0);
+	for (int i = 0; i < vars_in_mono.size(); i++)
+		powers[vars_in_mono[i]] = pow;
+
+	powers_str = int_vec_to_str(powers);
+}
+
+void Monomial::print()
+{
+	std::cout << "I am a mono. Name : " << powers_str << ", c : " << c << ", vec: " << int_vec_to_str(powers) << std::endl;
+}
+
+MaxMonomial::MaxMonomial()
+{
+}
+
+MaxMonomial::MaxMonomial(int id)
+{
+	gvc_id = id;
+	add_to_period = true;
+}
+
+MaxMonomial::MaxMonomial(int id, bool atp)
+{
+	gvc_id = id;
+	add_to_period = atp;
+}
+
+
+void MaxMonomial::insert_mono(Monomial m)
+{
+	if (m.c != 1.0)
+		std::cout << "ERRORRRRRRRR!!!!! Mono being added to MaxMono has const other than 1.0!!!!! \n";
+	// NOTE that we assume that all the monos in max mono will have const equal to 1.
+	if (monos.find(m.powers_str) == monos.end())
+		monos[m.powers_str] = m;
+}
+
+void MaxMonomial::print()
+{
+	std::cout << "I am a MaxMono. Id : " << gvc_id << ", atp : " << add_to_period << ", Here are the monos I maximize over :" << std::endl;
+	for (std::map<std::string, Monomial>::iterator it = monos.begin(); it != monos.end(); it++)
+		it->second.print();
+	
+}
+
+MinMonomial::MinMonomial()
+{
+}
+
+MinMonomial::MinMonomial(int id)
+{
+        gvc_id = id;
+}
+
+void MinMonomial::insert_mono(Monomial m)
+{
+        if (m.c != 1.0)
+                std::cout << "ERRORRRRRRRR!!!!! Mono being added to MinMono has const other than 1.0!!!!! \n";
+	// NOTE that we assume that all the monos in min mono will have const equal to 1.
+        if (monos.find(m.powers_str) == monos.end())
+                monos[m.powers_str] = m;
+}
+
+void MinMonomial::insert_maxmono(MaxMonomial mm)
+{
+	maxm_gvc_ids.insert(mm.gvc_id);
+}
+
+void MinMonomial::print()
+{
+	std::cout << "I am a MinMono, Id : " << gvc_id << ", Here are the monos I minimize over : " << std::endl;
+	for (std::map<std::string, Monomial>::iterator it = monos.begin(); it != monos.end(); it++)
+                it->second.print();
+	std::cout << "Here are the maxmonos I minimize over : " << std::endl;
+	for (std::set<int>::iterator it = maxm_gvc_ids.begin(); it != maxm_gvc_ids.end(); it++)
+		std::cout << (*it) << " ";
+	std::cout << std::endl;
+}
+
 DAG::DAG()
 {
 }
 
 DAG::DAG(std::string fname)
 {
+	global_var_count = 0;
 	// Read out DAG structure from file.
 	std::ifstream df(fname);
 	std::vector<std::tuple<float, std::vector<int>, float, int > > chains;
@@ -51,7 +175,7 @@ DAG::DAG(std::string fname)
 				while (b.find("X") == std::string::npos )
 				{
 					std::cout << "Addign edge " << na.name << " to " << b << std::endl;
-					na.out_edges[name_id_map[b]] = 0;
+					na.out_edges[name_id_map[b]] = -1; // -1 denotes na sending all outputs to b.
 					id_node_map[name_id_map[b]].in_edges.push_back(na.id);
 					ss >> b;
 				}
@@ -82,11 +206,17 @@ DAG::DAG(std::string fname)
 		order_chains_criticality(chains);	
 	}
 	
-	// Initialize mosek solver:
-	mosek_model = new Model("single_core_scheduler_algo"); auto _M = finally([&]() { mosek_model->dispose(); });
 }
 
 void DAG::print_vec(std::vector<int>& v, std::string s)
+{
+	std::cout << s;
+	for (int i = 0; i < v.size(); i++)
+		std::cout << " " << v[i];
+	std::cout << "\n";
+}
+
+void DAG::print_dvec(std::vector<double>& v, std::string s)
 {
 	std::cout << s;
 	for (int i = 0; i < v.size(); i++)
@@ -165,7 +295,7 @@ void DAG::assign_publishing_rates()
 	for (std::map<int, DAGNode>::iterator it = id_node_map.begin(); it != id_node_map.end(); it++)
 	{
 		// for each node, iterate over all nodes that this publishes to:
-		DAGNode dn = it->second;
+		DAGNode& dn = it->second;
 		int dn_id = it->first;
 
 		int curr_count = 0; // to keep track of the number of unique f variables we shall define:
@@ -173,15 +303,21 @@ void DAG::assign_publishing_rates()
 		{
 			int out_edge_id = ot->first;
 			if (id_node_map[out_edge_id].trigger_node != dn_id)
-				dn.out_edges[out_edge_id] = 0; // this node is asynchronous wrt dn.
+				dn.out_edges[out_edge_id] = -1; // this node is asynchronous wrt dn.
 			else if (out_edge_id == dn.most_critical_se)
-				dn.out_edges[out_edge_id] = 0; // this node is the most critical out of all nodes triggered by dn.
+				dn.out_edges[out_edge_id] = -1; // this node is the most critical out of all nodes triggered by dn.
 			else
 			{
 				curr_count += 1;
 				dn.out_edges[out_edge_id] = curr_count; // each +ve integer denotes a new fractional variable.
+				
+				// Aug23 : USING global VAR count here.
+				dn.out_edges[out_edge_id] = global_var_count; 
+				global_var_count += 1;
+				global_var_desc.push_back(std::make_tuple(dn.name, dn.id, id_node_map[out_edge_id].name, out_edge_id));
+				
 			}
-			std::cout << "For edge " << dn.name << " -> " << id_name_map[out_edge_id] << ", rate assigned : " << dn.out_edges[out_edge_id] << ", curr_count : " << curr_count << std::endl;	
+			std::cout << "For edge " << dn.name << " -> " << id_name_map[out_edge_id] << ", rate assigned : " << dn.out_edges[out_edge_id] << ", curr_count : " << curr_count << ", global_var_count : " << global_var_count << std::endl;	
 		}	
 	}
 }
@@ -203,8 +339,612 @@ void DAG::assign_src_rates()
 			// each new src node gets a new var to denote its fractional rate wrt most_critical_src
 			curr_count += 1;
 			id_node_map[ chain[0] ].pub_rate = curr_count;
-			id_node_map[ chain[0] ].pub_rate_frac_var = mosek_model->variable(1);	
+			
+			// Aug23 : USING global VAR count here.
+			id_node_map[ chain[0] ].pub_rate_frac_var_id = global_var_count;
+			global_var_count += 1;
+                        global_var_desc.push_back(std::make_tuple(id_node_map[ chain[0] ].name, id_node_map[ chain[0] ].id, "OUT", -1 ));
+			
 		}
-		std::cout << "For src node " << id_name_map[ chain[0] ] << ", rate : " << id_node_map[ chain[0] ].pub_rate << std::endl;
+		std::cout << "For src node " << id_name_map[ chain[0] ] << ", rate (as gvc var_id) : " << id_node_map[ chain[0] ].pub_rate_frac_var_id << std::endl;
 	}
+}
+
+std::map<int, std::vector<int>> DAG::get_period()
+{
+	// Should return a vector of length gvc.
+	std::cout << "##### STARTING Step5.1 : Getting period" << std::endl;
+	std::map<int, std::vector<int>> covered_nodes; // all nodes that've been covered already. id->vec(var ids to multiply)
+	for (int i = 0; i < all_chains.size(); i++)
+	{
+		std::cout << "Starting chain #" << i << std::endl;
+		std::vector<int>& chain = std::get<1>(all_chains[i]);
+		std::set<int> current_frac; // probbaly not needed!
+		for (int j = 0; j < chain.size(); j++)
+		{
+			 if (covered_nodes.find(chain[j]) == covered_nodes.end() )
+			{
+				std::cout << "New node : " << chain[j];
+				// this node needs to be added to covered_nodes.
+				if (nodes_in_most_critical_chain.find(chain[j]) != nodes_in_most_critical_chain.end())
+				{
+					std::cout << " In critical chain!! ";
+					covered_nodes[chain[j]] = std::vector<int> (0); // fraction=1!
+				}
+				else if (j == 0)
+				{
+					covered_nodes[chain[j]] = std::vector<int> (1, id_node_map[chain[j]].pub_rate_frac_var_id); // fraction=its own pub rate!
+					current_frac.insert(id_node_map[chain[j]].pub_rate_frac_var_id);
+				}
+				else if (id_node_map[chain[j]].trigger_node == chain[j-1])
+				{
+					std::cout << id_node_map[chain[j-1]].id << id_node_map[chain[j-1]].name << id_node_map[chain[j-1]].out_edges[chain[j]] << " -> " << id_node_map[chain[j]].trigger_node;
+					std::vector<int> a = std::vector<int> ( covered_nodes[chain[j-1]].begin(), covered_nodes[chain[j-1]].end() );
+					if (id_node_map[chain[j-1]].out_edges[chain[j]] != -1)
+						a.push_back( id_node_map[chain[j-1]].out_edges[chain[j]] );
+						// current_frac.insert( id_node_map[chain[j-1]].out_edges[chain[j]] ); // this is the frac. for the rate of publish
+					covered_nodes[chain[j]] = std::vector<int> ( a );
+				}
+				else
+					std::cout << "DAMN, this is ERROR!!!" << id_node_map[chain[j-1]].id << id_node_map[chain[j-1]].name << id_node_map[chain[j-1]].out_edges[chain[j]] << " \n";
+				print_vec(covered_nodes[chain[j]], " fraction: ");
+			}
+		}
+	}
+
+	for (std::map<int, std::vector<int>>::iterator it = covered_nodes.begin(); it != covered_nodes.end(); it++)
+		print_vec(it->second, "fraction of node " + std::to_string(it->first) );
+	
+	return covered_nodes; // will convert to monomials later.	
+}
+
+void DAG::add_mono_to_map(std::map<std::string, Monomial>& monos, Monomial m)
+{
+	if (m.c == 0.0)
+		std::cout << "Empty mono! Not adding :) \n";
+	else if ( monos.find(m.powers_str) != monos.end() )
+		monos[m.powers_str].c += m.c;
+	else
+		monos[m.powers_str] = m;
+}
+
+void DAG::update_chain_min_rate(std::vector<int>& a, std::vector<std::vector<int> >& x)
+{
+	if (x.size() == 0)
+		x.push_back(a);
+	else if (is_a_subset_of_b(x[x.size()-1], a) )
+		x[x.size()-1] = a;
+	else if ( is_a_subset_of_b(a, x[x.size()-1]) )
+		std::cout << "Update chain min rate : Doing nothing \n";
+	else
+		x.push_back(a);
+	std::cout << "New len of x :" << x.size() << std::endl;
+}
+
+/* Inputs : index of chain in array, map of node id -> its fraction of execution. e.g. f1*f2 will be [1,2].
+   This function computes the RT as the number of periods, in the form of a set of monomials.
+   Which can be multiplied with the set of monomials representing the period to get the RT expression.
+*/
+void DAG::compute_rt_chain(int i, std::map<int, std::vector<int>>& period_map)
+{
+	// computing RT of a chain
+	std::cout << "STARTING TRAVERSING CHAIN id " << i << std::endl;		
+
+	std::map<std::string, Monomial> rt_periods;
+	std::map<int, MaxMonomial> rt_maxmono_periods; // Need to store then separately for now.
+	std::map<int, MinMonomial> rt_minmono_periods;
+
+	std::vector<int>& ith_chain = std::get<1>(all_chains[i]);
+
+	// Add fraction of first var
+	// Saving mono_len to ensure that ALL monos for a particular chain have same powers_len.
+	int mono_len = global_var_count;
+
+	Monomial m1 (1.0, period_map[ith_chain[0]], mono_len, -1);
+	add_mono_to_map(rt_periods, m1);
+
+	if (i == 0)
+	{
+		std::cout << "Most critical chain!! Only adding const 1 to the monomial set. \n";
+	}
+
+	else
+	{
+		// TODO:Later Use min_rate_tput to reduce the #monos in tput.
+		// TODO:Later dont make a new variable for maxMono if same maxMono already exists..
+		MaxMonomial tput (global_var_count, true);
+		std::vector<std::vector<int> > min_rate_tput; // add a new set whenever there's asynchrony. 
+		global_var_count += 1;
+		global_var_desc.push_back( std::make_tuple("chain_approx_tput", i, "", -1) );
+
+		double curr_ci = 0; // mostly not needed.
+
+		for (int j = 0; j < (ith_chain.size()-1); j++)
+		{
+			std::cout << "Processing Edge from " << ith_chain[j] << std::endl;
+			Monomial mt (1.0, period_map[ith_chain[j]], mono_len, -1);
+			tput.insert_mono(mt);
+			update_chain_min_rate(period_map[ith_chain[j]], min_rate_tput);
+
+			DAGNode& nj = id_node_map[ith_chain[j]]; // node j
+			DAGNode& nj1 = id_node_map[ith_chain[j+1]]; // node j+1
+			
+			if ( (nj1.trigger_node == nj.id) && (nj.out_edges[nj1.id] == -1) )
+			{
+				// Case C1:
+				std::cout << "Case C1 : Do nothing! Wohoo! \n";
+			}
+			else if ( nodes_in_most_critical_chain.find(nj1.id) != nodes_in_most_critical_chain.end() )
+			{
+				// Case C2:
+				std::cout << "Case C2 \n";
+				Monomial m (1.0, std::vector<int> (0), mono_len, -1);
+				add_mono_to_map(rt_periods, m);
+			}
+			else if ( is_a_subset_of_b( period_map[nj1.id], period_map[nj.id] ) )
+			{
+				std::cout << "Case C3 ";
+				Monomial m(1.0, period_map[nj1.id], mono_len, -1);
+				add_mono_to_map(rt_periods, m);
+			}
+			else if ( nodes_in_most_critical_chain.find(nj.id) != nodes_in_most_critical_chain.end() )
+			{
+				std::cout << "Case C4 \n";
+				if ( (min_rate_tput.size() == 1) && (min_rate_tput[0].size() == 0) )
+				{
+					std::cout << ": 4.1 1/f1 - 1...";
+					Monomial m1 (1.0, period_map[nj1.id], mono_len, -1 );
+					Monomial m2 (-1.0, std::vector<int> (0), mono_len, 0);
+					add_mono_to_map(rt_periods, m1);
+					add_mono_to_map(rt_periods, m2);
+				}
+				else if ( (min_rate_tput.size() == 1) && (is_a_subset_of_b(period_map[nj1.id], min_rate_tput[0]) ) )
+				{
+					std::cout << ": 4.2 2/f1 - 1";
+					Monomial m1 (2.0, period_map[nj1.id], mono_len, -1 );
+					Monomial m2 (-1.0, std::vector<int> (0), mono_len, 0);
+					add_mono_to_map(rt_periods, m1);
+					add_mono_to_map(rt_periods, m2);
+				}
+				else
+				{
+					std::cout << ": 4.3 async!!";
+					add_monos_async_edge(period_map[nj1.id], mono_len, rt_periods, rt_maxmono_periods, rt_minmono_periods, nj.id, nj1.id, tput);
+				}
+			}
+			else if ( is_a_subset_of_b(period_map[nj.id], period_map[nj1.id] ) )
+			{
+				std::cout << "Case C5 \n";
+				if ( (min_rate_tput.size() == 1) && (is_a_subset_of_b(min_rate_tput[0], period_map[nj.id]) ) && (is_a_subset_of_b(period_map[nj.id], min_rate_tput[0]) ) )
+				{
+					std::cout << " case 5.1 ...";
+					Monomial m1 (1.0, period_map[nj1.id], mono_len, -1 );
+					add_mono_to_map(rt_periods, m1);
+				}
+				else if ( (min_rate_tput.size() == 1) && (is_a_subset_of_b(period_map[nj1.id], min_rate_tput[0]) ) )
+				{
+					std::cout << ": 5.2 2/B - 1";
+					Monomial m1 (2.0, period_map[nj1.id], mono_len, -1 );
+					Monomial m2 (-1.0, std::vector<int> (0), mono_len, 0);
+					add_mono_to_map(rt_periods, m1);
+					add_mono_to_map(rt_periods, m2);
+				}
+				else
+				{
+					std::cout << " : 5.3 Async!! ";
+					add_monos_async_edge(period_map[nj1.id], mono_len, rt_periods, rt_maxmono_periods, rt_minmono_periods, nj.id, nj1.id, tput);
+				}
+			}
+			else
+			{
+				std::cout << "Case C6 : \n";
+				add_monos_async_edge(period_map[nj1.id], mono_len, rt_periods, rt_maxmono_periods, rt_minmono_periods, nj.id, nj1.id, tput);
+			}
+		}
+		
+		// Add last node's period in tput maxMono.
+		Monomial mt (1.0, period_map[ith_chain[(ith_chain.size()-1)]], mono_len, -1);
+		tput.insert_mono(mt);
+		rt_maxmono_periods[tput.gvc_id] = tput;
+
+	}
+	// For RT, we have latency as #Periods + Tput.
+	std::cout << "Printing rt_periods : " << std::endl;
+	print_mono_map(rt_periods);
+
+	std::cout << "Printing rt_maxmono_periods : " << std::endl;
+	for (std::map<int, MaxMonomial>::iterator it = rt_maxmono_periods.begin(); it != rt_maxmono_periods.end(); it++)
+                it->second.print();
+
+	std::cout << "Printing rt_minmono_periods : " << std::endl;
+        for (std::map<int, MinMonomial>::iterator it = rt_minmono_periods.begin(); it != rt_minmono_periods.end(); it++)
+		it->second.print();
+
+	all_rt_periods.push_back(rt_periods);
+	all_rt_maxmono_periods.push_back(rt_maxmono_periods);
+	all_rt_minmono_periods.push_back(rt_minmono_periods);
+}
+
+void DAG::add_monos_async_edge(std::vector<int>& b_frac_set, int mono_len, std::map<std::string, Monomial>& rt_ps, std::map<int, MaxMonomial>& rt_maxm_ps, std::map<int, MinMonomial>& rt_minm_ps, int a_id, int b_id, MaxMonomial curr_tput)
+{
+	// Exec time term : 
+	Monomial m1 (1.0, b_frac_set, mono_len, -1 );
+        add_mono_to_map(rt_ps, m1);
+
+	// Wait time term :
+	MinMonomial mm(global_var_count);
+	global_var_count += 1;
+	global_var_desc.push_back(std::make_tuple("min_" + id_node_map[a_id].name, a_id, id_node_map[b_id].name, b_id) );
+	// This MinMono should have current tput MaxMono, along with b's period Mono.
+	// We make a new maxmono since the curr_tput will be updated for the rest of the chain.
+	MaxMonomial tput(global_var_count, false);
+	global_var_count += 1;
+        global_var_desc.push_back(std::make_tuple("min_max_" + id_node_map[a_id].name, a_id, id_node_map[b_id].name, b_id) );
+	
+	tput.monos = curr_tput.monos; // copying all monos.
+	// We've set add_to_period to false to ensure that this doesnt get added to #periods.
+	rt_maxm_ps[tput.gvc_id] = tput;	
+
+	mm.insert_maxmono(tput);
+	mm.insert_mono(m1);
+	rt_minm_ps[mm.gvc_id] = mm;
+}
+
+// After all the Monos and MaxMonos are ready, 
+// make a mono for each MM, and update length of all monos to 
+void DAG::update_monos(int total_vars)
+{
+	for (int i = 0; i < all_chains.size(); i++)
+	{
+		std::map<int, MaxMonomial>& rt_mm_ps = all_rt_maxmono_periods[i];
+		std::map<std::string, Monomial>& rt_ps = all_rt_periods[i];
+		std::map<int, MinMonomial>& rt_minm_ps = all_rt_minmono_periods[i];
+		
+		std::map<std::string, Monomial> new_rt_ps;	
+	
+		std::cout << "$$$$$ Update_monos for chain " << i << std::endl;
+
+		for (std::map<std::string, Monomial>::iterator it = rt_ps.begin(); it != rt_ps.end(); it++)
+		{
+			std::vector<int> a (total_vars - it->second.powers.size(), 0);
+			it->second.powers.insert(it->second.powers.end(), a.begin(), a.end());
+			
+			Monomial m;
+			m.c = it->second.c;
+			m.powers = it->second.powers;
+			m.powers_str = int_vec_to_str(m.powers);
+
+			add_mono_to_map(new_rt_ps, m);
+		}
+
+		for (std::map<int, MaxMonomial>::iterator it = rt_mm_ps.begin(); it != rt_mm_ps.end(); it++)
+		{
+			if (it->second.add_to_period)
+			{	
+				std::vector<int> a (1, it->second.gvc_id);
+				Monomial mm (1.0, a, total_vars, -1); // 1/var_gvc_id = max (1/f1, 1/f2.... etc).
+				add_mono_to_map(new_rt_ps, mm);
+			}
+		}
+
+		for (std::map<int, MinMonomial>::iterator it = rt_minm_ps.begin(); it != rt_minm_ps.end(); it++)
+		{
+			std::vector<int> a (1, it->second.gvc_id);
+                        Monomial minm (1.0, a, total_vars, -1);
+			add_mono_to_map(new_rt_ps, minm);
+		}
+		
+		rt_ps.clear();
+		all_rt_periods[i] = new_rt_ps;
+		std::cout << "Here's updated monoMAP for chain " << i << std::endl;
+		print_mono_map(rt_ps);
+	}
+}
+
+std::map<std::string, Monomial> DAG::convert_period_to_monos(std::map<int, std::vector<int>>& period_map, int total_vars)
+{
+	std::map<std::string, Monomial> period_mono_set;
+	for (std::map<int, std::vector<int>>::iterator it = period_map.begin(); it != period_map.end(); it++)
+	{
+		Monomial m (id_node_map[it->first].compute, it->second, total_vars, 1); // product of ci * all fractions in period_map[ni]
+		add_mono_to_map(period_mono_set, m);
+	}
+	std::cout << "Here's the period mono set : " << std::endl;
+	print_mono_map(period_mono_set);
+	return period_mono_set;
+}
+
+void DAG::print_global_vars_desc()
+{
+	std::cout << "Printing all vars desc : \n";
+        for (int i = 0; i < global_var_count; i++)
+                std::cout << std::get<0>(global_var_desc[i]) << std::get<1>(global_var_desc[i]) << std::get<2>(global_var_desc[i]) << std::get<3>(global_var_desc[i]) << ", ";
+        std::cout << "\n";
+}
+
+void DAG::print_mono_map( std::map<std::string, Monomial>& s )
+{
+	for (std::map<std::string, Monomial>::iterator it = s.begin(); it != s.end(); it++)
+		it->second.print();
+}
+
+Monomial DAG::multiply_monos(Monomial m1, Monomial m2)
+{
+	Monomial m;
+	if (m1.powers.size() != m2.powers.size())
+		std::cout << "ERRORRRRRR!!!!! m1, m2 monomials' power vec are of different sizes!!!! \n";
+	else
+	{
+		m.c = m1.c * m2.c;
+		m.powers = std::vector<int> (m1.powers.size());
+		for (int i = 0; i < m1.powers.size(); i++)
+			m.powers[i] = m1.powers[i] + m2.powers[i];
+		m.powers_str = int_vec_to_str(m.powers);
+	}
+	// std::cout << "Multiplying the following monos : ";
+	// std::cout << "Output : ";
+
+	assert(m1.powers_str.compare(int_vec_to_str(m1.powers)) == 0);
+	assert(m2.powers_str.compare(int_vec_to_str(m2.powers)) == 0);
+	assert(m.powers_str.compare(int_vec_to_str(m.powers)) == 0);
+	
+	m.print();
+	return m;
+}
+
+void DAG::multiply_monos_with_period(std::map<std::string, Monomial>& period_mono_set)
+{
+	for (int i = 0; i < all_chains.size(); i++)
+	{
+		std::cout << "Starting chain " << i << std::endl;
+		std::map<std::string, Monomial> new_mono_set_i;
+		std::map<std::string, Monomial>& rt_mono_periods = all_rt_periods[i];
+		// Multiply all monos in rt_mono_periods to period_mono_Set.
+		for (std::map<std::string, Monomial>::iterator it = rt_mono_periods.begin(); it != rt_mono_periods.end(); it++)
+		{
+			// std::cout << "Picking up mono from rt_mono_periods ";
+			// it->second.print();
+			for (std::map<std::string, Monomial>::iterator itp = period_mono_set.begin(); itp != period_mono_set.end(); itp++)
+			{
+				// std::cout << "Multiplying to : ";
+				// itp->second.print();
+				Monomial m = multiply_monos(it->second, itp->second);
+				add_mono_to_map(new_mono_set_i, m);
+			}
+		}
+		rt_mono_periods.clear();
+		all_rt_periods[i] = new_mono_set_i;
+		std::cout << "Here's the final RT mono set [rt_per_mono*period_mono] for chain " << i << std::endl;
+		print_mono_map(all_rt_periods[i]);
+	}
+}
+
+void DAG::add_constraints_for_max_monos(int total_vars, Variable::t all_lfrac_vars)
+{
+	for (int i = 0; i < all_chains.size(); i++)
+	{
+		std::map<int, MaxMonomial>& rt_mm_ps = all_rt_maxmono_periods[i];
+		for (std::map<int, MaxMonomial>::iterator it = rt_mm_ps.begin(); it != rt_mm_ps.end(); it++)
+		{
+			MaxMonomial& mm = it->second;
+			std::cout << "The maxMono : " << std::to_string(mm.gvc_id);
+			mm.print();
+			for (std::map<std::string, Monomial>::iterator itm = mm.monos.begin(); itm != mm.monos.end(); itm++)
+			{
+				Monomial& m = itm->second;
+				// e^gvc_id+[m.powers DOT variables vec] <= 1.
+				std::vector<std::vector<double>> a (1, std::vector<double> (total_vars, 0.0) );
+				a[0][mm.gvc_id] = 1;
+				for (int j = 0; j < m.powers.size(); j++)
+					a[0][j] = m.powers[j];
+				m.print();
+				print_dvec(a[0], "Here is the vector for MaxMono " + std::to_string(mm.gvc_id));
+				logsumexp(mosek_model,
+						new_array_ptr<double>( a ),
+						all_lfrac_vars,
+						new_array_ptr<double,1> ( { 0 } ) ); 
+			}
+		}
+	}
+}
+
+void DAG::add_constraints_for_min_monos(int total_vars, Variable::t all_lfrac_vars)
+{
+	for (int i = 0; i < all_chains.size(); i++)
+        {
+                std::map<int, MinMonomial>& rt_minm_ps = all_rt_minmono_periods[i];
+		for (std::map<int, MinMonomial>::iterator it = rt_minm_ps.begin(); it != rt_minm_ps.end(); it++)
+		{
+			MinMonomial& mm = it->second;
+			std::cout << "The minMono : " << std::to_string(mm.gvc_id);
+			mm.print();
+			for (std::map<std::string, Monomial>::iterator itm = mm.monos.begin(); itm != mm.monos.end(); itm++)
+                        {
+				Monomial& m = itm->second;
+				// e^ - gvc_id - [m.powers DOT variables vec] <= 1.
+				std::vector<std::vector<double>> a (1, std::vector<double> (total_vars, 0.0) );
+                                a[0][mm.gvc_id] = -1;
+				for (int j = 0; j < m.powers.size(); j++)
+                                        a[0][j] = -1*(m.powers[j]);
+				m.print();
+                                print_dvec(a[0], "Here is the vector for MinMono " + std::to_string(mm.gvc_id));
+				logsumexp(mosek_model,
+                                                new_array_ptr<double>( a ),
+                                                all_lfrac_vars,
+                                                new_array_ptr<double,1> ( { 0 } ) );
+			}
+
+			std::cout << "Now iterating over MaxMonos for minmomo " << mm.gvc_id << std::endl;
+			for (std::set<int>::iterator its = mm.maxm_gvc_ids.begin(); its != mm.maxm_gvc_ids.end(); its++)
+			{
+				int maxmono_gvc_id = (*its);
+				std::vector<std::vector<double>> a (1, std::vector<double> (total_vars, 0.0) );
+				a[0][maxmono_gvc_id] = 1;
+				a[0][mm.gvc_id] = -1;
+                                print_dvec(a[0], "Here is the vector for MinMono " + std::to_string(mm.gvc_id) + ", maxmono id : " + std::to_string(maxmono_gvc_id) );
+				logsumexp(mosek_model,
+                                                new_array_ptr<double>( a ),
+                                                all_lfrac_vars,
+                                                new_array_ptr<double,1> ( { 0 } ) );
+			}
+		}
+	}
+}
+
+void DAG::compute_rt()
+{
+	std::cout << "##### STARTING Step5 : computing RT for each chain" << std::endl;
+	print_global_vars_desc();
+	std::map<int, std::vector<int>> period_map = get_period();
+	
+	// What we essentially need, is to break down the wi*RTi into a sum of monomials, and we need the powers of each frac_var in each monomial term.
+	// Then, we need to add a row to Ax+B thing for EACH monomial in the RT expr for EACH chain.
+	
+	for (int j = 0; j < all_chains.size(); j++)
+		compute_rt_chain(j, period_map);
+	
+	int total_vars = global_var_count+1;
+	std::cout << "Total variables : " << total_vars << std::endl;
+	print_global_vars_desc();
+
+	// Done: Update each max mono into a new mono & update len of each Mono powers.
+	update_monos(total_vars);
+
+	clock_t ci_start_rt = clock();
+	// Get set of Monos for the period.
+	// This is another place where compute times are used.
+	std::map<std::string, Monomial> period_mono_set = convert_period_to_monos(period_map, total_vars);
+
+	// Store each chain's RT separately [rt_periods*period_mono_set]
+	multiply_monos_with_period(period_mono_set);
+	
+	// TODO:Later - Subtract sum cifi from the RT expression, to account for ordering.
+	
+
+	// Done: Add sum ci to critical chain, after multiplying with period.
+	Monomial m (0.0, std::vector<int> (0), total_vars, 0);
+	for (std::map<int, int>::iterator it = nodes_in_most_critical_chain.begin(); it != nodes_in_most_critical_chain.end(); it++)
+		m.c += id_node_map[it->first].compute;
+	add_mono_to_map(all_rt_periods[0], m);	
+	std::cout << "Here's the final (added sum ci) set of monos for chain0 : ";
+	print_mono_map(all_rt_periods[0]);
+
+
+	std::cout << "DONE with computing rt for each chain. Starting to make variables now \n";	
+	// Initialize mosek solver:
+	mosek_model = new Model("single_core_scheduler_algo");
+	auto _mosek_model = finally([&]() { mosek_model->dispose(); });
+	Variable::t all_l_vars = mosek_model->variable(total_vars);
+	std::cout << "Initialized variable!!" << std::endl;
+
+	// Constraint 1 : All fi's are <= 1, i.e. all log fi's are < 0.
+	for (int i = 0; i < global_var_count; i++)
+	{
+		std::vector<double> a (total_vars, 0.0);
+		a[i] = 1;
+		mosek_model->constraint( Expr::dot(new_array_ptr<double>(a) , all_l_vars) , Domain::lessThan(-0.001) );
+		std::cout << "ADDED vi < 0 constraint for var " << i << std::endl;
+	}
+
+	// Done: Constraints for all Max Monos:
+	add_constraints_for_max_monos(total_vars, all_l_vars);
+
+	// Done : Constraints for all Min monos:
+	add_constraints_for_min_monos(total_vars, all_l_vars);
+
+	clock_t solve_start_rt = clock();
+
+	// Objective function is ALWAYS last variable.
+	std::vector<double> a (total_vars, 0.0);
+	a[total_vars-1] = 1;
+	mosek_model->objective("Objective", ObjectiveSense::Minimize, Expr::dot(new_array_ptr<double> (a), all_l_vars) );
+
+	//This last part is where compute times are used : 
+	if (!is_constraint)
+	{
+		std::cout << "WEIGHT FORMULATION. ABOUT TO MERGE ALL RTs AND ADD CONSTRAINT \n";
+		// Done: One constraint : sum wi*Ri <= last_variable.
+		// i.e. sum mono*corresponding_wt/last_variable <= 1.
+		std::vector< std::vector<double>> allA;
+                std::vector<double> allB;
+		for (int i = 0; i < all_chains.size(); i++)
+		{
+			double wt = std::get<0>(all_chains[i]);
+			std::map<std::string, Monomial>& all_rt_monos = all_rt_periods[i];
+			for (std::map<std::string, Monomial>::iterator cit = all_rt_monos.begin(); cit != all_rt_monos.end(); cit++)
+			{
+				Monomial& m = cit->second;
+				m.print();
+				allB.push_back(log(wt*m.c));
+				std::vector<double> v (m.powers.begin(), m.powers.end());
+                        	v[total_vars-1] = -1;
+				allA.push_back(v);
+				std::cout << "Added mono with B: " << allB[allB.size()-1] << " wt : " << wt;
+				print_dvec(allA[allA.size()-1], " and here's the A :");
+			}
+		}
+		logsumexp(mosek_model,
+				new_array_ptr<double> (allA),
+				all_l_vars,
+				new_array_ptr<double> (allB));
+	}
+	else
+	{
+		std::cout << "CONSTRAINT FORMULATION. Part-I : MINIMIZING RT0 \n";
+		// Done: minimize the RT for most critical chain + constraints for all chains.
+		// Constraint A : R0 <= last_variable
+		std::vector< std::vector<double>> Az;
+                std::vector<double> Bz;
+                std::map<std::string, Monomial>& all_rt_monos_z = all_rt_periods[0];
+		for (std::map<std::string, Monomial>::iterator zit = all_rt_monos_z.begin(); zit != all_rt_monos_z.end(); zit++)
+		{
+			Monomial& m = zit->second;
+			m.print();
+			// Constraint : sum (monos)/last_var <= 1.
+			Bz.push_back(log(m.c));
+			std::vector<double> v (m.powers.begin(), m.powers.end());
+			v[total_vars-1] = -1;
+			Az.push_back(v);
+			std::cout << "Added mono with B: " << Bz[Bz.size()-1];
+			print_dvec(Az[Az.size()-1], " and here's the A :");
+		}
+		logsumexp(mosek_model,
+                                new_array_ptr<double> (Az), 
+                                all_l_vars,
+                                new_array_ptr<double> (Bz));
+
+		std::cout << "CONSTRAINT FORMULATION. Part-II : CONSTRAINT FOR each chain \n";
+		// Constraint B : for all chains, ri <= Ci.
+		for (int i = 0; i < all_chains.size(); i++)
+		{
+			std::cout << "STARTING CHAIN " << i << std::endl;
+			// Constraint : sum (monos)/cons <= 1.
+			std::vector< std::vector<double>> A;
+			std::vector<double> B;
+			std::map<std::string, Monomial>& all_rt_monos = all_rt_periods[i];
+			double cons = std::get<0>(all_chains[i]);
+			for (std::map<std::string, Monomial>::iterator cit = all_rt_monos.begin(); cit != all_rt_monos.end(); cit++)
+			{
+				Monomial& m = cit->second;
+				m.print();
+				// Add an elem to a,b for this mono.
+				B.push_back(log(m.c/cons));
+				A.push_back(std::vector<double>(m.powers.begin(), m.powers.end()));
+				std::cout << "Added mono with B: " << B[B.size()-1];
+				print_dvec(A[A.size()-1], " and here's the A :");
+			}
+			logsumexp(mosek_model,
+					new_array_ptr<double> (A),
+					all_l_vars,
+					new_array_ptr<double> (B));
+		}
+	}
+
+	mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
+	mosek_model->solve();
+	auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
+	std::cout << "OPTIMAL ANSWER : " << (*opt_ans)[0] << ", " << (*opt_ans)[1] << ", " << (*opt_ans)[2] << ", " << (*opt_ans)[3] << std::endl;
+	double total_time_ci = (double)(clock() - ci_start_rt)/CLOCKS_PER_SEC;
+	double solve_time = (double)(clock() - solve_start_rt)/CLOCKS_PER_SEC;	
+	std::cout << "TOTAL time including stuff that uses ci : " << total_time_ci << ", solve time : " << solve_time << std::endl;
 } 

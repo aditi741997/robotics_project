@@ -56,9 +56,14 @@ public:
         {
 		ROS_INFO("Initializing DAGController class");
 		node_dag = DAG(dag_file);
+		
+		clock_t cb_start_rt = clock();
 		node_dag.fill_trigger_nodes();
 		node_dag.assign_publishing_rates();
 		node_dag.assign_src_rates();
+		node_dag.compute_rt();	
+		double total_time = (double)(clock() - cb_start_rt)/CLOCKS_PER_SEC;
+		std::cout << "TOTAL TIME TAKEN to do everything : " << total_time << std::endl;
 
                 // hard coding for testing : aug15
                 node_ci.insert({"globalcmp", 205});
@@ -158,7 +163,8 @@ int main (int argc, char **argv)
         std::string node_name = "dagcontroller";
         ROS_INFO("Init node name %s", node_name.c_str());
         ros::init(argc, argv, node_name);
-        DAGController dagc(0, "/home/ubuntu/catkin_ws/micaela_dag.txt");
+	std::string dag_fname = argv[1];
+        DAGController dagc(0, "/home/ubuntu/catkin_ws/" + dag_fname + "_dag.txt");
         ros::spin();
 
         return 0;

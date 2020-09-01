@@ -8,6 +8,9 @@
 #include <tuple>
 #include <unordered_map>
 #include "fusion.h"
+#include <set> 
+#include <assert.h>
+
 
 using namespace mosek::fusion;
 using namespace monty;
@@ -20,9 +23,9 @@ public:
 	std::vector<int> in_edges; // ids of all nodes that publish to this node.
 
 	/* Value denotes the rate at which this node pubs to each of the out edges.
-	   0 denotes pubs each output. 1 denotes f1, 2 denotes f2 and so on. 
+	   -1 denotes pubs each output. 0 denotes f1, 1 denotes f2 and so on. 
 	   In call_solver step, each unique nonzero number in this vector becomes a variable. */
-	std::map<int, int> out_edges; // [ids, pub_rate] of all nodes to which this node publishes.
+	std::map<int, int> out_edges; // [ids, pub_rate as id of global var array.] of all nodes to which this node publishes.
 
 	// Done: see if we should add a corresponding vector that denotes the criticality number for each edge : max of crit # of all chains which include this edge.
 	// this will be helpful in scheduling algo.
@@ -30,16 +33,64 @@ public:
 	int most_critical_se = -1; // denotes the id of the node which is the most critical out of all sync. nodes in out_edges.
 	
 
-	int trigger_node = -1; // id of triggering node. TODO: default should be -1
+	int trigger_node = -1; // id of triggering node. Done: default should be -1
 
 	int pub_rate = -1; // this being non -ve denotes that this is a src/sensor node.
 	// this variable shall be represented by node.name_pubrate, while trying to 
-	Variable::t pub_rate_frac_var; // if pub_rate >= 0, this variable denotes this_node_pub_rate/critical_chain_rate.
+	int pub_rate_frac_var_id = -1; // if pub_rate >= 0, this denotes the index of this_node_pub_rate/critical_chain_rate in the variable arr.
 	
 	float compute; // compute requirement
 
 	// the set of chains this node is in?
 	std::vector<int> n_chains;
+};
+
+class Monomial
+{
+public:
+	double c; // constant
+	std::string powers_str; // this is needed for adding monomials : only if the power string is same.
+	std::vector<int> powers; // for ith frac_var, powers_i denotes its power. 
+
+	Monomial();
+	Monomial(double x, std::vector<int> vars_in_mono, int len, int pow);
+	
+	void print();
+};
+
+class MaxMonomial
+{
+public:
+	// Assuming we take max of monomials of the kind 1/(product fi), the power_str shall be the unique identifier.
+	std::map<std::string, Monomial> monos;
+	int gvc_id; // denotes the id of the variable denoting the max.
+	bool add_to_period = true; // there might be max monos which shouldn't be added to #periods, but be added as constraints.
+
+	MaxMonomial();
+	MaxMonomial(int id);
+	MaxMonomial(int id, bool atp);
+
+	void insert_mono(Monomial m); // insert another mono into monos set.
+	void print();
+};
+
+class MinMonomial
+{
+public:
+	// Monos with c=1, over which we take min
+	std::map<std::string, Monomial> monos;
+	// MaxMonos over which we take min
+	std::set<int> maxm_gvc_ids;
+
+	int gvc_id;
+
+	MinMonomial();
+	MinMonomial(int id);
+
+	void insert_mono(Monomial m); // insert another mono into monos map.
+	void insert_maxmono(MaxMonomial mm); // insert another max mono.
+	
+	void print();
 };
 
 class DAG
@@ -66,6 +117,12 @@ public:
 
 	// Fields related to mosek solver:
 	Model::t mosek_model;
+	
+	int global_var_count;
+	// for each variable, this vec contains the description.
+	// s1, i1 : name, id of publishing node. 
+	// s2 : 'OUT' denotes this is the OP producing rate of a src o.w. s2,i2 : name, id of subscribing node which gets this fraction of all n1 outputs.
+	std::vector<std::tuple<std::string, int, std::string, int> > global_var_desc; 
 
 	// these steps need to be repeated only if the criticality ordering changes at runtime:
 	
@@ -78,13 +135,31 @@ public:
 
 	void assign_publishing_rates(); // iterates over the DAG, and assigns rates at which each node publishes its outputs to its succeding nodes.
 	void assign_src_rates(); // one src node will have the parent period [most critical chain]. Other src nodes : fraction.
-	void create_mosek_vars(); // instantiates vars for all fractions.
-	void compute_rt(); // need to somehow save formula for RT along each chain, as a func of all fraction variables.
+	
+	std::map<int, std::vector<int>> get_period();
+	void compute_rt_chain(int i, std::map<int, std::vector<int>>& period_map);
+	std::vector< std::map<std::string, Monomial> > all_rt_periods;
+	std::vector< std::map<int, MaxMonomial> > all_rt_maxmono_periods;
+	std::vector< std::map<int, MinMonomial> > all_rt_minmono_periods;
+	void compute_rt(); // need to find formula for RT along each chain, as a func of all fraction variables.
 
 	// This step will always be executed whenever compute times change:
 	void call_solver(); // 1core
 
 
 	// Helper functions:
+	void add_mono_to_map(std::map<std::string, Monomial>& monos, Monomial m);
+	void update_chain_min_rate(std::vector<int>& a, std::vector<std::vector<int> >& x);
+	void update_monos(int total_vars);
+	void add_monos_async_edge(std::vector<int>& b_frac_set, int mono_len, std::map<std::string, Monomial>& rt_ps, std::map<int, MaxMonomial>& rt_maxm_ps, std::map<int, MinMonomial>& rt_mm_ps, int a_id, int b_id, MaxMonomial mm);
+	std::map<std::string, Monomial> convert_period_to_monos(std::map<int, std::vector<int>>& period_map, int total_vars);
+	void multiply_monos_with_period(std::map<std::string, Monomial>& period_mono_set);
+	Monomial multiply_monos(Monomial m1, Monomial m2);
 	void print_vec(std::vector<int>& v, std::string s);
+	void print_dvec(std::vector<double>& v, std::string s);
+	void print_global_vars_desc();
+	void print_mono_map(std::map<std::string, Monomial>& s);
+	
+	void add_constraints_for_max_monos(int total_vars, Variable::t all_lfrac_vars);
+	void add_constraints_for_min_monos(int total_vars, Variable::t all_lfrac_vars);
 };
