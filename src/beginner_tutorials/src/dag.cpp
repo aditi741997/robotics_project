@@ -34,6 +34,90 @@ bool is_a_subset_of_b(std::vector<int>& a, std::vector<int>& b)
 	return true;
 }
 
+void test_solver_multicore()
+{
+	// Testing kcore solver on micaela's DAG
+	Model::t testM = new Model("test_kCore");
+	auto _testM = finally([&]() { testM->dispose(); });
+	int total_vars = 7;
+	Variable::t ki = testM->variable(total_vars);
+
+	std::vector<double> a (total_vars, 0.0);
+        a[total_vars-1] = 1; 
+	
+	testM->objective("Objective", ObjectiveSense::Minimize, Expr::dot(new_array_ptr<double> (a), ki) );
+
+	double crit_ci = 56;
+	double cdf_ci = 55;
+	double gps_ci = 7;
+	
+	double crit_cons = 120;
+	double cdf_cons = 150;
+	double gps_cons = 120;
+
+	double crit_mi = 28, cdf_mi = 28, gps_mi = 7;
+
+	logsumexp(testM,
+			new_array_ptr<double,2> ( { {0, 0, 0, -1, 0, 0, 0} } ),
+			ki,
+			new_array_ptr<double,1> ( {log(crit_mi)} ) );
+	logsumexp(testM,
+			new_array_ptr<double,2> ( { {-1, 0, 0, -1, 0, 0, 0} } ),
+                        ki,
+                        new_array_ptr<double,1> ( {log(crit_ci)} ) );
+	logsumexp(testM,
+                        new_array_ptr<double,2> ( { {0, 0, 0, 0, -1, 0, 0} } ),
+                        ki,
+                        new_array_ptr<double,1> ( {log(cdf_mi)} ) );
+	logsumexp(testM,
+                        new_array_ptr<double,2> ( { {0, -1, 0, 0, -1, 0, 0} } ),
+                        ki,
+                        new_array_ptr<double,1> ( {log(cdf_ci)} ) );
+	logsumexp(testM,
+                        new_array_ptr<double,2> ( { {0, 0, 0, 0, 0, -1, 0} } ),
+                        ki,
+                        new_array_ptr<double,1> ( {log(gps_mi)} ) );
+        logsumexp(testM,
+                        new_array_ptr<double,2> ( { {0, 0, -1, 0, 0, -1, 0} } ),
+                        ki,
+                        new_array_ptr<double,1> ( {log(gps_ci)} ) );
+
+	// sum ki <= t
+	logsumexp(testM,
+			new_array_ptr<double,2> ( { {1,0,0,0,0,0,-1}, {0,1,0,0,0,0,-1}, {0,0,1,0,0,0,-1} } ),
+			ki, 
+			new_array_ptr<double,1> ( {0,0,0} ) );
+	// si + ti <= xi i=1
+	logsumexp(testM,
+                        new_array_ptr<double,2> ( { {0,0,0,0,0,0,0}, {0,0,0,1,0,0,0} } ),
+                        ki,
+                        new_array_ptr<double,1> ( {log(crit_ci/crit_cons),log(1.0/crit_cons)} ) );
+	// si + ti <= xi i=2
+	logsumexp(testM,
+                        new_array_ptr<double,2> ( { {0,0,0,0,0,0,0}, {0,0,0,1,0,0,0}, {0,0,0,0,1,0,0} } ), 
+			ki,
+			new_array_ptr<double,1> ( { log((9.5+cdf_ci)/cdf_cons), log(1.0/cdf_cons), log(1.0/cdf_cons) } ) );
+	// si + ti <= xi i=3
+        logsumexp(testM,
+                        new_array_ptr<double,2> ( { {0,0,0,0,0,0,0}, {0,0,0,1,0,0,0}, {0,0,0,0,0,1,0} } ), 
+                        ki,
+                        new_array_ptr<double,1> ( { log((9.5+gps_ci)/gps_cons), log(1.0/gps_cons), log(1.0/gps_cons) } ) );
+	/* Constraint that ki's > 1 : 
+	for (int i = 0; i < 3; i++)
+	{
+		std::vector<double> a (total_vars, 0.0);
+                a[i] = 1;
+		testM->constraint( Expr::dot(new_array_ptr<double>(a) , ki) , Domain::greaterThan(0.001) );
+	}
+	*/
+	clock_t solve_start_rt = clock();
+	testM->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
+	testM->solve();
+        auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [ki](ptrdiff_t i) { return exp((*(ki->level()))[i]); });
+	std::cout << "~~~~~~~ OPTIMAL ANSWER : " << (*opt_ans)[0] << ", " << (*opt_ans)[1] << ", " << (*opt_ans)[2] << ", " << (*opt_ans)[3] << std::endl;
+	double solve_time = (double)(clock() - solve_start_rt)/CLOCKS_PER_SEC;
+	std::cout << "~~~~ Solve time for ki's for micaela : " << solve_time << std::endl;
+};
 
 Monomial::Monomial()
 {
@@ -205,6 +289,7 @@ DAG::DAG(std::string fname)
 		}
 		order_chains_criticality(chains);	
 	}
+	test_solver_multicore();
 	
 }
 
@@ -348,6 +433,52 @@ void DAG::assign_src_rates()
 		}
 		std::cout << "For src node " << id_name_map[ chain[0] ] << ", rate (as gvc var_id) : " << id_node_map[ chain[0] ].pub_rate_frac_var_id << std::endl;
 	}
+}
+
+std::vector<std::vector<int> > DAG::get_exec_order()
+{
+	std::vector<std::vector<int> > exec_order;
+	std::set<int> covered_nodes;
+	for (int i = 0; i < all_chains.size(); i++)
+	{
+		std::vector<int>& chain = std::get<1>(all_chains[i]);
+		std::vector<int> curr_subchain;
+		if (covered_nodes.find(chain[0]) == covered_nodes.end())
+		{
+			std::cout << "Adding chain[0] : " << chain[0] << " to covered nodes \n";
+			curr_subchain.push_back(chain[0]);
+			covered_nodes.insert(chain[0]);
+		}
+		for (int j = 1; j < chain.size(); j++)
+		{
+			if ( (id_node_map[chain[j]].trigger_node == chain[j-1]) && (id_node_map[chain[j-1]].out_edges[chain[j]] == -1) )
+			{
+				if (covered_nodes.find(chain[j]) == covered_nodes.end())
+				{
+					std::cout << "Adding chain[j] : " << chain[j] << " to curr subchain & to covered nodes \n";
+					curr_subchain.push_back(chain[j]);
+				}
+			}
+			else
+			{
+				if ( curr_subchain.size() > 0 )
+					exec_order.push_back(curr_subchain);
+				print_vec(curr_subchain, "Here's the current subchain, About to clear it. ");
+				if (covered_nodes.find(chain[j]) == covered_nodes.end())
+					curr_subchain = std::vector<int> (1, chain[j]);
+				else
+					curr_subchain = std::vector<int> (0);
+			}
+			covered_nodes.insert(chain[j]);
+		}
+
+		if ( curr_subchain.size() > 0 )
+		{
+                	exec_order.push_back(curr_subchain);
+			print_vec(curr_subchain, "Here's the current subchain, About to clear it, since chain has been traversed. ");
+		}
+	}
+	return exec_order;
 }
 
 std::map<int, std::vector<int>> DAG::get_period()
@@ -791,11 +922,11 @@ void DAG::add_constraints_for_min_monos(int total_vars, Variable::t all_lfrac_va
 	}
 }
 
-void DAG::compute_rt()
+std::vector<int> DAG::compute_rt_solve()
 {
 	std::cout << "##### STARTING Step5 : computing RT for each chain" << std::endl;
 	print_global_vars_desc();
-	std::map<int, std::vector<int>> period_map = get_period();
+	period_map = get_period();
 	
 	// What we essentially need, is to break down the wi*RTi into a sum of monomials, and we need the powers of each frac_var in each monomial term.
 	// Then, we need to add a row to Ax+B thing for EACH monomial in the RT expr for EACH chain.
@@ -943,8 +1074,16 @@ void DAG::compute_rt()
 	mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
 	mosek_model->solve();
 	auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
+	
+	// Done: round off to closest integer.
+	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);
+	for (int i = 0; i < total_vars; i++)
+		all_frac_vals[i] = (int) round( 1.0/((*opt_ans)[i]) );
 	std::cout << "OPTIMAL ANSWER : " << (*opt_ans)[0] << ", " << (*opt_ans)[1] << ", " << (*opt_ans)[2] << ", " << (*opt_ans)[3] << std::endl;
+	std::cout << (int) round(2.3) << ", " << (int) round(2.7) << ", " << (int) round(1.11) << ", " << std::endl;
+	print_vec(all_frac_vals, "Here are all the variables [1/fi] rounded to closest integer ");
 	double total_time_ci = (double)(clock() - ci_start_rt)/CLOCKS_PER_SEC;
 	double solve_time = (double)(clock() - solve_start_rt)/CLOCKS_PER_SEC;	
 	std::cout << "TOTAL time including stuff that uses ci : " << total_time_ci << ", solve time : " << solve_time << std::endl;
+	return all_frac_vals;
 } 

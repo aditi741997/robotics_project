@@ -43,7 +43,10 @@ class DAGController
 	std::map<std::string, int> node_ci, node_fi;
         std::vector<ros::Subscriber> exec_start_subs;
 	std::map<std::string, ros::Timer> exec_yield_timer; // we will only use 1 timer at a time in 1c scenario, but in multicore case, there can be multiple nodes running on different cores. 
-	std::vector<std::string> exec_order; // will be an output from the sched algo
+	// std::vector<std::string> exec_order; // will be an output from the sched algo
+	std::vector<std::vector<int> > exec_order; // vector of subchains.
+	std::map<int, std::vector<int>> period_map;
+	std::vector<int> all_frac_values;
 	int curr_exec_index;
 
 	ros::Subscriber critical_exec_end_sub;
@@ -61,11 +64,18 @@ public:
 		node_dag.fill_trigger_nodes();
 		node_dag.assign_publishing_rates();
 		node_dag.assign_src_rates();
-		node_dag.compute_rt();	
+		all_frac_values = node_dag.compute_rt_solve();
+		
+		period_map = node_dag.period_map;	
+		
 		double total_time = (double)(clock() - cb_start_rt)/CLOCKS_PER_SEC;
 		std::cout << "TOTAL TIME TAKEN to do everything : " << total_time << std::endl;
 
-                // hard coding for testing : aug15
+		// We will use dag.period_map [node id -> set of frac vars] and dag.get_exec_order() 
+		// Also compute_rt_solve returns the value of each frac. variable.
+		exec_order = node_dag.get_exec_order();
+		
+                /* hard coding for testing : aug15
                 node_ci.insert({"globalcmp", 205});
                 node_ci.insert({"nncmp", 57});
 
@@ -74,9 +84,12 @@ public:
 
 		exec_order.push_back("globalcmp");
 		exec_order.push_back("nncmp");
+		*/
+	
+		int last_node_cc_id = exec_order[0][ exec_order[0].size() - 1 ];
+		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/exec_end_" + node_dag.id_name_map[last_node_cc_id], 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
 
-		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/exec_end_lplan", 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
-
+		/*
                 ROS_INFO("DAGController : Subscribe to 'exec_start' topics for ALL nodes");
                 for(std::map<std::string,int>::iterator it = node_ci.begin(); it != node_ci.end(); ++it)
                 {
@@ -85,14 +98,18 @@ public:
 			ros::Subscriber si = nh.subscribe<std_msgs::Header>(topic, 1, &DAGController::exec_start_cb, this, ros::TransportHints().tcpNoDelay());
 			exec_start_subs.push_back(si);
                 }
+		*/
         }
+
+	// TODO: Test - The actual scheduling code hasnt been tested since updated on Sept2 [after plugigng with the 1core Algo.]
+	// TODO: Crit chain will be executed like RTC, i.e. scheduler pings Sensor when to start.
 
 	void critical_exec_end_cb(const std_msgs::Header::ConstPtr& msg)
 	{
 		// when crit exec ends, always start with ind=0.
 		int ind = 0;
 		changePriority(ind);
-		float timeout = node_ci[exec_order[ind]]/(float)(node_fi[exec_order[ind]]);
+		double timeout = get_timeout(ind);
 		ROS_INFO("GOT exec_end msg. Making timer with to : %f", timeout);
 		exec_prio_timer = nh.createTimer(ros::Duration(0.001*timeout), &DAGController::exec_nc, this, true);
 	}
@@ -102,7 +119,7 @@ public:
 		// probably dont need to do this for ind = last elem in crit_nc_exec_order. But no harm.
 		int ind = (curr_exec_index+1)%(exec_order.size());
 		changePriority(ind);
-		float timeout = node_ci[exec_order[ind]]/(float)(node_fi[exec_order[ind]]);
+		double timeout = get_timeout(ind);
 		if (ind == ( exec_order.size() - 1) )
 			ROS_INFO("Dont need timer for last elem in exec_order");
 		else
@@ -113,22 +130,44 @@ public:
 		
 	}
 
+	float get_timeout(int isc)
+	{
+		// add ci of all nodes in subchain isc.
+		double tot = 0.0;
+		for (int i = 0; i < exec_order[isc].size(); i++)
+			tot += node_dag.id_node_map[exec_order[isc][i]].compute;
+
+		// multiply by fractions in period_map[subchain] 
+		std::vector<int>& frac_set = period_map[exec_order[isc][0]];
+		for (int i = 0; i < frac_set.size(); i++)
+			tot /= all_frac_values[frac_set[i]];
+		return tot;
+	}
+
 	void changePriority(int ind)
 	{
 		curr_exec_index = ind;
-		ROS_INFO("Changing priority : ind to be exec %i : name : %s", ind, exec_order[ind].c_str());
+		ROS_INFO("Changing priority : ind to be executed %i : name of 1st node in subchain : %s", ind, node_dag.id_name_map[exec_order[ind][0]].c_str());
                 for (int i = 0; i < exec_order.size(); i++)
                 {
 			int ret = 7;
-			struct sched_param sp_exec = { .sched_priority = 2,};
-			struct sched_param sp_other = { .sched_priority = 1,};
 			// No need to change to tid instead of pid, pid=tid for main cb thread!!
 			if (i == curr_exec_index)
-				ret = sched_setscheduler(node_pid[exec_order[i]], SCHED_FIFO, &sp_exec);
+				ret = changePrioritySubChain(i, 2);
 			else
-				ret = sched_setscheduler(node_pid[exec_order[i]], SCHED_FIFO, &sp_other);
-			ROS_INFO("Ret value %i for setting priority of node %s, exec id : %i", ret, exec_order[i].c_str(), curr_exec_index);
+				ret = changePrioritySubChain(i, 1);
+			// ret = sched_setscheduler(node_pid[exec_order[i]], SCHED_FIFO, &sp_other);
+			ROS_INFO("Ret value %i for setting priority of subchain node %s, exec id : %i", ret, node_dag.id_name_map[exec_order[i][0]].c_str(), curr_exec_index);
                 }
+	}
+
+	int changePrioritySubChain(int i, int prio)
+	{
+		bool ret = true;
+		struct sched_param sp = { .sched_priority = prio,};
+		for (int j = 0; j < exec_order[i].size(); j++)
+			ret = ( (ret) && (sched_setscheduler( node_pid[node_dag.id_node_map[exec_order[i][j]].name] , SCHED_FIFO, &sp) ) );
+		return ret;
 	}
 
 	void exec_start_cb(const std_msgs::Header::ConstPtr& msg)

@@ -10,7 +10,7 @@
 #include "fusion.h"
 #include <set> 
 #include <assert.h>
-
+#include <math.h> 
 
 using namespace mosek::fusion;
 using namespace monty;
@@ -135,16 +135,18 @@ public:
 
 	void assign_publishing_rates(); // iterates over the DAG, and assigns rates at which each node publishes its outputs to its succeding nodes.
 	void assign_src_rates(); // one src node will have the parent period [most critical chain]. Other src nodes : fraction.
+
+	// this function returns the order of execution of sub-chains [where all nodes in a sub-chain have the same frac_rate. ]
+	std::vector<std::vector<int> > get_exec_order();
 	
 	std::map<int, std::vector<int>> get_period();
 	void compute_rt_chain(int i, std::map<int, std::vector<int>>& period_map);
+	
+	std::map<int, std::vector<int>> period_map; // node -> set of frac vars, e.g. f1*f4.
 	std::vector< std::map<std::string, Monomial> > all_rt_periods;
 	std::vector< std::map<int, MaxMonomial> > all_rt_maxmono_periods;
 	std::vector< std::map<int, MinMonomial> > all_rt_minmono_periods;
-	void compute_rt(); // need to find formula for RT along each chain, as a func of all fraction variables.
-
-	// This step will always be executed whenever compute times change:
-	void call_solver(); // 1core
+	std::vector<int> compute_rt_solve(); // need to find formula for RT along each chain, as a func of all fraction variables & then solve.
 
 
 	// Helper functions:
