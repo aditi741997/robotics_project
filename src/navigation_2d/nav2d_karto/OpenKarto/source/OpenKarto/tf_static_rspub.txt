@@ -1,0 +1,110 @@
+Made rospy publisher, name :  /rosout
+In init TCPROSTransportProtocol, QUEUE Sz :  None /rostopic_6068_1600905140122/get_loggers 65536
+Starting run thread for TCPServer
+In init TCPROSTransportProtocol, QUEUE Sz :  None /rostopic_6068_1600905140122/set_logger_level 65536
+In init TCPROSTransportProtocol, QUEUE Sz :  1 /clock 65536
+In TCPROSTransport init /clock
+In init TCPROSTransportProtocol, QUEUE Sz :  In receive loop for /clock
+None /tf_static 65536
+In TCPROSTransport init /tf_static
+In receive loop for /tf_static
+transforms: 
+  - 
+    header: 
+      seq: 0
+      stamp: 
+        secs: 805
+        nsecs: 297000000
+      frame_id: "base_footprint"
+    child_frame_id: "base_link"
+    transform: 
+      translation: 
+        x: 0.0
+        y: 0.0
+        z: 0.01
+      rotation: 
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - 
+    header: 
+      seq: 0
+      stamp: 
+        secs: 805
+        nsecs: 297000000
+      frame_id: "base_link"
+    child_frame_id: "caster_back_link"
+    transform: 
+      translation: 
+        x: -0.081
+        y: 0.0
+        z: -0.004
+      rotation: 
+        x: -0.706825181105
+        y: 0.0
+        z: 0.0
+        w: 0.707388269167
+  - 
+    header: 
+      seq: 0
+      stamp: 
+        secs: 805
+        nsecs: 297000000
+      frame_id: "base_link"
+    child_frame_id: "imu_link"
+    transform: 
+      translation: 
+        x: -0.032
+        y: 0.0
+        z: 0.068
+      rotation: 
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+  - 
+    header: 
+      seq: 0
+      stamp: 
+        secs: 805
+        nsecs: 297000000
+      frame_id: "base_link"
+    child_frame_id: "base_scan"
+    transform: 
+      translation: 
+        x: -0.032
+        y: 0.0
+        z: 0.172
+      rotation: 
+        x: 0.0
+        y: 0.0
+        z: 0.0
+        w: 1.0
+---
+In init TCPROSTransportProtocol, QUEUE Sz :  None /rosout 128
+In TCPROSTransport init /rosout
+[INFO] [1600905140.513002, 1200.046000]: IN set_socket..../rosout, sock 10
+Adding QueuedConnection  /rosout
+Closing
+Closing
+Closing
+Recv Times Mean Median & Tail :  0.00199999999995 0.00199999999995 0.00199999999995 /tf_static
+Recv_Once Times Mean Median & Tail :  0.0 0.0 0.0 /tf_static
+CB Times Mean Median & Tail :  0.00199999999995 0.00199999999995 0.00199999999995 /tf_static
+CB+Deserial Times Mean Median & Tail : 0.00199999999995 0.00199999999995 0.00199999999995 /tf_static
+Closing
+Recv Times Mean Median & Tail :  0.00199999999995 0.00199999999995 0.00199999999995 /tf_static
+Recv_Once Times Mean Median & Tail :  0.0 0.0 0.0 /tf_static
+CB Times Mean Median & Tail :  0.00199999999995 0.00199999999995 0.00199999999995 /tf_static
+CB+Deserial Times Mean Median & Tail : 0.00199999999995 0.00199999999995 0.00199999999995 /tf_static
+Closing
+Recv Times Mean Median & Tail :  0.330739763671 0.000999999999976 0.0010000000002 /clock
+Recv_Once Times Mean Median & Tail :  0.0 0.0 0.0 /clock
+CB Times Mean Median & Tail :  0.330740038472 0.000999999999976 0.0010000000002 /clock
+CB+Deserial Times Mean Median & Tail : 0.330740038472 0.000999999999976 0.0010000000002 /clock
+Closing
+Recv Times Mean Median & Tail :  0.330740038472 0.000999999999976 0.0010000000002 /clock
+Recv_Once Times Mean Median & Tail :  0.0 0.0 0.0 /clock
+CB Times Mean Median & Tail :  0.330740038472 0.000999999999976 0.0010000000002 /clock
+CB+Deserial Times Mean Median & Tail : 0.330740038472 0.000999999999976 0.0010000000002 /clock
