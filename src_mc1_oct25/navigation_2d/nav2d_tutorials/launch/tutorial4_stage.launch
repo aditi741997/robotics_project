@@ -1,0 +1,17 @@
+<launch>
+
+    <!-- Some general parameters -->
+    <param name="use_sim_time" value="true" />
+
+    <!-- Start Stage simulator with a given environment -->
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find nav2d_tutorials)/world/tutorial4.world">
+        <param name="base_watchdog_timeout" value="0.1" />
+    </node>
+
+    <!-- Start the joystick-driver and remote-controller for operation-->
+    <node name="Joystick" pkg="joy" type="joy_node" />
+    <node name="SimController" pkg="nav2d_remote" type="sim_joy" args="2"/>
+
+    <node name="R0_MapAlign" pkg="tf" type="static_transform_publisher" args="0 0 0 0 0 0 /map /robot_0/map 100"/>
+    <node name="R1_MapAlign" pkg="tf" type="static_transform_publisher" args="40 0 0 0 0 0 /map /robot_1/map 100"/>
+</launch>
