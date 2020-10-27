@@ -8,6 +8,7 @@ for fname in ["local_map", "mapper_mapUpdate", "mapper_scanCB", "navigator_cmd",
     times = []
     ts = []
     scan_count = []
+    tputs = []
     with open(fname_pre_str + fname + fname_post_str, 'r') as f:
         for fl in f.readlines():
             if "imes:" in fl:
@@ -16,6 +17,8 @@ for fname in ["local_map", "mapper_mapUpdate", "mapper_scanCB", "navigator_cmd",
                 ts += [ float(x) for x in fl.split(" ")[2:-1] ]
             elif "ScanCOunt" in fl:
                 scan_count += [ int(x) for x in fl.split(" ")[2:-1] ]
+    	    elif "tput:" in fl:
+		tputs += [ float(x) for x in fl.split(" ")[2:-1] ]
     # plot times,ts and scan_count.
     plt.plot(ts, times, 'bo-', label=fname + " compute time")
     plt.title("Nav2d Node : %s"%(fname) )
@@ -28,3 +31,8 @@ for fname in ["local_map", "mapper_mapUpdate", "mapper_scanCB", "navigator_cmd",
         plt.title("Nav2d NOde : %s #Scans"%(fname))
         plt.legend()
         plt.show()
+    if len(tputs) > 0:
+	plt.plot(ts, tputs, 'r*-.', label=fname + " Tput")
+	plt.title("nav2d Node : %s Tput"%(fname) )
+	plt.legend()
+	plt.show()
