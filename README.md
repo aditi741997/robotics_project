@@ -1,2 +1,2 @@
 # robotics_project
-A repository for running experiments on the navigation stack of rOS.
+A repository for running scheduling experiments on robotics applications over ROS.
