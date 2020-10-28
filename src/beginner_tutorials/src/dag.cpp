@@ -289,7 +289,7 @@ DAG::DAG(std::string fname)
 		}
 		order_chains_criticality(chains);	
 	}
-	test_solver_multicore();
+	// test_solver_multicore();
 	
 }
 
@@ -328,7 +328,9 @@ bool DAG::order_chains_criticality(std::vector<std::tuple<float, std::vector<int
 		else
 			std::get<2>(chains[i]) = ( si / std::get<0>(chains[i]) );
 	}
-	std::sort(chains.begin(), chains.end(), [](const std::tuple<float, std::vector<int>, float, int >& c1, const std::tuple<float, std::vector<int>, float, int >& c2) {return ( std::get<2>(c1) < std::get<2>(c2) ); });
+	
+	// Oct: commenting sorting if the input chains are already ordered based on criticality.
+	// std::sort(chains.begin(), chains.end(), [](const std::tuple<float, std::vector<int>, float, int >& c1, const std::tuple<float, std::vector<int>, float, int >& c2) {return ( std::get<2>(c1) < std::get<2>(c2) ); });
 	bool ret = false;
 	if (all_chains.size() != chains.size())
 		ret = true;
@@ -373,6 +375,12 @@ void DAG::fill_trigger_nodes()
 	}
 }
 
+// returns true of the edge a->b is in the CC.
+bool DAG::is_edge_in_cc(int a, int b)
+{
+	return ( ( nodes_in_most_critical_chain.find(a) != nodes_in_most_critical_chain.end() ) && ( nodes_in_most_critical_chain.find(b) != nodes_in_most_critical_chain.end() ) );
+}
+
 void DAG::assign_publishing_rates()
 {
 	std::cout << "##### STARTING Step3 : assign_publishing_rates" << std::endl;
@@ -389,7 +397,8 @@ void DAG::assign_publishing_rates()
 			int out_edge_id = ot->first;
 			if (id_node_map[out_edge_id].trigger_node != dn_id)
 				dn.out_edges[out_edge_id] = -1; // this node is asynchronous wrt dn.
-			else if (out_edge_id == dn.most_critical_se)
+			// Oct: modification : A->B runs at same rate only if B is triggered by A and (is the only one using A's outputs || A-B in CC).
+			else if ( (out_edge_id == dn.most_critical_se) && ( ( dn.out_edges.size() == 1 )  || (is_edge_in_cc(dn_id, out_edge_id)) ) )
 				dn.out_edges[out_edge_id] = -1; // this node is the most critical out of all nodes triggered by dn.
 			else
 			{

@@ -4,9 +4,9 @@ import numpy as np
 import math
 
 # For each metric, we read 3 files : F/5, F, 5F
-num_e = 2
+num_e = 1
 num_r = int(sys.argv[5])
-efs = [sys.argv[1], sys.argv[2]] #, sys.argv[3]] #e.g. tb3_gz_5c_scanF2, ...
+efs = [sys.argv[1] ] #, sys.argv[2]] #, sys.argv[3]] #e.g. tb3_gz_5c_scanF2, ...
 
 param_varying = [sys.argv[3], sys.argv[4] ] #, sys.argv[6]]
 
@@ -16,7 +16,7 @@ medrt_S_MapCB_NavC_LP = [0.0 for x in range(num_e)]
 medrt_S_MapCB_NavP_NavC_LP = [0.0 for x in range(num_e)]
 medrt_S_MapCB_MapU_NavP_NavC_LP = [0.0 for x in range(num_e)]
 
-
+"""
 for ei in range(num_e):
     ename = efs[ei]
     
@@ -63,7 +63,7 @@ for ei in range(num_e):
     medrt_S_MapCB_NavC_LP[ei] = mean_medrt_S_MapCB_NavC_LP/num_r
     medrt_S_MapCB_NavP_NavC_LP[ei] = mean_medrt_S_MapCB_NavP_NavC_LP/num_r
     medrt_S_MapCB_MapU_NavP_NavC_LP[ei] = mean_medrt_S_MapCB_MapU_NavP_NavC_LP/num_r
-
+"""
 
 def plot_smt(arr, yl, titl):
     ngroups = num_e
@@ -76,8 +76,8 @@ def plot_smt(arr, yl, titl):
     plt.title(titl)
     plt.xticks(index, param_varying)
     plt.show()
-    
-
+  
+"""
 print 'Avg MedianRT across ' + str(num_r) + ' runs.', medrt_S_LC_LP
 plot_smt(medrt_S_LC_LP, 'RT (Sec)', 'Median RT wrt S-LC-LP')
 plot_smt(medrt_S_MapCB_NavC_LP, 'RT (sec)', 'Median RT wrt S-MapCB-NavC-LP')
@@ -89,6 +89,7 @@ plot_smt(medrt_S_MapCB_MapU_NavP_NavC_LP, 'RT (sec)', 'Median RT wrt S-MapCB-Map
 # plt.title('Median RT wrt S-LC-LP')
 # plt.xticks(index, param_varying)
 # plt.show()
+"""
 
 def get_room_no(x,y):
     # given x,y of robot, find room#
@@ -128,20 +129,25 @@ def get_dist(x1,y1,x2,y2):
 avg_obst_dist_arr = [0.0 for x in range(num_e)]
 obst_dist_arr = [[] for x in range(num_e)]
 
-num_obst = 5
+num_obst = 3
 for ei in range(num_e):
     ename = efs[ei]
     avg_obst_d = 0.0
 
-    for run in range(1, num_r+1, 1):
+    for run in [150]:
         r_avg_obst_dist = 0.0
         num_read = 0
+	# for plotting TimeSeries of ObstDist:
+	obst_dist_ts_arr = []
+	obst_room_arr = []
+	obst_ts_arr = []
+	robo_odom_arr = []
         with open('../robot_nav2d_obstacleDist_logs_' + ename + '_run' + str(run) + '.txt', 'r') as obf:
             obfl = obf.readlines()
             # split into groups of 6*[]lines. for measure_obstacleDist script.
             # numl = 6*4
             # split into groups of 4lines for stageros.
-            numl = 4*1
+            numl = 6*1
             print "Reading ", ename, ", run:", run
             for i in range(len(obfl)/numl):
                 # for tb3 - gz:
@@ -151,12 +157,21 @@ for ei in range(num_e):
                 # obst_ind = get_room_no(rob_x, rob_y)
 
                 # for stage:
-                rob_pos = i*numl
+                rob_pos = i*numl + 1
                 rob_pos_l = obfl[rob_pos].split(' ')
                 rob_x = float(rob_pos_l[1])
                 rob_y = float(rob_pos_l[2][:-1])
                 obst_ind = get_obstacle_no_stage(rob_x, rob_y)
-                
+		
+		# read TS:
+		pos_st_ts = float(obfl[i*numl].split(' ')[1])
+		pos_rt_ts = float(obfl[i*numl].split(' ')[3])/1000.0                
+
+		# read odom info:
+		vx = float( obfl[i*numl + num_obst + 2].split(' ')[1] )
+		vy = float( obfl[i*numl + num_obst + 2].split(' ')[2] )
+		robo_odom_arr.append( math.sqrt( vx*vx + vy*vy ) ) 
+
                 if (obst_ind > -1):
                     # 4lines for each robot in tb3-gazebo:
                     # obst_x = float( obfl[tb3_pos + 4*obst_ind].split(' ')[-1][:-1] )
@@ -173,11 +188,28 @@ for ei in range(num_e):
                     num_read += 1
                     obst_dist_arr[ei].append(dist)
 
+		    obst_dist_ts_arr.append(dist)
+	
                     if i % 200 == 5:
                         print "i:", i, ", tb3_pos:", rob_pos, rob_x, rob_y, obst_x, obst_y, obst_ind
                     if dist > 15.0:
                         print "i:", i, ", tb3_pos:", rob_pos, rob_x, rob_y, obst_x, obst_y, obst_ind, " DIST : ", dist
+		else:
+		    obst_dist_ts_arr.append(0.0)
+		obst_ts_arr.append(pos_rt_ts)
+		obst_room_arr.append(obst_ind)
         print "Num reads: ", num_read  
+	print "PLOTTING TimeSeries of ObstDist: "
+	plt.plot(obst_ts_arr, obst_dist_ts_arr, 'bo:', label="ObstDist")
+	plt.plot(obst_ts_arr, obst_room_arr, 'r^-.', label="Obst Id")
+	plt.title('Dist from closest obst')
+	plt.legend()
+	plt.show()
+
+	plt.plot(obst_ts_arr, robo_odom_arr, 'g*:', label="Odom")
+	plt.title('Robot Velocity')
+	plt.show()
+	
         if (num_read) > 0:
             avg_obst_d += r_avg_obst_dist/num_read
             print "Avg dist for this run :", r_avg_obst_dist/num_read
@@ -214,6 +246,10 @@ for ei in range(num_e):
     for run in range(1,num_r+1,1):
         mpsz = 0
         unk_ratio = 0.0
+
+	known_area_arr = []
+	known_area_ts = []
+
         with open('nav2d_robot_logs_' + ename + '_run' + str(run) + '.err', 'r') as mf:
             for l in mf.readlines():
                 if 'ratio of unknown/total area' in l:
@@ -221,6 +257,9 @@ for ei in range(num_e):
                     # Later maybe change to just int(a).
                     mpsz = int(a)
                     unk_ratio = float(l.split(' ')[-3])/mpsz
+		    known_area_arr.append( mpsz*(1.0 - unk_ratio) )
+		    # add TS.
+
         sum_mpsz += mpsz
         sum_unk_ratio += unk_ratio
         print "For expt", ename, ", run:", run, " Map Area: ", mpsz, " UNcovered: ", unk_ratio

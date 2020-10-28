@@ -1,3 +1,4 @@
+# THIS SCRIPT PLOTS THE CI FOR ALL NODES, TPUT FOR NC Nodes.
 import sys
 import matplotlib.pyplot as plt
 
@@ -32,7 +33,7 @@ for fname in ["local_map", "mapper_mapUpdate", "mapper_scanCB", "navigator_cmd",
         plt.legend()
         plt.show()
     if len(tputs) > 0:
-	plt.plot(ts, tputs, 'r*-.', label=fname + " Tput")
+	plt.plot(ts[1:], tputs, 'r*-.', label=fname + " Tput")
 	plt.title("nav2d Node : %s Tput"%(fname) )
 	plt.legend()
 	plt.show()
