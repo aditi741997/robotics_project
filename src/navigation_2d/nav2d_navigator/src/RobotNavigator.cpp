@@ -10,6 +10,13 @@
 #include <ctime>
 #include <chrono>
 
+#include <fstream>
+#include <sstream>
+
+#include <unistd.h>
+#include <sys/syscall.h>
+#define gettid() syscall(SYS_gettid)
+
 #define PI 3.14159265
 
 using namespace ros;
@@ -20,13 +27,53 @@ double get_time_diff(timespec& a, timespec& b)
   return (( b.tv_sec + 1e-9*b.tv_nsec ) - ( a.tv_sec + 1e-9*a.tv_nsec ));
 }
 
+double get_time_now()
+{
+	/*
+	boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
+        boost::chrono::system_clock::duration tse = now.time_since_epoch();
+        //using system_clock to measure latency:
+        unsigned long long ct = boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() - (1603000000000);
+        double time_now = ct / (double)(1000.0);
+	*/
+
+	struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+        double time_now = ts.tv_sec + 1e-9*ts.tv_nsec;
+
+	return time_now;
+}
+
+void write_arr_to_file(std::vector<double>& tput, std::string s)
+{
+        std::string ename;
+    ros::NodeHandle nh;
+    nh.param<std::string>("/expt_name", ename, "");
+
+        int sz = tput.size();
+
+	if (sz > 0)
+	{
+		std::ofstream of;
+        	of.open( ("/home/ubuntu/robot_" + s + "_stats_" + ename + ".txt").c_str() , std::ios_base::app);
+
+        	of << "\n" << s << " tput: ";
+        	for (int i = 0; i < sz; i++)
+                	of << tput[i] << " ";
+
+        	std::sort(tput.begin(), tput.end());
+        	ROS_ERROR("Nav2d Navigator %s, Median, 95ile TPUT %f %f", s.c_str(), tput[sz/2], tput[(95*sz)/100]);
+        	tput.clear();
+	}
+}
+
 RobotNavigator::RobotNavigator()
 {	
 	NodeHandle robotNode;
 
 	std::string serviceName;
 	robotNode.param("map_service", serviceName, std::string("get_map"));
-	ROS_WARN("INitializing NAV2D::Navigator Node. The map service for getMap is %s", serviceName.c_str());
+	ROS_ERROR("INitializing NAV2D::Navigator Node. The map service for getMap is %s", serviceName.c_str());
 	mGetMapClient = robotNode.serviceClient<nav_msgs::GetMap>(serviceName);
 
 	mCommandPublisher = robotNode.advertise<nav2d_operator::cmd>("cmd", 1);
@@ -35,7 +82,7 @@ RobotNavigator::RobotNavigator()
 	mCurrentPlan = NULL;
 
 	NodeHandle navigatorNode("~/");
-	ROS_WARN("INitializing NAV2D::Navigator Node. Publishing plan to plan topic and markers AND PUBLISHES nav2d_operator::cmd on cmd topic.");
+	ROS_ERROR("INitializing NAV2D::Navigator Node. Publishing plan to plan topic and markers AND PUBLISHES nav2d_operator::cmd on cmd topic.");
 	mPlanPublisher = navigatorNode.advertise<nav_msgs::GridCells>("plan", 1);
 	mMarkerPublisher = navigatorNode.advertise<visualization_msgs::Marker>("markers", 1, true);
 	
@@ -68,13 +115,13 @@ RobotNavigator::RobotNavigator()
 	mRobotFrame = mTfListener.resolve(mRobotFrame);
 	mMapFrame = mTfListener.resolve(mMapFrame);
 
-	ROS_WARN("INitializing nav2d_navigator NODE. mRobotFrame : %s, mMapFrame : %s", mRobotFrame.c_str(), mMapFrame.c_str());
-	ROS_WARN("IN RobotNavigator NavCmd Freq : %f, NavP: min_replanning_period: %f, max_replanning_period: %f, NavPlanThread period: %f", mFrequency, mMinReplanningPeriod, mMaxReplanningPeriod, mReplanningPeriod);
+	ROS_ERROR("INitializing nav2d_navigator NODE. mRobotFrame : %s, mMapFrame : %s", mRobotFrame.c_str(), mMapFrame.c_str());
+	ROS_ERROR("IN RobotNavigator NavCmd Freq : %f, NavP: min_replanning_period: %f, max_replanning_period: %f, NavPlanThread period: %f", mFrequency, mMinReplanningPeriod, mMaxReplanningPeriod, mReplanningPeriod);
 	try
 	{
 		mPlanLoader = new PlanLoader("nav2d_navigator", "ExplorationPlanner");
 		mExplorationPlanner = mPlanLoader->createInstance(mExplorationStrategy);
-		ROS_WARN("IN NAV2D::Navigator - Successfully loaded exploration strategy [%s].", mExplorationStrategy.c_str());
+		ROS_ERROR("IN NAV2D::Navigator - Successfully loaded exploration strategy [%s].", mExplorationStrategy.c_str());
 
 		mExploreActionServer = new ExploreActionServer(mExploreActionTopic, boost::bind(&RobotNavigator::receiveExploreGoal, this, _1), false);
 		mExploreActionServer->start();
@@ -113,6 +160,13 @@ RobotNavigator::RobotNavigator()
 	// seting tcp nodelay to false...
 	mScanUsedTSTFSubscriber = navigatorNode.subscribe("/robot_0/mapper_scan_ts_used_TF", 1, &RobotNavigator::updateMapperScanTSUsedTF, this, ros::TransportHints().tcpNoDelay());
 
+	navp_exec_info_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_start_navp", 1, true);
+	navc_exec_info_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_start_navc", 1, true);
+
+	// For measuring tput of subchains :
+	last_nav_cmd_out = 0.0;
+	last_nav_plan_out = 0.0;
+
 	nav_cmd_thread_ = NULL;
 	nav_cmd_thread_shutdown_ = false;
 }
@@ -147,7 +201,7 @@ bool RobotNavigator::getMap()
 	// ROS_WARN("IN nav2d::RobotNavigator About to call getMap service!!");
 	if(!mGetMapClient.call(srv))
 	{
-		ROS_WARN("Could not get a map.");
+		ROS_ERROR("Could not get a map.");
 		return false;
 	}
 	mCurrentMap.update(srv.response.map);
@@ -206,7 +260,7 @@ bool RobotNavigator::preparePlan()
 	if(!getMap()) // return false;
 	{
 		if(mCellInflationRadius == 0) return false;
-		ROS_WARN("Could not get a new map, trying to go with the old one...");
+		ROS_ERROR("Could not get a new map, trying to go with the old one...");
 	}
 	
 	// Where am I?
@@ -225,13 +279,13 @@ bool RobotNavigator::preparePlan()
 
 bool RobotNavigator::createPlan()
 {	
-	ROS_WARN("In RobotNavigator::createPlan, Map-Value of goal point is %d, lethal threshold is %d.", mCurrentMap.getData(mGoalPoint), mCostLethal);
+	ROS_ERROR("In RobotNavigator::createPlan, Map-Value of goal point is %d, lethal threshold is %d.", mCurrentMap.getData(mGoalPoint), mCostLethal);
 	unsigned int start_x = 0, start_y = 0;
 	unsigned int goal_x = 0, goal_y = 0;
 	if(mCurrentMap.getCoordinates(goal_x,goal_y,mGoalPoint))
 	{
 		mCurrentMap.getCoordinates(start_x, start_y, mStartPoint);
-		ROS_WARN("IN ROBOTNavigator:: createPlan Goal coordinates in map: %i %i | STartPOint : %i %i #", goal_x, goal_y, start_x, start_y);
+		ROS_ERROR("IN ROBOTNavigator:: createPlan Goal coordinates in map: %i %i | STartPOint : %i %i #", goal_x, goal_y, start_x, start_y);
 		visualization_msgs::Marker marker;
 		marker.header.frame_id = "/map";
 		marker.header.stamp = ros::Time();
@@ -282,7 +336,7 @@ bool RobotNavigator::createPlan()
 			mCurrentPlan[neighbors[i]] = 0;
 		}
 	}
-	ROS_WARN("IN ROBOTNavigator:: createPlan, added %i nodes (Goal/NearGoal) to queue.", queue.size());
+	ROS_ERROR("IN ROBOTNavigator:: createPlan, added %i nodes (Goal/NearGoal) to queue.", queue.size());
 	
 	Queue::iterator next;
 	double distance;
@@ -291,6 +345,7 @@ bool RobotNavigator::createPlan()
 	double diagonal = std::sqrt(2.0) * linear;
 	
 	// Do full search with Dijkstra-Algorithm
+	int count = 0;
 	while(!queue.empty())
 	{
 		// Get the nearest cell from the queue
@@ -299,6 +354,8 @@ bool RobotNavigator::createPlan()
 		index = next->second;
 		queue.erase(next);
 		
+		count += 1;
+
 		if(mCurrentPlan[index] >= 0 && mCurrentPlan[index] < distance) continue;
 		
 //		if(index == mStartPoint) break;
@@ -329,6 +386,8 @@ bool RobotNavigator::createPlan()
 				}
 			}
 		}
+		if (count%2500 == 77)
+			ROS_ERROR("In navPlan createPlan, curr que sz : %i, count %i", queue.size(), count);
 	}
 	
 	if(mCurrentPlan[mStartPoint] < 0)
@@ -538,7 +597,7 @@ bool RobotNavigator::generateCommand()
 
 void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::ConstPtr &goal)
 {
-	ROS_WARN("IN NAV2D::ROBOTNavigator - Received STartMapping Goal.");
+	ROS_ERROR("IN NAV2D::ROBOTNavigator - Received STartMapping Goal.");
 	if(mStatus != NAV_ST_IDLE)
 	{
 		ROS_WARN("Navigator is busy!");
@@ -630,7 +689,7 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 		mGetMapActionServer->setSucceeded();
 	}else
 	{
-		ROS_WARN("Navigator could not be initialized!");
+		ROS_ERROR("Navigator could not be initialized!");
 		mGetMapActionServer->setAborted();
 	}
 }
@@ -703,6 +762,7 @@ void RobotNavigator::receiveMoveGoal(const nav2d_navigator::MoveToPosition2DGoal
 	ROS_DEBUG("Received Goal: %.2f, %.2f (in frame '%s')", goal->target_pose.x, goal->target_pose.y, goal->header.frame_id.c_str());
 
 	// Start navigating according to the generated plan
+	// TODO: change from ros rate to wall time rate, cuz ros time is 10times slower than real time.
 	Rate loopRate(mFrequency);
 	unsigned int cycle = 0;
 	bool reached = false;
@@ -853,14 +913,14 @@ void write_arrs_to_file(std::vector<double>& times, std::vector<double>& ts, std
 	std::string ename;
 	NodeHandle nh;
 	nh.param<std::string>("/expt_name", ename, "");
-	of.open("/home/aditi/robot_" + s + "_stats_" + ename + ".txt", std::ios_base::app);
+	of.open("/home/ubuntu/robot_" + s + "_stats_" + ename + ".txt", std::ios_base::app);
 	of << "\n" << s << " times: ";
 	int sz = times.size();
 	for (int i = 0; i < sz; i++)
 		of << times[i] << " ";
 	of << "\n" << s << " ts: ";
 	for (int i = 0; i < sz; i++)
-		of << ts[i] << " ";
+		of << std::to_string(ts[i]) << " ";
 
 	times.clear();
 	ts.clear();
@@ -889,24 +949,34 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 	unsigned int lastCheck = 0;
 	unsigned int recheckCycles = mMinReplanningPeriod * mFrequency;
 	unsigned int recheckThrottle = mMaxReplanningPeriod * mFrequency;
+
+	double explore_start_mono_rt = get_time_now();
 	
-	ROS_WARN("IN NAV2D::NAVIGATOR, received StartExploration service action. recheckCycles %i, recheckThrottle %i", recheckCycles, recheckThrottle);
+	ROS_ERROR("IN NAV2D::NAVIGATOR, received StartExploration service action. Mono RT %f, recheckCycles %i, recheckThrottle %i, replanningPeriod %f", explore_start_mono_rt, recheckCycles, recheckThrottle, mReplanningPeriod);
 	// Move to exploration target
 	Rate loopRate(mFrequency);
 
-	Rate planUpdateLoopRate(1.0/mReplanningPeriod);
+	ros::WallRate planUpdateLoopRate(1.0/mReplanningPeriod);
+
+	ROS_ERROR("Publishing node navPlan tid %i, pid %i to controller.", ::gettid(), ::getpid());
+        std_msgs::Header hdr;
+
+        std::stringstream ss_e;
+        ss_e << ::getpid() << " navp " << ::gettid();
+        hdr.frame_id = ss_e.str();
+
+	navp_exec_info_pub.publish(hdr);
 
 	while(true)
 	{
 		struct timespec cb_start, cb_end;
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
 
-
 		// ROS_WARN("In nav2d::RobotNavigator STARTING Explore Loop!");
 		// Check if we are asked to preempt
 		if(!ok() || mExploreActionServer->isPreemptRequested() || mIsStopped)
 		{
-			ROS_INFO("Exploration has been preempted externally.");
+			ROS_ERROR("Exploration has been preempted externally.");
 			mExploreActionServer->setPreempted();
 			stop();
 			return;
@@ -932,12 +1002,20 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		
 		// if(reCheck || nearGoal)
 		// {
+
+		double using_map_ts, using_tf_scan_ts;
+
 			WallTime startTime = WallTime::now();
 			lastCheck = cycle;
 
 			bool success = false;
 			if(preparePlan())
 			{
+				// the TS of TF being used by navPlan is set when setCurrentPosition is called from within preparePlan
+				// TS of map being used is also set when setCurrentPosition is called from within preparePlan
+				using_map_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
+				using_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts;
+				
 				int result = mExplorationPlanner->findExplorationTarget(&mCurrentMap, mStartPoint, mGoalPoint);
 				switch(result)
 				{
@@ -952,12 +1030,13 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 						r.final_pose.y = mCurrentPositionY;
 						r.final_pose.theta = mCurrentDirection;
 						mExploreActionServer->setSucceeded(r);
+						explore_end_clk = clock();
+						double explore_end_real_ts = get_time_now();
+						ROS_ERROR("Exploration has finished. Total_Time_Taken_Clk: %f, Time of finish : %f #", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC, explore_end_real_ts);
 					}
 					stop();
-					explore_end_clk = clock();
 					clock_gettime(CLOCK_MONOTONIC, &explore_end);
-					ROS_WARN("Exploration has finished. Total_Time_Taken_Clk: %f", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC);
-					ROS_WARN("Exploration has finished. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
+					ROS_ERROR("Exploration has finished. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
 					nav_cmd_thread_shutdown_ = true;
 					return;
 				case EXPL_WAITING:
@@ -968,14 +1047,17 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 						stopMsg.Velocity = 0;
 						mCommandPublisher.publish(stopMsg);
 					}
-					ROS_WARN("Exploration is waiting.");
+					ROS_ERROR("Exploration is waiting.");
 					break;
 				case EXPL_FAILED:
+					ROS_ERROR("Got EXPL_FAILED from findExplorationTarget");
 					break;
 				default:
 					ROS_ERROR("Exploration planner returned invalid status code: %d!", result);
 				}
 			}
+			else
+				ROS_ERROR("PreparePlan was unsuccessful!!");
 			
 			if(mStatus == NAV_ST_EXPLORING)
 			{
@@ -983,15 +1065,30 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 				{
 					WallTime endTime = WallTime::now();
 					WallDuration d = endTime - startTime;
-					ROS_WARN("Exploration planning took %.09f seconds, distance is %.2f m.", d.toSec(), mCurrentPlan[mStartPoint]);
+					ROS_ERROR("Exploration planning took %.09f seconds, distance is %.2f m.", d.toSec(), mCurrentPlan[mStartPoint]);
+					// indicates a plan was made successfully. [preparePlan, findExplorationtarget, createPlan.]
+					// if ( (using_map_ts > nav_plan_last_map_used) || (using_tf_scan_ts > nav_plan_last_tf_used) )
+					{
+						double time_now = get_time_now();
+						if (last_nav_plan_out > 0.0)
+						{
+							tput_nav_plan.push_back(time_now - last_nav_plan_out);
+							ROS_ERROR("MADE NEW NAV PLAN, Tput : %f", (time_now - last_nav_plan_out) );
+						}
+
+						last_nav_plan_out = time_now;
+						nav_plan_last_map_used = using_map_ts;
+						nav_plan_last_tf_used = using_tf_scan_ts;
+					}
 				}else
 				{
 					mExploreActionServer->setAborted();
 					stop();
 					explore_end_clk = clock();
 					clock_gettime(CLOCK_MONOTONIC, &explore_end);
-					ROS_WARN("Exploration has failed. Total_Time_Taken_Clk: %f", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC);
-					ROS_WARN("Exploration has failed. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
+					double explore_end_ts = get_time_now();
+					ROS_ERROR("Exploration has failed. Total_Time_Taken_Clk: %fi, Time of finish : %f #", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC, explore_end_ts);
+					ROS_ERROR("Exploration has failed. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
 					nav_cmd_thread_shutdown_ = true;
 					return;
 				}
@@ -1000,15 +1097,17 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
 			double plan_t = get_time_diff(cb_start, cb_end);
 
+			double exec_rt_end = get_time_now();
+
 			explore_cb_plan_times.push_back(plan_t);
-			explore_cb_plan_ts.push_back(ros::Time::now().toSec());
+			explore_cb_plan_ts.push_back(exec_rt_end);
 
 			// Making a separate thread for Navigator generateCommand
 			// It should start after a plan has been made.
 			if (nav_cmd_thread_ == NULL)
 			{
 				nav_cmd_thread_shutdown_ = false;
-				ROS_WARN("IN RobotNavigator::receiveExploreGoal, STARTING navCmd thread!!");
+				ROS_ERROR("IN RobotNavigator::receiveExploreGoal, STARTING navCmd thread!!");
 				nav_cmd_thread_ = new boost::thread(boost::bind(&RobotNavigator::navGenerateCmdLoop, this));
 			}
 		// }
@@ -1053,16 +1152,27 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		// 	ROS_WARN("Missed desired rate of %.2fHz! Loop actually took %.4f seconds!",mFrequency, loopRate.cycleTime().toSec());
 	
 		if (explore_cb_plan_ts.size()%20 == 7)
+		{
 			write_arrs_to_file(explore_cb_plan_times, explore_cb_plan_ts, "nav2d_navigator_plan");
+			write_arr_to_file(tput_nav_plan, "nav2d_navigator_plan");
+		}
 	}
 }
 
 void RobotNavigator::navGenerateCmdLoop()
 {
 	ros::NodeHandle nh;
-	ROS_WARN("In RobotNavigator::navGenerateCmdLoop frequency : %f", mFrequency);
-	ros::Rate r(mFrequency);
+	ROS_ERROR("In RobotNavigator::navGenerateCmdLoop frequency : %f", mFrequency);
+	ros::WallRate r(mFrequency);
 	int cycle;
+
+	ROS_ERROR("Publishing node navCmd tid %i, pid %i to controller.", ::gettid(), ::getpid());
+        std_msgs::Header hdr;
+        
+        std::stringstream ss_e;
+        ss_e << ::getpid() << " navc " << ::gettid();
+        hdr.frame_id = ss_e.str();
+	navc_exec_info_pub.publish(hdr);	
 
 	while (nh.ok() && !nav_cmd_thread_shutdown_)
 	{
@@ -1083,6 +1193,9 @@ void RobotNavigator::navGenerateCmdLoop()
 			nav_cmd_thread_shutdown_ = true;
 		}
 
+		double using_tf_scan_ts = current_mapCB_tf_navCmd_scan_ts;
+		double using_plan_ts = last_nav_plan_out; // navP itself has multiple inputs, so we consider the TS of the latest new plan. 
+
 		// The generateCommand work, moved from the receiveExploreGoal:
 		if(mStatus == NAV_ST_EXPLORING)
 		{
@@ -1100,18 +1213,41 @@ void RobotNavigator::navGenerateCmdLoop()
 
 			// Create a new command and send it to Operator
 			generateCommand();
+			ROS_ERROR("Generated command!");
 
 			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
 			double cmd_t = get_time_diff(cb_start, cb_end);
 
+			double exec_rt_end = get_time_now();
+
 			explore_cb_cmd_times.push_back(cmd_t);
-			explore_cb_cmd_ts.push_back(ros::Time::now().toSec());
+			explore_cb_cmd_ts.push_back(exec_rt_end);
+			
+			double time_now = exec_rt_end;		
+	
+			// Measuring NavC tput : check if used a new tf or a new plan?
+			// if ( (using_plan_ts > nav_cmd_last_plan_used) || (using_tf_scan_ts > nav_cmd_last_tf_used) )
+			{
+				// add to tput array.
+				if (last_nav_cmd_out > 0.0)
+				{
+					tput_nav_cmd.push_back(time_now - last_nav_cmd_out);
+					ROS_ERROR("MADE NEW NAV CMD, tput %f", time_now - last_nav_cmd_out);
+				}
+
+				last_nav_cmd_out = time_now;	
+				nav_cmd_last_plan_used = using_plan_ts;
+				nav_cmd_last_tf_used = using_tf_scan_ts;
+			}
 		}
 		cycle++;
 		r.sleep();
 
 		if (explore_cb_cmd_ts.size()%50 == 20)
+		{
 			write_arrs_to_file(explore_cb_cmd_times, explore_cb_cmd_ts, "nav2d_navigator_cmd");
+			write_arr_to_file(tput_nav_cmd, "nav2d_navigator_cmd");
+		}
 	}
 }
 

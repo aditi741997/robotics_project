@@ -161,6 +161,10 @@
     /// jacobian with respect to frames; uses dR'/dq from Node2d calculation
     Eigen::Matrix<double,3,3> J0,J0t,J1,J1t;
 
+    /// scaling factor for quaternion derivatives relative to translational ones;
+    /// not sure if this is needed, it's close to 1.0
+    const static double qScale = 1.0;
+
     /// dpc/dq = dR'/dq [pw-t], in homogeneous form, with q a quaternion param
     /// 
 

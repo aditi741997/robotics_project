@@ -1,64 +1,88 @@
 #include <nav_msgs/GridCells.h>
 #include <math.h>
 #include <numeric>
+#include <fstream>
 
 #include <nav2d_operator/RobotOperator.h>
 
+#include <ros/console.h>
+
 #define PI 3.14159265
 
-#include <fstream>
+#include <unistd.h>
+#include <sys/syscall.h>
+#define gettid() syscall(SYS_gettid)
 
 double get_time_diff(timespec& a, timespec& b)
 {
   return (( b.tv_sec + 1e-9*b.tv_nsec ) - ( a.tv_sec + 1e-9*a.tv_nsec ));
 }
 
+double get_time_now()
+{
+        /*
+	boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
+        boost::chrono::system_clock::duration tse = now.time_since_epoch();
+        //using system_clock to measure latency:
+        unsigned long long ct = boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() - (1603000000000);
+        double time_now = ct / (double)(1000.0);
+        */
+	
+	struct timespec ts;
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	double time_now = ts.tv_sec + 1e-9*ts.tv_nsec;
+
+	return time_now;
+}
+
 void print_arr(std::vector<double> m_arr, std::string m)
 {
-	int perc7 = 75;
+        int perc7 = 75;
     int percentile = 95;
     int perc0 = 90;
     int perc2 = 99;
     float perc3 = 99.9;
     float perc4 = 99.99;
-    
-	int l = m_arr.size();
+
+        int l = m_arr.size();
     if (l > 0)
     {
         std::sort(m_arr.begin(), m_arr.end());
         double avg = (std::accumulate(m_arr.begin(), m_arr.end(), 0.0))/l;
         double med = m_arr[l/2];
         double perc = m_arr[(l*percentile)/100];
-    
-        ROS_WARN("Median, %i tail of %s is %f %f , arr sz %i , %i : %f, %i : %f, %i : %f, %f : %f, %f : %f #", percentile, m.c_str(), med, perc, l, perc7, m_arr[(l*perc7)/100], perc0, m_arr[(l*perc0)/100], perc2, m_arr[(l*perc2)/100], perc3, m_arr[(l*perc3)/100], perc4, m_arr[(l*perc4)/100]);            
+
+        ROS_ERROR("Median, %i tail of %s is %f %f , arr sz %i , %i : %f, %i : %f, %i : %f, %f : %f, %f : %f #", percentile, m.c_str(), med, perc, l, perc7, m_arr[(l*perc7)/100], perc0, m_arr[(l*perc0)/100], perc2, m_arr[(l*perc2)/100], perc3, m_arr[(l*perc3)/100], perc4, m_arr[(l*perc4)/100]);
     }
 }
 
 void write_arr_to_file(std::vector<double>& arr, std::string m)
 {
-	std::string ename;
-	ros::NodeHandle nh;
-	nh.param<std::string>("/expt_name", ename, "");
+        std::string ename;
+        ros::NodeHandle nh;
+        nh.param<std::string>("/expt_name", ename, "");
 
-	std::ofstream of;
-	ROS_WARN("IN RobotOperator: write_arr_to_file CALLED. Ename %s", ename);
-    of.open("/home/aditi/robot_nav2d_" + ename + "_rt_stats.txt", std::ios_base::app);
+        std::ofstream of;
+        ROS_ERROR("IN RobotOperator: write_arr_to_file CALLED. Ename %s", ename.c_str());
+    of.open("/home/ubuntu/robot_nav2d_" + ename + "_rt_stats.txt", std::ios_base::app);
     of << m << ": ";
     for (int i = 0; i < arr.size(); i++)
-    	of << arr[i] << " ";
+        of << std::to_string(arr[i]) << " ";
     of << "\n";
 
     arr.clear();
 }
 
-
-RobotOperator::RobotOperator(std::condition_variable* cv_robot_op) : mTf2Buffer(), mTf2Listener(mTf2Buffer)
+RobotOperator::RobotOperator(std::condition_variable* cv_robot_op)
 {
+	if( ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info) ) {
+        	ros::console::notifyLoggerLevelsChanged();
+    	}
+
 	// Create the local costmap
-	mLocalMap = new costmap_2d::Costmap2DROS("local_map", mTf2Buffer, cv_robot_op);
+	mLocalMap = new costmap_2d::Costmap2DROS("local_map", mTfListener, cv_robot_op);
 	mRasterSize = mLocalMap->getCostmap()->getResolution();
 	
-	ROS_WARN("Subscribing to COmmand_Topic : %s, Publishing COntrol %s, Publishing Cost at costs topic", COMMAND_TOPIC, CONTROL_TOPIC);
 	// Publish / subscribe to ROS topics
 	ros::NodeHandle robotNode;
 	robotNode.param("robot_frame", mRobotFrame, std::string("robot"));
@@ -67,6 +91,8 @@ RobotOperator::RobotOperator(std::condition_variable* cv_robot_op) : mTf2Buffer(
 	mControlPublisher = robotNode.advertise<geometry_msgs::Twist>(CONTROL_TOPIC, 1);
 	mCostPublisher = robotNode.advertise<geometry_msgs::Vector3>("costs", 1);
 	
+	ROS_ERROR("Subscribing to COmmand_Topic : %s, Publishing COntrol %s, Publishing Cost at costs topic", COMMAND_TOPIC, CONTROL_TOPIC);
+
 	// Get parameters from the parameter server
 	ros::NodeHandle operatorNode("~/");
 	operatorNode.param("publish_route", mPublishRoute, false);
@@ -78,11 +104,14 @@ RobotOperator::RobotOperator(std::condition_variable* cv_robot_op) : mTf2Buffer(
 	}
 	operatorNode.param("max_free_space", mMaxFreeSpace, 5.0);
 	operatorNode.param("safety_decay", mSafetyDecay, 0.95);
+	operatorNode.param("distance_weight", mDistanceWeight, 1);
 	operatorNode.param("safety_weight", mSafetyWeight, 1);
 	operatorNode.param("conformance_weight", mConformanceWeight, 1);
 	operatorNode.param("continue_weight", mContinueWeight, 1);
-	operatorNode.param("escape_weight", mEscapeWeight, 1);
 	operatorNode.param("max_velocity", mMaxVelocity, 1.0);
+	// trying ros melodic param, evaluateAction code:
+        operatorNode.param("escape_weight", mEscapeWeight, 1);
+	ROS_ERROR("RobotOperator mMaxFreeSpace %f, mSafetyDecay %f, mSafetyWeight %i, mConformanceWeight %i, mContinueWeight %i, mMaxVelocity %f, mEscapeWeight %i", mMaxFreeSpace, mSafetyDecay, mSafetyWeight, mConformanceWeight, mContinueWeight, mMaxVelocity, mEscapeWeight);
 
 	// Apply tf_prefix to all used frame-id's
 	mRobotFrame = mTfListener.resolve(mRobotFrame);
@@ -102,23 +131,25 @@ RobotOperator::RobotOperator(std::condition_variable* cv_robot_op) : mTf2Buffer(
 	mRecoverySteps = 0;
 
 	// For measuring RT:
-	last_scan_lcmp_ts = -1.0;
-	last_scan_mapCB_navCmd_ts = -1.0;
-	last_scan_mapCB_navPlan_navCmd_ts = -1.0;
-	last_scan_mapCB_mapUpd_navPlan_navCmd_ts = -1.0;
-
-	// These chains dont exist, since LC, LP dont use Mapper's tf output.
-	// last_scan_mapCB_lcmp_ts = -1.0;
-	// last_scan_mapCB_ts = -1.0;
-	// last_scan_mapCB_lcmp_out = 0.0;
-	// last_scan_mapCB_out = 0.0;
+        last_scan_lcmp_ts = -1.0;
+        last_scan_mapCB_navCmd_ts = -1.0;
+        last_scan_mapCB_navPlan_navCmd_ts = -1.0;
+        last_scan_mapCB_mapUpd_navPlan_navCmd_ts = -1.0;
 
 	last_scan_lcmp_out = 0.0;
-	last_scan_mapCB_navCmd_out = 0.0;
-	last_scan_mapCB_navPlan_navCmd_out = 0.0;
-	last_scan_mapCB_mapUpd_navPlan_navCmd_out = 0.0;
+        last_scan_mapCB_navCmd_out = 0.0;
+        last_scan_mapCB_navPlan_navCmd_out = 0.0;
+        last_scan_mapCB_mapUpd_navPlan_navCmd_out = 0.0;
 
-	last_scan_mapCB_mapUpd_navPlan_navCmd_recv = -1.0;
+        last_scan_mapCB_mapUpd_navPlan_navCmd_recv = -1.0;
+
+	// For publishing end of CC exec to controller:
+	exec_end_cc_pub = robotNode.advertise<std_msgs::Header>("/robot_0/exec_end_lp", 1, false);
+
+	count_scan_lcmp = 0;
+	count_scan_mapCB_navCmd = 0;
+	count_scan_mapCB_navPlan_navCmd = 0;
+	count_scan_mapCB_mapUpd_navPlan_navCmd = 0;
 }
 
 RobotOperator::~RobotOperator()
@@ -127,26 +158,6 @@ RobotOperator::~RobotOperator()
 	{
 		delete mTrajTable[i];
 	}
-	ROS_WARN("In RobotOperator::Deconstructor");
-
-	// For measuring RT:
-	// write lat, tput, RT arrays to file:
-	// write_arr_to_file(lat_scan_lcmp_arr, "Latency_Scan_LC_LP");
-	// write_arr_to_file(tput_scan_lcmp_arr, "Tput_Scan_LC_LP");
-
-	// write_arr_to_file(lat_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Latency_Scan_MapCB_MapU_NavP_NavC_LP");
-	// write_arr_to_file(tput_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Tput_Scan_MapCB_MapU_NavP_NavC_LP");
-	
-	// write_arr_to_file(lat_scan_mapCB_navCmd_arr, "Latency_Scan_MapCB_NavCmd_LP");
-	// write_arr_to_file(tput_scan_mapCB_navCmd_arr, "Tput_Scan_MapCB_NavCmd_LP");
-
-	// write_arr_to_file(lat_scan_mapCB_navPlan_navCmd_arr, "Latency_Scan_MapCB_NavPlan_NavCmd_LP");
-	// write_arr_to_file(tput_scan_mapCB_navPlan_navCmd_arr, "Tput_Scan_MapCB_NavPlan_NavCmd_LP");
-
-	// write_arr_to_file(rt_scan_lcmp_arr, "RT_Scan_LC_LP");
-	// write_arr_to_file(rt_scan_mapCB_navCmd_arr, "RT_Scan_MapCB_NavCmd_LP");
-	// write_arr_to_file(rt_scan_mapCB_navPlan_navCmd_arr, "RT_Scan_MapCB_NavPlan_NavCmd_LP");
-	// write_arr_to_file(rt_scan_mapCB_mapUpd_navPlan_navCmd_arr, "RT_Scan_MapCB_NavPlan_NavCmd_LP");
 }
 
 void RobotOperator::initTrajTable()
@@ -284,31 +295,30 @@ void RobotOperator::receiveCommand(const nav2d_operator::cmd::ConstPtr& msg)
 	mDriveMode = msg->Mode;
 
 	last_scan_mapCB_mapUpd_navPlan_navCmd_recv = msg->LastScanTSScanMapCBMapUpdNavPlanNavCmd;
-	last_scan_mapCB_navCmd_recv = msg->LastScanTSScanMapCBNavCmd;
-	last_scan_mapCB_navPlan_navCmd_recv = msg->LastScanTSScanMapCBNavPlanNavCmd;
+        last_scan_mapCB_navCmd_recv = msg->LastScanTSScanMapCBNavCmd;
+        last_scan_mapCB_navPlan_navCmd_recv = msg->LastScanTSScanMapCBNavPlanNavCmd;
 
-	ROS_WARN("NAV2D : RobotOperator got command : direction %f, velocity %f, MODE : %i, with Scan input wrt Scan-MapCB-MapU-NavP-NavC-LP TS: %f, Scan input wrt S-MapCB-NavC-LP %f, Scan input wrt S-MapCB-NavP-NavC-LP %f", mDesiredDirection, mDesiredVelocity, mDriveMode, last_scan_mapCB_mapUpd_navPlan_navCmd_recv, last_scan_mapCB_navCmd_recv, last_scan_mapCB_navPlan_navCmd_recv);
+        ROS_ERROR("NAV2D : RobotOperator got command : direction %f, velocity %f, MODE : %i, with Scan input wrt Scan-MapCB-MapU-NavP-NavC-LP TS: %f, Scan input wrt S-MapCB-NavC-LP %f, Scan input wrt S-MapCB-NavP-NavC-LP %f", mDesiredDirection, mDesiredVelocity, mDriveMode, last_scan_mapCB_mapUpd_navPlan_navCmd_recv, last_scan_mapCB_navCmd_recv, last_scan_mapCB_navPlan_navCmd_recv);
 }
 
 void RobotOperator::executeCommand()
 {
+	// ROS_ERROR("In RobotOperator executeCmd!!");
 	struct timespec exec_start, exec_end;
-	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &exec_start);
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &exec_start);	
+
+
 	// 1. Get a copy of the costmap to work on.
 	mCostmap = mLocalMap->getCostmap();
-	boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(mCostmap->getMutex()));
-	
-	// ROS_WARN("IN RobotOperator::execCOmmand : Got lock on LC!!");
-
-	// For measuring RT:
-	double using_scan_lcmp_ts = mCostmap->getLatestObsTSUsed();
-	double using_scan_mapCB_mapUpd_navPlan_navCmd_ts = last_scan_mapCB_mapUpd_navPlan_navCmd_recv;
-	double using_s_mapCB_navC_ts = last_scan_mapCB_navCmd_recv;
-	double using_s_mapCB_navP_navC_ts = last_scan_mapCB_navPlan_navCmd_recv;
-	// TODO: see if maybe need to lock or create local copies of DesiredDirection, DesiredVelocity and DriveMode?
-
+    boost::unique_lock<costmap_2d::Costmap2D::mutex_t> lock(*(mCostmap->getMutex()));
 	double bestDirection, d;
 	
+	// For measuring RT:
+        double using_scan_lcmp_ts = mCostmap->getLatestObsTSUsed();
+        double using_scan_mapCB_mapUpd_navPlan_navCmd_ts = last_scan_mapCB_mapUpd_navPlan_navCmd_recv;
+        double using_s_mapCB_navC_ts = last_scan_mapCB_navCmd_recv;
+        double using_s_mapCB_navP_navC_ts = last_scan_mapCB_navPlan_navCmd_recv;
+
 	// 2. Set velocity and direction depending on drive mode
 	switch(mDriveMode)
 	{
@@ -334,17 +344,6 @@ void RobotOperator::executeCommand()
 	
 	sensor_msgs::PointCloud* originalCloud = getPointCloud(mCurrentDirection, mDesiredVelocity);
 	sensor_msgs::PointCloud transformedCloud;
-
-	// ROS_WARN("in nav2d::OPERATOR execCOmmand : transform bw OdomFrame %s and originalPointCloud Frame %s", mOdometryFrame.c_str(), originalCloud->header.frame_id.c_str() );
-
-	geometry_msgs::PointStamped bl_origin;
-
-	geometry_msgs::PointStamped odom_origin;
-	odom_origin.header.frame_id = mOdometryFrame;
-	odom_origin.header.stamp = originalCloud->header.stamp;
-	odom_origin.point.x = 0;
-	odom_origin.point.y = 0;
-	odom_origin.point.z = 0;
 
 	try
 	{
@@ -408,7 +407,6 @@ void RobotOperator::executeCommand()
 		sensor_msgs::PointCloud* originalPlanCloud = getPointCloud(mDesiredDirection, mDesiredVelocity);
 		sensor_msgs::PointCloud transformedPlanCloud;
 
-		// ROS_WARN("in nav2d::OPERATOR execCOmmand : transform bw OdomFrame %s and originalPlan PointCloud Frame %s", mOdometryFrame.c_str(), originalPlanCloud->header.frame_id.c_str() );
 		try
 		{
 			mTfListener.transformPointCloud(mOdometryFrame,*originalPlanCloud,transformedPlanCloud);
@@ -478,173 +476,234 @@ void RobotOperator::executeCommand()
 	mControlPublisher.publish(controlMsg);
 
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &exec_end);
-	double t = get_time_diff(exec_start, exec_end);
-	operator_loop_times.push_back(t);
-	operator_loop_ts.push_back(ros::Time::now().toSec());
+	double exec_rt_end = get_time_now();
+        double t = get_time_diff(exec_start, exec_end);
+        operator_loop_times.push_back(t);
+        operator_loop_ts.push_back(exec_rt_end);
 
-	// For measuring RT:
-	// Calucate Latency wrt all chains
-	double lat_scan_lcmp = (ros::Time::now().toSec() - using_scan_lcmp_ts);
-	if (lat_scan_lcmp > 2.0)
-		ROS_WARN("Latency weird wrt Scan-LC-LP : using_scan_lcmp_ts : %f", using_scan_lcmp_ts);
+        // For measuring RT:
+        // Calucate Latency wrt all chains
 
-	double lat_scan_mapCB_mapUpd_navPlan_navCmd = (ros::Time::now().toSec() - using_scan_mapCB_mapUpd_navPlan_navCmd_ts);
-	double lat_scan_mapCB_navCmd = (ros::Time::now().toSec() - using_s_mapCB_navC_ts);
-	double lat_scan_mapCB_navPlan_navCmd = (ros::Time::now().toSec() - using_s_mapCB_navP_navC_ts);
+	// double lat_scan_lcmp = (ros::Time::now().toSec() - using_scan_lcmp_ts);
+        // double lat_scan_mapCB_mapUpd_navPlan_navCmd = (ros::Time::now().toSec() - using_scan_mapCB_mapUpd_navPlan_navCmd_ts);
+        // double lat_scan_mapCB_navCmd = (ros::Time::now().toSec() - using_s_mapCB_navC_ts);
+        // double lat_scan_mapCB_navPlan_navCmd = (ros::Time::now().toSec() - using_s_mapCB_navP_navC_ts);
+
+	/*
+	boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
+        boost::chrono::system_clock::duration tse = now.time_since_epoch();
+	//using system_clock to measure latency:
+	unsigned long long ct = boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() - (1603000000000);
+	double time_now = ct / (double)(1000.0);
+	*/	
+
+	double time_now = get_time_now();
 	
+	double lat_scan_lcmp = time_now - using_scan_lcmp_ts;
+	double lat_scan_mapCB_navCmd = time_now - using_s_mapCB_navC_ts; 
+	double lat_scan_mapCB_navPlan_navCmd = time_now - using_s_mapCB_navP_navC_ts;
+	double lat_scan_mapCB_mapUpd_navPlan_navCmd = time_now - using_scan_mapCB_mapUpd_navPlan_navCmd_ts;
+
+	if (lat_scan_lcmp > 2.0)
+                ROS_ERROR("Latency weird wrt Scan-LC-LP : using_scan_lcmp_ts : %f", using_scan_lcmp_ts);
+
+
 	// For measuring RT:
-	// See if this Operator output was new wrt any chain:
-	if ((using_scan_lcmp_ts > last_scan_lcmp_ts) && (lat_scan_lcmp < 100.0))
-	{
-		lat_scan_lcmp_arr.push_back(lat_scan_lcmp);
+        // See if this Operator output was new wrt any chain:
+        if ((using_scan_lcmp_ts > last_scan_lcmp_ts) && (lat_scan_lcmp < 100.0))
+        {
+                lat_scan_lcmp_arr.push_back(lat_scan_lcmp);
+		ts_scan_lcmp_arr.push_back(time_now);
+		count_scan_lcmp += 1;
 
-		if (last_scan_lcmp_out > 0.0)
+                if (last_scan_lcmp_out > 0.0)
+                {
+                        double tput_scan_lcmp = time_now - last_scan_lcmp_out;
+			if (tput_scan_lcmp > 0.15)
+				ROS_WARN("RobotOperator: CC Tput mor than 0.15 : %f, last_out: %f", tput_scan_lcmp, last_scan_lcmp_out);
+                        tput_scan_lcmp_arr.push_back(tput_scan_lcmp);
+                }
+
+                // if (tput_scan_lcmp_arr.size() > 2)
+                if (count_scan_lcmp > 1)
 		{
-			double tput_scan_lcmp = ros::Time::now().toSec() - last_scan_lcmp_out;
-			tput_scan_lcmp_arr.push_back(tput_scan_lcmp);
-		}
+                        // calculate RT
+                        double rt = time_now - last_scan_lcmp_ts;
+                        rt_scan_lcmp_arr.push_back(rt);
+                }
 
-		if (tput_scan_lcmp_arr.size() > 2)
-		{
-			// calculate RT
-			double rt = ros::Time::now().toSec() - last_scan_lcmp_ts;
-			rt_scan_lcmp_arr.push_back(rt);
-		}
-
-		last_scan_lcmp_ts = using_scan_lcmp_ts;
-		last_scan_lcmp_out = ros::Time::now().toSec();
-	}
+                last_scan_lcmp_ts = using_scan_lcmp_ts;
+                // last_scan_lcmp_out = ros::Time::now().toSec();
+		last_scan_lcmp_out = time_now;
+        }
 
 	if ( (using_scan_mapCB_mapUpd_navPlan_navCmd_ts > last_scan_mapCB_mapUpd_navPlan_navCmd_ts) && (lat_scan_mapCB_mapUpd_navPlan_navCmd < 100.0) )
-	{
-		// Note : the last value in array is the first latency : which depends on when was Navigator goals started wrt scans, So ignore that.
-		lat_scan_mapCB_mapUpd_navPlan_navCmd_arr.push_back(lat_scan_mapCB_mapUpd_navPlan_navCmd);
-		ROS_WARN("Adding to Latency wrt LONG chain!! Using scan TS %f, Lat: %f", using_scan_mapCB_mapUpd_navPlan_navCmd_ts, lat_scan_mapCB_mapUpd_navPlan_navCmd);
+        {
+                // Note : the last value in array is the first latency : which depends on when was Navigator goals started wrt scans, So ignore that.
+                lat_scan_mapCB_mapUpd_navPlan_navCmd_arr.push_back(lat_scan_mapCB_mapUpd_navPlan_navCmd);
+		ts_scan_mapCB_mapUpd_navPlan_navCmd_arr.push_back(time_now);
+		count_scan_mapCB_mapUpd_navPlan_navCmd += 1;
 
-		if (last_scan_mapCB_mapUpd_navPlan_navCmd_out > 0.0)
+                ROS_ERROR("Adding to Latency wrt LONG chain!! Using scan TS %f, Lat: %f", using_scan_mapCB_mapUpd_navPlan_navCmd_ts, lat_scan_mapCB_mapUpd_navPlan_navCmd);
+
+                if (last_scan_mapCB_mapUpd_navPlan_navCmd_out > 0.0)
+                {
+                        double tput_scan_mapCB_mapU_navP_navC = time_now - last_scan_mapCB_mapUpd_navPlan_navCmd_out;
+                        tput_scan_mapCB_mapUpd_navPlan_navCmd_arr.push_back(tput_scan_mapCB_mapU_navP_navC);
+                        ROS_ERROR("Adding to TPUT wrt LONG chain!! , Last out %f, Tput : %f", last_scan_mapCB_mapUpd_navPlan_navCmd_out, tput_scan_mapCB_mapU_navP_navC);
+                }
+
+                // if (tput_scan_mapCB_mapUpd_navPlan_navCmd_arr.size() > 2)
+                if (count_scan_mapCB_mapUpd_navPlan_navCmd > 1)
 		{
-			double tput_scan_mapCB_mapU_navP_navC = ros::Time::now().toSec() - last_scan_mapCB_mapUpd_navPlan_navCmd_out;
-			tput_scan_mapCB_mapUpd_navPlan_navCmd_arr.push_back(tput_scan_mapCB_mapU_navP_navC);
-			ROS_WARN("Adding to TPUT wrt LONG chain!! , Last out %f, Tput : %f", last_scan_mapCB_mapUpd_navPlan_navCmd_out, tput_scan_mapCB_mapU_navP_navC);
-		}
+                        // calculate RT
+                        double rt = time_now - last_scan_mapCB_mapUpd_navPlan_navCmd_ts;
+                        rt_scan_mapCB_mapUpd_navPlan_navCmd_arr.push_back(rt);
+                }
 
-		if (tput_scan_mapCB_mapUpd_navPlan_navCmd_arr.size() > 2)
-		{
-			// calculate RT
-			double rt = ros::Time::now().toSec() - last_scan_mapCB_mapUpd_navPlan_navCmd_ts;
-			rt_scan_mapCB_mapUpd_navPlan_navCmd_arr.push_back(rt);
-		}
+                last_scan_mapCB_mapUpd_navPlan_navCmd_ts = using_scan_mapCB_mapUpd_navPlan_navCmd_ts;
+                last_scan_mapCB_mapUpd_navPlan_navCmd_out = time_now;
+        }
 
-		last_scan_mapCB_mapUpd_navPlan_navCmd_ts = using_scan_mapCB_mapUpd_navPlan_navCmd_ts;
-		last_scan_mapCB_mapUpd_navPlan_navCmd_out = ros::Time::now().toSec();
-	}
 	
 	if ( (using_s_mapCB_navC_ts > last_scan_mapCB_navCmd_ts) && (lat_scan_mapCB_navCmd < 100.0) )
-	{
-		lat_scan_mapCB_navCmd_arr.push_back(lat_scan_mapCB_navCmd);
-		ROS_WARN("Adding Latency wrt S-MapCB-NavC-LP chain!! Using scanTS %f, Lat %f", using_s_mapCB_navC_ts, lat_scan_mapCB_navCmd);
+        {
+                lat_scan_mapCB_navCmd_arr.push_back(lat_scan_mapCB_navCmd);
+		ts_scan_mapCB_navCmd_arr.push_back(time_now);
+		count_scan_mapCB_navCmd += 1;
 
-		if (last_scan_mapCB_navCmd_out > 0.0)
+                ROS_ERROR("Adding Latency wrt S-MapCB-NavC-LP chain!! Using scanTS %f, Lat %f", using_s_mapCB_navC_ts, lat_scan_mapCB_navCmd);
+
+                if (last_scan_mapCB_navCmd_out > 0.0)
+                {
+                        double tput = time_now - last_scan_mapCB_navCmd_out;
+                        tput_scan_mapCB_navCmd_arr.push_back(tput);
+                        ROS_ERROR("Adding tput wrt S-MapCB-NavC-LP!!, Last out %f, Tput %f", last_scan_mapCB_navCmd_out, tput);
+                }
+
+                // if (tput_scan_mapCB_navCmd_arr.size() > 2)
+                if (count_scan_mapCB_navCmd > 1)
 		{
-			double tput = ros::Time::now().toSec() - last_scan_mapCB_navCmd_out;
-			tput_scan_mapCB_navCmd_arr.push_back(tput);
-			ROS_WARN("Adding tput wrt S-MapCB-NavC-LP!!, Last out %f, Tput %f", last_scan_mapCB_navCmd_out, tput);
-		}
+                        // RT
+                        double rt = time_now - last_scan_mapCB_navCmd_ts;
+                        rt_scan_mapCB_navCmd_arr.push_back(rt);
+                }
 
-		if (tput_scan_mapCB_navCmd_arr.size() > 2)
-		{
-			// RT
-			double rt = ros::Time::now().toSec() - last_scan_mapCB_navCmd_ts;
-			rt_scan_mapCB_navCmd_arr.push_back(rt);
-		}
-
-		last_scan_mapCB_navCmd_ts = using_s_mapCB_navC_ts;
-		last_scan_mapCB_navCmd_out = ros::Time::now().toSec();
-	}
+                last_scan_mapCB_navCmd_ts = using_s_mapCB_navC_ts;
+                last_scan_mapCB_navCmd_out = time_now;
+        }
 
 	if ( (using_s_mapCB_navP_navC_ts > last_scan_mapCB_navPlan_navCmd_ts) & (lat_scan_mapCB_navPlan_navCmd < 100.0) )
-	{
-		lat_scan_mapCB_navPlan_navCmd_arr.push_back(lat_scan_mapCB_navPlan_navCmd);
-		ROS_WARN("Adding Latency wrt S-MapCB-NavP-NavC-LP!! Using scanTS %f, Lat %f", using_s_mapCB_navP_navC_ts, lat_scan_mapCB_navPlan_navCmd);
+        {
+                lat_scan_mapCB_navPlan_navCmd_arr.push_back(lat_scan_mapCB_navPlan_navCmd);
+                ts_scan_mapCB_navPlan_navCmd_arr.push_back(time_now);
+		count_scan_mapCB_navPlan_navCmd += 1;
 
-		if (last_scan_mapCB_navPlan_navCmd_out > 0.0)
+		ROS_ERROR("Adding Latency wrt S-MapCB-NavP-NavC-LP!! Using scanTS %f, Lat %f", using_s_mapCB_navP_navC_ts, lat_scan_mapCB_navPlan_navCmd);
+
+                if (last_scan_mapCB_navPlan_navCmd_out > 0.0)
+                {
+                        double tput = time_now - last_scan_mapCB_navPlan_navCmd_out;
+                        tput_scan_mapCB_navPlan_navCmd_arr.push_back(tput);
+                        ROS_ERROR("Adding tput wrt S-MapCB-NavP-NavC-LP!!, Last out %f, Tput %f", last_scan_mapCB_navPlan_navCmd_out, tput);
+                }
+
+                // if (tput_scan_mapCB_navPlan_navCmd_arr.size() > 2)
+                if (count_scan_mapCB_navPlan_navCmd > 1)
 		{
-			double tput = ros::Time::now().toSec() - last_scan_mapCB_navPlan_navCmd_out;
-			tput_scan_mapCB_navPlan_navCmd_arr.push_back(tput);
-			ROS_WARN("Adding tput wrt S-MapCB-NavP-NavC-LP!!, Last out %f, Tput %f", last_scan_mapCB_navPlan_navCmd_out, tput);
-		}
+                        // RT
+                        double rt = time_now - last_scan_mapCB_navPlan_navCmd_ts;
+                        rt_scan_mapCB_navPlan_navCmd_arr.push_back(rt);
+                }
 
-		if (tput_scan_mapCB_navPlan_navCmd_arr.size() > 2)
-		{
-			// RT
-			double rt = ros::Time::now().toSec() - last_scan_mapCB_navPlan_navCmd_ts;
-			rt_scan_mapCB_navPlan_navCmd_arr.push_back(rt);
-		}
-
-		last_scan_mapCB_navPlan_navCmd_ts = using_s_mapCB_navP_navC_ts;
-		last_scan_mapCB_navPlan_navCmd_out = ros::Time::now().toSec();
-	}
+                last_scan_mapCB_navPlan_navCmd_ts = using_s_mapCB_navP_navC_ts;
+                last_scan_mapCB_navPlan_navCmd_out = time_now;
+        }
 
 	if (operator_loop_times.size() % 200 == 150)
-	{
-		// write to file
-		std::string ss = "nav2d_operator_loop";
-        write_arrs_to_file(operator_loop_times, operator_loop_ts, ss);
-
-		print_arr(lat_scan_lcmp_arr, "Latency wrt Scan-LC-LP chain");
-		print_arr(tput_scan_lcmp_arr, "Tput wrt Scan-LC-LP chain");
-		print_arr(lat_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Latency wrt Scan-MapCB-MapU-NavP-NavC-LP chain");
-		print_arr(tput_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Tput wrt Scan-MapCB-MapU-NavP-NavC-LP chain");
-		print_arr(lat_scan_mapCB_navCmd_arr, "Latency wrt Scan-MapCB-NavCmd-LP chain");
-		print_arr(tput_scan_mapCB_navCmd_arr, "Tput wrt Scan-MapCB-NavCmd-LP");
-		print_arr(lat_scan_mapCB_navPlan_navCmd_arr, "Latency wrt Scan-MapCB-NavP-NavC-LP chain");
-		print_arr(tput_scan_mapCB_navPlan_navCmd_arr, "Tput wrt Scan-MapCB-NavP-NavC-LP chain");
-
-		print_arr(rt_scan_lcmp_arr, "RT wrt S-LC-LP chain");
-		print_arr(rt_scan_mapCB_navCmd_arr, "RT wrt S-MapCB-NavC-LP chain");
-		print_arr(rt_scan_mapCB_navPlan_navCmd_arr, "RT wrt S-MapCB-NavP-NavC-LP chain");
-		print_arr(rt_scan_mapCB_mapUpd_navPlan_navCmd_arr, "RT wrt S-MapCB-MapU-NavP-NavC-LP chain");
-	
-		write_arr_to_file(lat_scan_lcmp_arr, "Latency_Scan_LC_LP");
-		write_arr_to_file(tput_scan_lcmp_arr, "Tput_Scan_LC_LP");
-
-		write_arr_to_file(lat_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Latency_Scan_MapCB_MapU_NavP_NavC_LP");
-		write_arr_to_file(tput_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Tput_Scan_MapCB_MapU_NavP_NavC_LP");
-		
-		write_arr_to_file(lat_scan_mapCB_navCmd_arr, "Latency_Scan_MapCB_NavCmd_LP");
-		write_arr_to_file(tput_scan_mapCB_navCmd_arr, "Tput_Scan_MapCB_NavCmd_LP");
-
-		write_arr_to_file(lat_scan_mapCB_navPlan_navCmd_arr, "Latency_Scan_MapCB_NavPlan_NavCmd_LP");
-		write_arr_to_file(tput_scan_mapCB_navPlan_navCmd_arr, "Tput_Scan_MapCB_NavPlan_NavCmd_LP");
-
-		write_arr_to_file(rt_scan_lcmp_arr, "RT_Scan_LC_LP");
-		write_arr_to_file(rt_scan_mapCB_navCmd_arr, "RT_Scan_MapCB_NavCmd_LP");
-		write_arr_to_file(rt_scan_mapCB_navPlan_navCmd_arr, "RT_Scan_MapCB_NavPlan_NavCmd_LP");
-		write_arr_to_file(rt_scan_mapCB_mapUpd_navPlan_navCmd_arr, "RT_Scan_MapCB_NavPlan_NavCmd_LP");
+        {
+                // write to file
+                std::string ss = "nav2d_operator_loop";
+        	write_arrs_to_file(operator_loop_times, operator_loop_ts, ss);
 	}
 
+	if (operator_loop_times.size() % 200 == 30)
+        {
+                print_arr(lat_scan_lcmp_arr, "Latency wrt Scan-LC-LP chain");
+                print_arr(tput_scan_lcmp_arr, "Tput wrt Scan-LC-LP chain");
+                print_arr(rt_scan_lcmp_arr, "RT wrt S-LC-LP chain");
+		print_arr(ts_scan_lcmp_arr, "Checking TS...");
+
+		write_arr_to_file(lat_scan_lcmp_arr, "Latency_Scan_LC_LP");
+                write_arr_to_file(tput_scan_lcmp_arr, "Tput_Scan_LC_LP");
+                write_arr_to_file(rt_scan_lcmp_arr, "RT_Scan_LC_LP");
+		write_arr_to_file(ts_scan_lcmp_arr, "TS_Scan_LC_LP");
+
+	}
+
+	if (operator_loop_times.size() % 200 == 60)
+	{
+		print_arr(lat_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Latency wrt Scan-MapCB-MapU-NavP-NavC-LP chain");
+                print_arr(tput_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Tput wrt Scan-MapCB-MapU-NavP-NavC-LP chain");
+                print_arr(rt_scan_mapCB_mapUpd_navPlan_navCmd_arr, "RT wrt S-MapCB-MapU-NavP-NavC-LP chain");
+		
+		write_arr_to_file(lat_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Latency_Scan_MapCB_MapU_NavP_NavC_LP");
+                write_arr_to_file(tput_scan_mapCB_mapUpd_navPlan_navCmd_arr, "Tput_Scan_MapCB_MapU_NavP_NavC_LP");
+                write_arr_to_file(rt_scan_mapCB_mapUpd_navPlan_navCmd_arr, "RT_Scan_MapCB_MapU_NavP_NavC_LP");
+		write_arr_to_file(ts_scan_mapCB_mapUpd_navPlan_navCmd_arr, "TS_Scan_MapCB_MapU_NavP_NavC_LP");
+
+	}
+
+	if (operator_loop_times.size() % 200 == 90)
+	{
+                print_arr(lat_scan_mapCB_navCmd_arr, "Latency wrt Scan-MapCB-NavCmd-LP chain");
+                print_arr(tput_scan_mapCB_navCmd_arr, "Tput wrt Scan-MapCB-NavCmd-LP");
+                print_arr(rt_scan_mapCB_navCmd_arr, "RT wrt S-MapCB-NavC-LP chain");
+        
+	        write_arr_to_file(lat_scan_mapCB_navCmd_arr, "Latency_Scan_MapCB_NavCmd_LP");
+                write_arr_to_file(tput_scan_mapCB_navCmd_arr, "Tput_Scan_MapCB_NavCmd_LP");
+                write_arr_to_file(rt_scan_mapCB_navCmd_arr, "RT_Scan_MapCB_NavCmd_LP");
+		write_arr_to_file(ts_scan_mapCB_navCmd_arr, "TS_Scan_MapCB_NavCmd_LP");
+
+	}
+
+	if (operator_loop_times.size() % 200 == 120)
+	{
+	        print_arr(lat_scan_mapCB_navPlan_navCmd_arr, "Latency wrt Scan-MapCB-NavP-NavC-LP chain");
+                print_arr(tput_scan_mapCB_navPlan_navCmd_arr, "Tput wrt Scan-MapCB-NavP-NavC-LP chain");
+                print_arr(rt_scan_mapCB_navPlan_navCmd_arr, "RT wrt S-MapCB-NavP-NavC-LP chain");
+
+                write_arr_to_file(lat_scan_mapCB_navPlan_navCmd_arr, "Latency_Scan_MapCB_NavPlan_NavCmd_LP");
+                write_arr_to_file(tput_scan_mapCB_navPlan_navCmd_arr, "Tput_Scan_MapCB_NavPlan_NavCmd_LP");
+                write_arr_to_file(rt_scan_mapCB_navPlan_navCmd_arr, "RT_Scan_MapCB_NavPlan_NavCmd_LP");
+		write_arr_to_file(ts_scan_mapCB_navPlan_navCmd_arr, "TS_Scan_MapCB_NavPlan_NavCmd_LP");
+        }
+	std_msgs::Header hdr;
+	exec_end_cc_pub.publish(hdr);
 }
 
 void write_arrs_to_file(std::vector<double>& times, std::vector<double>& ts, std::string s)
 {
-	std::string ename;
-	ros::NodeHandle nh;
-	nh.param<std::string>("/expt_name", ename, "");
+        std::string ename;
+        ros::NodeHandle nh;
+        nh.param<std::string>("/expt_name", ename, "");
 
-	std::ofstream of;
-    of.open("/home/aditi/robot_" + s + "_stats_" + ename + ".txt", std::ios_base::app);
-	of << "\n" << s << " times: ";
-	int sz = times.size();
-	for (int i = 0; i < sz; i++)
-		of << times[i] << " ";
-	of << "\n" << s << " ts: ";
-	for (int i = 0; i < sz; i++)
-		of << ts[i] << " ";
+        int sz = times.size();
+	if (sz > 0)
+	{
+		std::ofstream of;
+    		of.open("/home/ubuntu/robot_" + s + "_stats_" + ename + ".txt", std::ios_base::app);
+        	of << "\n" << s << " times: ";
+        	for (int i = 0; i < sz; i++)
+                	of << times[i] << " ";
+        	of << "\n" << s << " ts: ";
+        	for (int i = 0; i < sz; i++)
+                	of << std::to_string(ts[i]) << " ";
 
-	times.clear();
-	ts.clear();
+        	times.clear();
+        	ts.clear();
+	}
 }
-
 
 int RobotOperator::calculateFreeSpace(sensor_msgs::PointCloud* cloud)
 {	
@@ -672,9 +731,106 @@ int RobotOperator::calculateFreeSpace(sensor_msgs::PointCloud* cloud)
 
 double RobotOperator::evaluateAction(double direction, double velocity, bool debug)
 {
+	/*
 	sensor_msgs::PointCloud* originalCloud = getPointCloud(direction, velocity);
 	sensor_msgs::PointCloud transformedCloud;
-	// ROS_WARN("in nav2d::OPERATOR execCOmmand : transform bw OdomFrame %s and [evaluateAction] original PointCloud Frame %s", mOdometryFrame.c_str(), originalCloud->header.frame_id.c_str() );
+	try
+	{
+		mTfListener.transformPointCloud(mOdometryFrame, *originalCloud,transformedCloud);
+	}
+	catch(tf::TransformException ex)
+	{
+		ROS_ERROR("%s", ex.what());
+		return 1;
+	}
+	
+	double valueDistance = 0.0;    // How far can the robot move in this direction?
+	double valueSafety = 0.0;      // How safe is it to move in that direction?
+	double valueConformance = 0.0; // How conform is it with the desired direction?
+	
+	double freeSpace = 0.0;
+	double decay = 1.0;
+	unsigned char cell_cost;
+	double safety;
+	
+	// Calculate safety value
+	int length = transformedCloud.points.size();
+	bool gettingBetter = true;
+	for(int i = 0; i < length; i++)
+	{
+		unsigned int mx, my;
+		if(mCostmap->worldToMap(transformedCloud.points[i].x, transformedCloud.points[i].y, mx, my))
+		{
+			cell_cost = mCostmap->getCost(mx,my);
+			if(cell_cost >= costmap_2d::INSCRIBED_INFLATED_OBSTACLE)
+			{
+				// Trajectory hit an obstacle
+				break;
+			}
+		}
+		freeSpace += mRasterSize;
+			
+		safety = costmap_2d::INSCRIBED_INFLATED_OBSTACLE - (cell_cost * decay);
+		if(gettingBetter)
+		{
+			if(safety >= valueSafety) valueSafety = safety;
+			else gettingBetter = false;
+		}else
+		{
+			if(safety < valueSafety) valueSafety = safety;
+		}
+		decay *= mSafetyDecay;
+	}
+	
+	double action_value = 0.0;
+	double normFactor = 0.0;
+	valueSafety /= costmap_2d::INSCRIBED_INFLATED_OBSTACLE;
+	
+	// Calculate distance value
+	if(freeSpace >= mMaxFreeSpace)
+	{
+		freeSpace = mMaxFreeSpace;
+	}
+	valueDistance = freeSpace / std::min(mMaxFreeSpace, length*mRasterSize);
+	normFactor = mDistanceWeight + mSafetyWeight;
+
+	if(mRecoverySteps == 0)
+	{
+		// Calculate continuety value
+		double valueContinue = mCurrentDirection - direction;
+		if(valueContinue < 0) valueContinue *= -1;
+		valueContinue = 1.0 / (1.0 + exp(pow(valueContinue-0.5,15)));
+		
+		// Calculate conformance value
+		double desired_sq = (mDesiredDirection > 0) ? mDesiredDirection * mDesiredDirection : mDesiredDirection * -mDesiredDirection;
+		double evaluated_sq = (direction > 0) ? direction * direction : direction * -direction;
+		valueConformance = cos(PI / 2.0 * (desired_sq - evaluated_sq)); // cos(-PI/2 ... +PI/2) --> [0 .. 1 .. 0]
+		
+		action_value += valueConformance * mConformanceWeight;
+		action_value += valueContinue * mContinueWeight;
+		normFactor += mConformanceWeight + mContinueWeight;
+	}
+	
+	action_value += valueDistance * mDistanceWeight;
+	action_value += valueSafety * mSafetyWeight;
+	action_value /=  normFactor;
+	
+	if(debug)
+	{
+		geometry_msgs::Vector3 cost_msg;
+		cost_msg.x = valueDistance;
+		cost_msg.y = valueSafety;
+//		cost_msg.y = valueContinue;
+		cost_msg.z = valueConformance;
+		mCostPublisher.publish(cost_msg); 
+	}
+	
+	return action_value;
+	*/
+
+	// TRYING ros_melodic branch code:
+	sensor_msgs::PointCloud* originalCloud = getPointCloud(direction, velocity);
+	sensor_msgs::PointCloud transformedCloud;
 	try
 	{
 		mTfListener.transformPointCloud(mOdometryFrame, *originalCloud,transformedCloud);

@@ -2,7 +2,6 @@ include "hokuyo.inc"
 
 define pioneer3at position
 (
-	
 	color "red"          # Default color.
 	drive "diff"         # Differential steering model.
 	gui_nose 1           # Draw a nose on the robot so we can see which way it points

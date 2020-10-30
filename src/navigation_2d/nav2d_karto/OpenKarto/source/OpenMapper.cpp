@@ -484,7 +484,6 @@ namespace karto
     if (pOpenMapper->IsMultiThreaded())
     {
 #ifdef USE_TBB
-      std::cerr << "IN OpenMapper:: ScanMatcher::create : USE_TBB is TRUE!! \n";
       pScanMatcher->m_pScanMatcherGridSetBank = new ScanMatcherGridSetBank(10, gridSize, gridSize, resolution, smearDeviation, searchSpaceSideSize, searchSpaceSideSize);                                                                         
 #else
       pScanMatcher->m_pScanMatcherGridSetBank = NULL;
@@ -2271,16 +2270,13 @@ namespace karto
   {
     if (pObject == NULL)
     {
-      std::cerr << "OpenMapper Process returned False cuz OBject=NULL" << std::endl;
       return false;
     }
-    std::cout << "In OpenMapper::Process!!!!!!" << std::endl;
     
     kt_bool isObjectProcessed = Module::Process(pObject);
 
     if (IsLaserRangeFinder(pObject))
     {
-      std::cout << "In OpenMapper::Process!!!!!! OBject was a LaserRangeFinder" << std::endl;
       LaserRangeFinder* pLaserRangeFinder = dynamic_cast<LaserRangeFinder*>(pObject);
  
       if (m_Initialized == false)
@@ -2298,7 +2294,6 @@ namespace karto
     LocalizedObject* pLocalizedObject = dynamic_cast<LocalizedObject*>(pObject);
     if (pLocalizedObject != NULL)
     {
-      std::cout << "In OpenMapper::Process!!!!!! Object cast into LocalizedObject" << std::endl;
       LocalizedLaserScan* pScan = dynamic_cast<LocalizedLaserScan*>(pObject);
       if (pScan != NULL)
       {
@@ -2307,7 +2302,6 @@ namespace karto
         // validate scan
         if (pLaserRangeFinder == NULL)
         {
-          std::cerr << "OpenMapper Process failed cuz cant find Laser for scan!! \n";
           return false;
         }
         
@@ -2338,7 +2332,6 @@ namespace karto
       // scan is outside minimum boundary or if heading is larger then minimum heading)
       if (pScan == NULL || (!HasMovedEnough(pScan, pLastScan) && !pScan->IsGpsReadingValid()))
       {
-        std::cout << "In OpenMapper::Process!!!!!! Checking custom data cuz o.w. useless LOL" << std::endl;
         if (pLocalizedObject->HasCustomItem() == true)
         {
           m_pMapperSensorManager->AddLocalizedObject(pLocalizedObject);
@@ -2349,8 +2342,7 @@ namespace karto
           
           return true;
         }
-        // std::cerr << "OpenMapper Process false cuz null/NotMovedEnough/GPSInvalid and NO Custom Item!! \n";
-
+        
         return false;
       }
       
@@ -2375,7 +2367,6 @@ namespace karto
       
       if (m_pUseScanMatching->GetValue())
       {
-        std::cout << "In OpenMapper::Process!!!!!!, UseScanMatching is True, Already done AddLocalizedObject, Will AddRunningScan & TryCloseLoop!!!"  << std::endl;
         // add to graph
         m_pGraph->AddVertex(pScan);
         m_pGraph->AddEdges(pScan, covariance);

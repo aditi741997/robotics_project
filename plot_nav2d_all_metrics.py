@@ -10,6 +10,7 @@ efs = [sys.argv[1] ] #, sys.argv[2]] #, sys.argv[3]] #e.g. tb3_gz_5c_scanF2, ...
 
 param_varying = [sys.argv[3], sys.argv[4] ] #, sys.argv[6]]
 
+
 # Plot Median RT
 medrt_S_LC_LP = [0.0 for x in range(num_e)]
 medrt_S_MapCB_NavC_LP = [0.0 for x in range(num_e)]
@@ -108,11 +109,21 @@ def get_room_no(x,y):
 
 def get_obstacle_no_stage(x,y):
     if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
-        return 1 # robot2 is line_no+1
+        return 1 # robot1 is line_no+1
     elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
-        return 2 # robot3 is line_no+2
+        return 2 # robot2 is line_no+2
     elif (x >= 1) and (x <= 7) and (y >= 6) and (y <= 12) :
-        return 3 # robot4 is line_no+3
+        return 3 # robot3 is line_no+3
+    elif (x >= 0.9) and (x <= 7) and (y >= 1) and (y <= 5.5):
+	return 4 # robot4 is line_no+4
+    elif (x >= 9) and (x <= 15) and (y <= -2.5) and (y >= -7):
+	return 5
+    elif (x <= 0) and (x >= -8) and (y >= 9) and (y <= 13):
+	return 6
+    elif (x <= -8) and (x >= -16) and (y >= 9) and (y <= 13):
+	return 7
+    elif (x >= 0) and (x <= 4.5) and (y >= -13) and (y <= -8):
+	return 8
     else:
         return -1
 
@@ -126,15 +137,102 @@ def get_dist(x1,y1,x2,y2):
 # room5 :
 # room6 : 
 
+def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
+	new_m_arr = []
+	new_ts_arr = []
+	start_arr = []
+	# start from startt, any reading 
+	i = 0
+	curr_ts = start_t
+	print "#### Func aggregate_over_time called with params: ", slot, start_t, end_t
+	print "Len of array to be aggregated: ", len(m_arr), " 0th TS:", ts_arr[0]
+	# aggregate until TS > curr_ts + slot. 
+	while (curr_ts + slot) < end_t:
+		# collect all those in this slot.
+		this_slot = []
+		this_slot_ts = []
+		while i < len(m_arr):
+			if ts_arr[i] < curr_ts:
+				i += 1
+			elif ts_arr[i] <= (curr_ts + slot):
+				this_slot.append(m_arr[i])
+				this_slot_ts.append(ts_arr[i])
+				# print "Adding ind ", i, " TS: ", ts_arr[i], " to slot from ", curr_ts
+				i += 1
+			else:
+				break
+		# print "Done with this slot, moving to next, i=", i
+		curr_ts += slot
+		start_arr.append(curr_ts)
+		new_m_arr.append(this_slot)
+		new_ts_arr.append(this_slot_ts)
+	# returns aggregated arr of arr, arr of end-TS of slots, arr of arr of TS
+	return new_m_arr, start_arr, new_ts_arr
+
 avg_obst_dist_arr = [0.0 for x in range(num_e)]
 obst_dist_arr = [[] for x in range(num_e)]
 
-num_obst = 3
+num_obst = int(sys.argv[6])
+
+def plot_obstDist_agg(dist, ts, start_t, end_t, slot):
+	agg1_obst_dist_arr, agg1_start_arr, agg1_obst_ts_arr = aggregate_over_time(dist, ts, start_t, slot, end_t)
+        # plot with start_arr on x, avg obst dist on y.
+        agg1_obst_AvgDist_arr = []
+        agg1_obst_25pDist_arr = []
+        agg1_obst_aggStart_arr = [] # remove the slots where no obstacle near robo.
+        for i in range(len(agg1_obst_dist_arr)):
+                a = []
+                for j in range(len(agg1_obst_dist_arr[i])):
+                        if agg1_obst_dist_arr[i][j] > 0.001:
+                                a.append(agg1_obst_dist_arr[i][j])
+                if len(a) > 0:
+                        agg1_obst_aggStart_arr.append(agg1_start_arr[i])
+                        agg1_obst_AvgDist_arr.append( sum(a)/len(a) )
+                        a.sort()
+                        agg1_obst_25pDist_arr.append( a[( 25*len(a) )/100] )
+	print "Done with all slots, Len arr:", len(agg1_obst_aggStart_arr)	
+
+        plt.plot(agg1_obst_aggStart_arr, agg1_obst_25pDist_arr, 'g*:', markersize=7, label="25ile Dist")
+        plt.plot(agg1_obst_aggStart_arr, agg1_obst_AvgDist_arr, 'b^-.', markersize=7, label="Avg Dist")
+        plt.xlabel('Time')
+        plt.title("Avg/25ile Dist from closest obstacle in " + str(slot) + "s period")
+	plt.ylabel('Distance')
+	plt.legend()
+	plt.show()
+
+def plot_odom_agg(odom, ts, start, end, slot):
+	agg_odom, agg_end, agg_ts = aggregate_over_time(odom, ts, start, slot, end)
+	# fraction of time vel=0, i.e. robot stopped.
+	agg_stopped_frac_arr = []
+	agg_AvgOdom_arr = []
+	agg_end_arr = []
+	for i in range(len(agg_odom)):
+		ct = 0
+		for j in range(len(agg_odom[i])):
+			if agg_odom[i][j] < 0.025:
+				ct += 1	
+		if len(agg_odom[i]) >0:
+			agg_stopped_frac_arr.append(float(ct)/len(agg_odom[i]))
+			agg_AvgOdom_arr.append( sum(agg_odom[i])/len(agg_odom[i]) )
+			agg_end_arr.append( agg_end[i] )
+	plt.plot(agg_end_arr, agg_stopped_frac_arr, 'g*:', markersize=7, label="Speed=0 Fraction")
+	plt.plot(agg_end_arr, agg_AvgOdom_arr, 'b^-.', markersize=7, label="Avg Speed")
+	plt.xlabel('Time')
+	plt.title('Fraction of time with Speed=0 & AvgSpeed in ' + str(slot) + "s periods")
+	plt.ylabel('Speed')
+	plt.legend()
+	plt.show()
+
+
+# TS for starting, ending aggregation:
+start_t = float(sys.argv[7])
+end_t = float(sys.argv[8])
+print "Num obstacles : ", num_obst
 for ei in range(num_e):
     ename = efs[ei]
     avg_obst_d = 0.0
 
-    for run in [150]:
+    for run in [1056]:
         r_avg_obst_dist = 0.0
         num_read = 0
 	# for plotting TimeSeries of ObstDist:
@@ -147,7 +245,7 @@ for ei in range(num_e):
             # split into groups of 6*[]lines. for measure_obstacleDist script.
             # numl = 6*4
             # split into groups of 4lines for stageros.
-            numl = 6*1
+            numl = (num_obst+3)
             print "Reading ", ename, ", run:", run
             for i in range(len(obfl)/numl):
                 # for tb3 - gz:
@@ -165,7 +263,7 @@ for ei in range(num_e):
 		
 		# read TS:
 		pos_st_ts = float(obfl[i*numl].split(' ')[1])
-		pos_rt_ts = float(obfl[i*numl].split(' ')[3])/1000.0                
+		pos_rt_ts = float(obfl[i*numl].split(' ')[3]) # need to divide by 1000 if using boost sys_clock.msec count.                
 
 		# read odom info:
 		vx = float( obfl[i*numl + num_obst + 2].split(' ')[1] )
@@ -203,13 +301,27 @@ for ei in range(num_e):
 	plt.plot(obst_ts_arr, obst_dist_ts_arr, 'bo:', label="ObstDist")
 	plt.plot(obst_ts_arr, obst_room_arr, 'r^-.', label="Obst Id")
 	plt.title('Dist from closest obst')
+	plt.xlabel('Time')
+	plt.ylabel('Dist.')
 	plt.legend()
 	plt.show()
 
+	agg1_slot = 2.0
+	agg2_slot = 10.0
+	plot_obstDist_agg(obst_dist_ts_arr, obst_ts_arr, start_t, end_t, 2.0)
+	plot_obstDist_agg(obst_dist_ts_arr, obst_ts_arr, start_t, end_t, 10.0)
+
+	
 	plt.plot(obst_ts_arr, robo_odom_arr, 'g*:', label="Odom")
+	plt.xlabel('Time')
+	plt.ylabel('Absolute robot speed')
 	plt.title('Robot Velocity')
 	plt.show()
-	
+
+	# agg1_robo_odom_arr, agg1_start_arr, agg1_robo_ts_arr = aggregate_over_time(robo_odom_arr, obst_ts_arr, start_t, 2.0, end_t)
+	plot_odom_agg(robo_odom_arr, obst_ts_arr, start_t, end_t, 2.0)
+	plot_odom_agg(robo_odom_arr, obst_ts_arr, start_t, end_t, 10.0)
+
         if (num_read) > 0:
             avg_obst_d += r_avg_obst_dist/num_read
             print "Avg dist for this run :", r_avg_obst_dist/num_read
@@ -239,6 +351,61 @@ plt.show()
 avg_map_sz = [0 for x in range(num_e)]
 avg_unknown_ratio = [00 for x in range(num_e)]
 
+def plot_coveredArea_agg(new_area_arr, area_ts, start, end, slot):
+	agg_area, agg_end, agg_ts = aggregate_over_time(new_area_arr, area_ts, start, slot, end)
+	agg_area_covered = [ sum(x) for x in agg_area ]
+	plt.plot(agg_end, agg_area_covered, 'b*:', label="New Area Explored")
+	plt.xlabel('Time')
+	plt.ylabel('MapArea in #cells')
+	plt.title('New area Explored per ' + str(slot) + 's period')
+	plt.legend()
+	plt.show()
+
+def get_area_stats(fn):
+	print "In get area stats for file", fn
+	known_area_arr = []
+	known_area_ts = []
+	new_area_arr = []
+	last_known_area = 0.0
+	with open(fn, 'r') as mf:
+            for l in mf.readlines():
+                if 'ratio of unknown/total area' in l:
+                    a = l.split(' ')[-2]
+                    # Later maybe change to just int(a).
+                    mpsz = int(a)
+                    unk_ratio = float(l.split(' ')[-3])/mpsz
+                    known_area = mpsz*(1.0 - unk_ratio)
+		    known_area_arr.append( known_area )
+                    # add TS.
+		    new_area_arr.append(known_area - last_known_area)
+                    # if using ros walltime:
+		    # known_area_ts.append( float(l.split(' ')[1][1:-1] ) )
+		    # using mono time from run1056 onw:
+		    known_area_ts.append( float(l.split(' ')[4]) )
+		    last_known_area = known_area
+	print "Len of known_area_arr : ", len(known_area_arr)
+	plt.plot(known_area_ts, known_area_arr, 'b*:', label="Total Explored Area")
+	plt.title('Area Explored by Robot')
+	plt.xlabel('Time')
+	plt.ylabel('Area, in #cells')
+	plt.legend()
+	plt.show()
+	plt.plot(known_area_ts, new_area_arr, 'g^-.', label="New explored Area")
+	plt.title('New Area Explored by Robot')
+        plt.xlabel('Time')
+        plt.ylabel('Area, in #cells')
+        plt.legend()
+        plt.show()
+	plot_coveredArea_agg(new_area_arr, known_area_ts, start_t, end_t, 2.0)
+	plot_coveredArea_agg(new_area_arr, known_area_ts, start_t, end_t, 10.0)
+	return known_area_arr, new_area_arr, known_area_ts
+
+logs_file = sys.argv[9]
+known_ar_arr, new_ar_arr, ar_ts = get_area_stats(logs_file)
+
+# Aggregate wrt time now.
+
+"""
 for ei in range(num_e):
     ename = efs[ei]
     sum_mpsz = 0
@@ -250,7 +417,9 @@ for ei in range(num_e):
 	known_area_arr = []
 	known_area_ts = []
 
-        with open('nav2d_robot_logs_' + ename + '_run' + str(run) + '.err', 'r') as mf:
+	get_area_stats('nav2d_robot_logs_' + ename + '_run' + str(run) + '.err')
+        
+	with open('nav2d_robot_logs_' + ename + '_run' + str(run) + '.err', 'r') as mf:
             for l in mf.readlines():
                 if 'ratio of unknown/total area' in l:
                     a = l.split(' ')[-2]
@@ -259,15 +428,23 @@ for ei in range(num_e):
                     unk_ratio = float(l.split(' ')[-3])/mpsz
 		    known_area_arr.append( mpsz*(1.0 - unk_ratio) )
 		    # add TS.
-
-        sum_mpsz += mpsz
+		    known_area_ts.append( float(l.split(' ')[1][1:-1] ) )
+	sum_mpsz += mpsz
         sum_unk_ratio += unk_ratio
         print "For expt", ename, ", run:", run, " Map Area: ", mpsz, " UNcovered: ", unk_ratio
+	plt.plot(known_area_ts, known_area_arr, 'b*:', label="Explored Area")
+	plt.title('Explored Area')
+	plt.xlabel('Time')
+	plt.ylabel('Explored Area in #cells')
+	plt.legend()
+	plt.show()
+
     avg_map_sz[ei] = sum_mpsz/num_r
     avg_unknown_ratio[ei] = sum_unk_ratio/num_r
 
 plot_smt(avg_map_sz, 'Avg MapSize in #Cells', 'Avg MapSize at EoR')
 plot_smt(avg_unknown_ratio, 'UnknownArea Ratio', 'Avg UnknownArea Ratio in Map')
+"""
 
 # TODO: For stage-p3at, ONLY count exploration runs with total explored area > 710000. 
 # Anything less than that denotes incomplete exploration.

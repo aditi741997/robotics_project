@@ -12,13 +12,16 @@
 #include <costmap_2d/costmap_2d_ros.h>
 #include <sensor_msgs/PointCloud.h>
 #include <nav2d_operator/cmd.h>
-#include <tf/transform_listener.h>
-#include <tf2_ros/transform_listener.h>
 
 #include <string>
 
 #include <mutex>
 #include <condition_variable>
+
+// for getting system clock time
+#include <boost/chrono/system_clocks.hpp>
+#include <boost/chrono/ceil.hpp>
+#include <boost/date_time/posix_time/posix_time_duration.hpp>
 
 // Helper Functions: Aditi
 void write_arrs_to_file(std::vector<double>& times, std::vector<double>& ts, std::string s);
@@ -62,34 +65,43 @@ public:
 
 	// For measuring RT
 
-	// Need to store [the latest scan USED TS] in the last executeCmd, wrt each of the chains:
-	double last_scan_lcmp_ts; // TS of [latest scan in latest LC] used by last executeCommand
-	double last_scan_mapCB_navPlan_navCmd_ts; // TS of last scan used wrt S-MapCB-LC chain
-	double last_scan_mapCB_navCmd_ts;
-	double last_scan_mapCB_mapUpd_navPlan_navCmd_ts;
+        // Need to store [the latest scan USED TS] in the last executeCmd, wrt each of the chains:
+        double last_scan_lcmp_ts; // TS of [latest scan in latest LC] used by last executeCommand
+        double last_scan_mapCB_navPlan_navCmd_ts; // TS of last scan used wrt S-MapCB-LC chain
+        double last_scan_mapCB_navCmd_ts;
+        double last_scan_mapCB_mapUpd_navPlan_navCmd_ts;
 
-	double last_scan_mapCB_ts;
+        double last_scan_mapCB_ts;
 
-	// TS of the scan, based on which we have got the command.
-	double last_scan_mapCB_mapUpd_navPlan_navCmd_recv;
+        // TS of the scan, based on which we have got the command.
+        double last_scan_mapCB_mapUpd_navPlan_navCmd_recv;
 
-	// TS of the scan, whose TF was used by navCmd.
-	double last_scan_mapCB_navCmd_recv;
+        // TS of the scan, whose TF was used by navCmd.
+        double last_scan_mapCB_navCmd_recv;
 
-	// TS of scan, whose TF was used by navPlan, used by navCmd.
-	double last_scan_mapCB_navPlan_navCmd_recv;
+        // TS of scan, whose TF was used by navPlan, used by navCmd.
+        double last_scan_mapCB_navPlan_navCmd_recv;
 
-	// Need to store TS of [last new output] wrt each chain
-	double last_scan_lcmp_out, last_scan_mapCB_navPlan_navCmd_out, last_scan_mapCB_navCmd_out, last_scan_mapCB_mapUpd_navPlan_navCmd_out;
+        // Need to store TS of [last new output] wrt each chain
+        double last_scan_lcmp_out, last_scan_mapCB_navPlan_navCmd_out, last_scan_mapCB_navCmd_out, last_scan_mapCB_mapUpd_navPlan_navCmd_out;
 
-	// Vector of latency for [every new output] wrt each chain
-	std::vector<double> lat_scan_lcmp_arr, lat_scan_mapCB_navCmd_arr, lat_scan_mapCB_navPlan_navCmd_arr, lat_scan_mapCB_mapUpd_navPlan_navCmd_arr;
-	
+        // Vector of latency for [every new output] wrt each chain
+        std::vector<double> lat_scan_lcmp_arr, lat_scan_mapCB_navCmd_arr, lat_scan_mapCB_navPlan_navCmd_arr, lat_scan_mapCB_mapUpd_navPlan_navCmd_arr;
+
 	// Vector for tput
-	std::vector<double> tput_scan_lcmp_arr, tput_scan_mapCB_navPlan_navCmd_arr, tput_scan_mapCB_navCmd_arr, tput_scan_mapCB_mapUpd_navPlan_navCmd_arr;
+        std::vector<double> tput_scan_lcmp_arr, tput_scan_mapCB_navPlan_navCmd_arr, tput_scan_mapCB_navCmd_arr, tput_scan_mapCB_mapUpd_navPlan_navCmd_arr;
 
-	// Vector for RT
-	std::vector<double> rt_scan_lcmp_arr, rt_scan_mapCB_navCmd_arr, rt_scan_mapCB_navPlan_navCmd_arr, rt_scan_mapCB_mapUpd_navPlan_navCmd_arr;
+        // Vector for RT
+        std::vector<double> rt_scan_lcmp_arr, rt_scan_mapCB_navCmd_arr, rt_scan_mapCB_navPlan_navCmd_arr, rt_scan_mapCB_mapUpd_navPlan_navCmd_arr;
+
+	// Storing the realTS of per chain outputs:
+	std::vector<double> ts_scan_lcmp_arr, ts_scan_mapCB_navCmd_arr, ts_scan_mapCB_navPlan_navCmd_arr, ts_scan_mapCB_mapUpd_navPlan_navCmd_arr;
+
+	double first_out_ts_scan_lcmp, first_out_ts_scan_mapCB_navCmd;
+	long count_scan_lcmp, count_scan_mapCB_navCmd, count_scan_mapCB_navPlan_navCmd, count_scan_mapCB_mapUpd_navPlan_navCmd; // total #outputs.
+
+	// For publishing end of exec of CC to controller:
+	ros::Publisher exec_end_cc_pub;
 
 private:
 	// Internal Methods
@@ -141,8 +153,6 @@ private:
 	double mRasterSize;
 	
 	tf::TransformListener mTfListener;
-	tf2_ros::Buffer mTf2Buffer;
-	tf2_ros::TransformListener mTf2Listener;
 	
 	ros::Subscriber mCommandSubscriber;
 	ros::Publisher mControlPublisher;
@@ -163,6 +173,7 @@ private:
 	bool mPublishRoute;
 	double mMaxFreeSpace;
 	double mSafetyDecay;
+	int mDistanceWeight;
 	int mSafetyWeight;
 	int mConformanceWeight;
 	int mContinueWeight;
@@ -174,10 +185,10 @@ private:
 	unsigned int mRecoverySteps;
 
 	std::vector<double> operator_loop_times;
-	std::vector<double> operator_loop_ts;
+        std::vector<double> operator_loop_ts;
 
-	// For testing:
-	std::string last_odom_bl_tf;
+        // For testing:
+        std::string last_odom_bl_tf;
 };
 
 #endif

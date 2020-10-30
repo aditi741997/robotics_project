@@ -2,7 +2,7 @@
 <package>
 
   <name>nav2d_operator</name>
-  <version>0.4.2</version>
+  <version>0.3.2</version>
   <description>
     The operator is a lightweight, purely reactive obstacle-avoidance
     module for mobile robots moving in a planar environment. The operator node
@@ -20,7 +20,6 @@
   <build_depend>roscpp</build_depend>
   <build_depend>message_generation</build_depend>
   <build_depend>tf</build_depend>
-  <build_depend>tf2_ros</build_depend>
   <build_depend>costmap_2d</build_depend>
   <build_depend>sensor_msgs</build_depend>
 

@@ -4,7 +4,6 @@
 	<param name="use_sim_time" value="true" />
 	<rosparam file="$(find nav2d_tutorials)/param/ros.yaml"/>
 
-	<!-- this world file initializes the p3at robot at some pose-->
 	<!-- Start Stage simulator with a given environment -->
 	<node name="Stage" pkg="stage_ros" type="stageros" args="$(find nav2d_tutorials)/world/tutorial.world">
 		<param name="base_watchdog_timeout" value="0" />
@@ -37,6 +36,6 @@
 	<node name="Remote" pkg="nav2d_remote" type="remote_joy" />
 
 	<!-- RVIZ to view the visualization -->
-	<node name="RVIZ" pkg="rviz" type="rviz" args=" -d $(find nav2d_tutorials)/param/tutorial3.rviz" />
+	<!-- node name="RVIZ" pkg="rviz" type="rviz" args=" -d $(find nav2d_tutorials)/param/tutorial3.rviz" -->
 
 </launch>

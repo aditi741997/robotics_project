@@ -2,16 +2,15 @@
 # Defines topics services and frames for all modules
 
 ### TF frames #############################################
-laser_frame: base_laser_link # base_laser_link for stage/p3at AND base_Scan fro tb3/gz
-robot_frame: base_link # base_link for stage/p3at. AND base_footprint for tb3/gz.
+laser_frame: base_laser_link
+robot_frame: base_link
 odometry_frame: odom
 offset_frame: offset
 map_frame: map
 
 ### ROS topics ############################################
 map_topic: map
-laser_topic: base_scan #scan for tb3, base_scan for stage/p3at. # modified to base_scan1 to use shim node's O/P.
-# Adding ranger_0 to accomodate the new version of stage_ros, which will hopefully work for interval_sim = interval_real < 100. Isnt working at all...
+laser_topic: base_scan
 
 ### ROS services ##########################################
 map_service: static_map

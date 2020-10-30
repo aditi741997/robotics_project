@@ -12,14 +12,6 @@
             <rosparam file="$(find nav2d_tutorials)/param/costmap.yaml" ns="local_map" command="load" />
         </node>
 
-        <!-- Start the Navigator to move the robot autonomously -->
-        <node name="Navigator" pkg="nav2d_navigator" type="navigator">
-            <rosparam file="$(find nav2d_tutorials)/param/navigator.yaml" command="load" />
-        </node>
-
-        <node name="Localize" pkg="nav2d_navigator" type="localize_client" />
-        <node name="Explore" pkg="nav2d_navigator" type="explore_client" />
-        <node name="GetMap" pkg="nav2d_navigator" type="get_map_client" />
 
         <node name="Mapper" pkg="nav2d_karto" type="mapper">
             <remap from="scan" to="base_scan"/>

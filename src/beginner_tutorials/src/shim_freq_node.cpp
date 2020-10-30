@@ -16,9 +16,38 @@
 #include <cstdlib>
 #include <stdint.h>
 
+// For measuring system wide real time:
+#include <boost/chrono/system_clocks.hpp>
+#include <boost/chrono/ceil.hpp>
+#include <boost/date_time/posix_time/posix_time_duration.hpp>
+
 // boost stuff
 #include <boost/thread.hpp>
 #include <boost/thread/mutex.hpp>
+
+#include <unistd.h>
+#include <sys/syscall.h>
+#define gettid() syscall(SYS_gettid)
+
+double get_time_now()
+{
+	/*
+	boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
+        boost::chrono::system_clock::duration tse = now.time_since_epoch();
+        //using system_clock to measure latency:
+        unsigned long long ct = boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() - (1603000000000);
+        double time_now = ct / (double)(1000.0);
+        */
+	struct timespec ts;
+	
+	//clock_gettime(CLOCK_REALTIME, &ts);
+	// double time_now = ts.tv_sec + 1e-9*ts.tv_nsec - 1603000000.0;
+	
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+	double time_now = ts.tv_sec + 1e-9*ts.tv_nsec;
+
+	return time_now;
+}
 
 class ShimFreqNode
 {
@@ -35,8 +64,10 @@ public:
 
     // Publisher, thread that'll publish.
     ros::Publisher sensor_pub;
-    ros::Timer sensor_data_publish_thread;
-    void publishLatestData(const ros::TimerEvent& event);
+    ros::WallTimer sensor_data_publish_thread;
+    void publishLatestData(const ros::WallTimerEvent& event);
+    
+    ros::Publisher thread_exec_info_pub;
 
     ros::NodeHandle nh;
 
@@ -44,6 +75,7 @@ public:
     clock_t real_last_recv_ts;
     struct timespec real_cg_last_recv_ts;
     std::vector<double> ros_recv_deltas, real_recv_deltas, real_cg_recv_deltas;
+    std::vector<double> scan_cb_times;
 
     void printVecStats(std::vector<double> v, std::string s);
 
@@ -61,6 +93,7 @@ ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topi
 
     if (msg_type.compare("scan") == 0)
     {
+	// queue len : 1.
         sensor_sub = nh.subscribe(sub_topic, 1, &ShimFreqNode::scanDataCallback, this, ros::TransportHints().tcpNoDelay() );
         
         sensor_pub = nh.advertise<sensor_msgs::LaserScan> (pub_topic, 1);
@@ -70,8 +103,9 @@ ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topi
     ros_last_recv_ts = 0.0;
     real_last_recv_ts = 0.0;
 
+    thread_exec_info_pub = nh.advertise<std_msgs::Header>("/robot_0/exec_start_s", 1, true);
     // start thread for publishing :
-    // sensor_data_publish_thread = nh.createTimer(ros::Duration(1.0/freq), &ShimFreqNode::publishLatestData, this);
+    sensor_data_publish_thread = nh.createWallTimer(ros::WallDuration(1.0/freq), &ShimFreqNode::publishLatestData, this);
 }
 
 void ShimFreqNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
@@ -81,8 +115,21 @@ void ShimFreqNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
         
         struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
-        if (ros_recv_deltas.size()%20 == 7)
-            ROS_WARN("Got scan with TS %f, current clockMono time %f %f", msg->header.stamp.toSec(), ts.tv_sec, ts.tv_nsec * 1e-9);
+
+	struct timespec ts_mono;
+	clock_gettime(CLOCK_MONOTONIC, &ts_mono);
+
+	
+	boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
+	boost::chrono::system_clock::duration tse = now.time_since_epoch();
+	std::time_t secs = boost::chrono::system_clock::to_time_t(now);
+        // secs is the tv_sec, and cast_to_secs.count * 1e-9 is the tv_nsec. TODO: Use for scan TS in stageros.
+	double wt = (double)secs + (double)( boost::chrono::duration_cast<boost::chrono::seconds>(tse).count() * 1e-9 );
+	if (ros_recv_deltas.size()%10 == 6)
+	{
+            ROS_WARN("Got scan with TS %f, current clockMono time %f, scan RT Stamp %f", msg->header.stamp.toSec(), ts_mono.tv_sec + ts_mono.tv_nsec * 1e-9, msg->scan_time );
+	    std::cout << secs << std::endl;
+	}
         latest_scan.header.frame_id = msg->header.frame_id;
         latest_scan.header.seq = msg->header.seq;
         latest_scan.header.stamp = msg->header.stamp;
@@ -120,7 +167,6 @@ void ShimFreqNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
             printVecStats(real_cg_recv_deltas, "Real_CG_Time_B/W_Recv_Scans");
         }
 
-        
         ros_last_recv_ts = ros::Time::now().toSec();
         real_last_recv_ts = clock();
         clock_gettime(CLOCK_MONOTONIC, &real_cg_last_recv_ts);
@@ -137,11 +183,26 @@ void ShimFreqNode::printVecStats(std::vector<double> v, std::string st)
     }
 }
 
-void ShimFreqNode::publishLatestData(const ros::TimerEvent& event)
+void ShimFreqNode::publishLatestData(const ros::WallTimerEvent& event)
 {
     {
         boost::mutex::scoped_lock lock(data_lock);
 
+	//publish thread id info.
+	if (real_cg_recv_deltas.size()%10 == 7)
+	{
+		std_msgs::Header hdr;
+		std::stringstream ss_e;
+        	ss_e << ::getpid() << " s " << ::gettid();
+        	hdr.frame_id = ss_e.str();
+		thread_exec_info_pub.publish(hdr);
+	}
+
+	double time_now = get_time_now();
+	if ( (time_now - latest_scan.scan_time) < -0.004)
+		ROS_ERROR("-VE LAT: ShimFreqNode: Publishing scan!!!! with realTS %f, time_now: %f", latest_scan.scan_time, time_now);
+	else
+		ROS_WARN("ShimFreqNode: Publishing scan!!!! with realTS %f", latest_scan.scan_time);
         // publish latest_scan...
         sensor_pub.publish(latest_scan);
     }

@@ -102,7 +102,8 @@ public:
 		offline_fracs["navc"] = 0.5;
 		offline_fracs["navp"] = 0.125;
 		// With wcet exec times, period for 1,2,4,2,4 : 154.25
-		// period for 1,2,8,2,8 : 120.375
+		// [~collision once] period for 1,2,8,2,8 : 120.375
+		// [more collisions?] period for 1,2,2,2,2 : 222ms.
 
 		ROS_INFO("DAGController : Subscribe to 'exec_start' topics for ALL nodes, to get tid/pid.");
                 for(std::map<std::string,int>::iterator it = node_dag.name_id_map.begin(); it != node_dag.name_id_map.end(); ++it)
@@ -197,7 +198,8 @@ public:
 			else
 				ret = changePrioritySubChain(i, 1);
 			// ret = sched_setscheduler(node_pid[exec_order[i]], SCHED_FIFO, &sp_other);
-			ROS_INFO("Ret value %i for setting priority of subchain node %s, ind to be exec : %i", ret, node_dag.id_name_map[exec_order[i][0]].c_str(), curr_exec_index);
+			if (ret != 0)
+				ROS_WARN("Weird: Ret value %i for setting priority of subchain node %s, ind to be exec : %i", ret, node_dag.id_name_map[exec_order[i][0]].c_str(), curr_exec_index);
                 }
 	}
 

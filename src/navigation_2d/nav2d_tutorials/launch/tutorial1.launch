@@ -21,6 +21,6 @@
 	<node name="Remote" pkg="nav2d_remote" type="remote_joy" />
 
 	<!-- RVIZ to view the visualization -->
-	<node name="RVIZ" pkg="rviz" type="rviz" args=" -d $(find nav2d_tutorials)/param/tutorial1.rviz" />
+	<!-- node name="RVIZ" pkg="rviz" type="rviz" args=" -d $(find nav2d_tutorials)/param/tutorial1.rviz" -->
 
 </launch>

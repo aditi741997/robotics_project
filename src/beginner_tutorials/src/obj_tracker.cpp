@@ -36,6 +36,8 @@ class ObjTracker
     std::vector<double> rxn_time_arr;
     double last_in_time = 0.0;
 
+    std::vector<double> vel_arr;
+
     double latency_sum = 0.0;
     std::vector<double> latency_arr;
 
@@ -107,7 +109,7 @@ public:
     {
 	std::cout << "SHUTTING DOWN OBJTRACKER!" << std::endl;
 	std::ofstream outfile;
-	std::string fname = "New_Expt2_" + get_string(num_cores) + "c_" + get_algo() + "_Logs" + suffix;
+	std::string fname = "FJ_Ser_NNP_Expt2_" + get_string(num_cores) + "c_" + get_algo() + "_Logs" + suffix;
         outfile.open(fname.c_str());
     	// need to write rxn Time arr, rel metric, rel metric 1
 	// lets remove the first 500 data.
@@ -116,6 +118,12 @@ public:
 	for(int i = rxn_time_arr.size()/100; i < rxn_time_arr.size(); i++)
 		outfile << rxn_time_arr[i] << ", ";
 	outfile << "\n";	
+
+	std::cout << "Writing TD rxn time, Ignoring 1percent of sz " << td_rxn_time_arr.size() << std::endl;
+        outfile << "RxnTmTD, ";
+        for (int i = td_rxn_time_arr.size()/100; i < td_rxn_time_arr.size(); i++)
+                outfile << td_rxn_time_arr[i] << ", ";
+        outfile << "\n";	
 
 	std::cout << "Writing rel metric, Ignoring 1percent of sz " << metric_arr.size() << std::endl;
 	outfile << "RelMetric, ";
@@ -127,6 +135,12 @@ public:
 	outfile << "RelMetric1, ";
 	for(int i = metric1_arr.size()/100; i < metric1_arr.size(); i++)
 		outfile << metric1_arr[i] << ", ";
+	outfile << "\n";
+
+	std::cout << "Writing vel arr, Ignoring 1percent of sz " << vel_arr.size() << std::endl;
+	outfile << "VelArr, ";
+	for (int i = vel_arr.size()/100; i < vel_arr.size(); i++)
+		outfile << vel_arr[i] << ", ";
 	outfile << "\n";
     }
 
@@ -263,6 +277,9 @@ public:
         }
 
         cmd_vel_pub.publish(move_cmd);
+	if (add_to_arr())
+		vel_arr.push_back(move_cmd.angular.z);
+
 	if (rtc_event_driven)
 	{
 		std_msgs::Header hdr;

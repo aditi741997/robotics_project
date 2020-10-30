@@ -18,6 +18,13 @@
 #include <OpenKarto/OccupancyGrid.h>
 #include <OpenKarto/OpenMapper.h>
 
+#include <stdio.h>
+
+// for getting system clock time
+#include <boost/chrono/system_clocks.hpp>
+#include <boost/chrono/ceil.hpp>
+#include <boost/date_time/posix_time/posix_time_duration.hpp>
+
 namespace karto
 {
 
@@ -287,9 +294,24 @@ namespace karto
     kt_int32u* pCellHitCntPtr = m_pCellHitsCnt->GetDataPointer();
 
     kt_int32u nBytes = GetDataSize();
+
+    boost::chrono::time_point<boost::chrono::system_clock> now0 = boost::chrono::system_clock::now();
+    boost::chrono::system_clock::duration tse0 = now0.time_since_epoch();
+    unsigned long long ct0 = boost::chrono::duration_cast<boost::chrono::milliseconds>(tse0).count() - (1603000000000);
+    double time = ct0 / (double)(1000.0);
+    printf("%f Time, MapperUpdate : OccGrid::Updategrid starting executing... nBytes: %i \n", time, nBytes);
+
     for (kt_int32u i = 0; i < nBytes; i++, pDataPtr++, pCellPassCntPtr++, pCellHitCntPtr++)
     {
       UpdateCell(pDataPtr, *pCellPassCntPtr, *pCellHitCntPtr);
+	if (i%7500 == 70)
+	{
+		boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
+                boost::chrono::system_clock::duration tse = now.time_since_epoch();
+		unsigned long long ct = boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() - (1603000000000);
+                double time = ct / (double)(1000.0);
+		printf("%f Time, MapperUpdate : OccGrid::Updategrid executing... i: %i, nBytes: %i \n", time, i, nBytes);
+	}
     }
   }
 

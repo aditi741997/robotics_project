@@ -23,6 +23,11 @@
 #define ST_LOCALIZING       20
 #define ST_MAPPING          30
 
+// for getting system clock time
+#include <boost/chrono/system_clocks.hpp>
+#include <boost/chrono/ceil.hpp>
+#include <boost/date_time/posix_time/posix_time_duration.hpp>
+
 class MultiMapper
 {
 public:
@@ -34,7 +39,7 @@ public:
 	void receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan);
 	void receiveLocalizedScan(const nav2d_msgs::LocalizedScan::ConstPtr& scan);
 	void receiveInitialPose(const geometry_msgs::PoseWithCovarianceStamped::ConstPtr& pose);
-	void sendLocalizedScan(const sensor_msgs::LaserScan::ConstPtr& scan, const karto::Pose2& pose);
+	void sendLocalizedScan(const karto::Pose2& pose);
 	void onMessage(const void* sender, karto::MapperEventArguments& args);
 	bool getMap(nav_msgs::GetMap::Request  &req, nav_msgs::GetMap::Response &res);
 	void publishLoop();
@@ -49,14 +54,39 @@ public:
 	// TSS of last scan used in generating the mapToOdom TF.
 	double last_scan_mapCB_tf_processed;
 
+	// For measuring Tput of subchains MapCB and MapUpdate:
+	std::vector<double> tput_map_cb, tput_map_update;
+	double last_map_cb_out, last_map_upd_out;
+	// boost::chrono::time_point<boost::chrono::system_clock> last_map_upd_out;
+
+	// For measuring how many scans does mapScanCB drop:
+	std::vector<double> scan_drop_ts;
+
+	long int total_mapcb_count, total_mapupdate_count;
+
 	ros::Publisher mScanTSPublisher;
 
 	// For converting the module into hybrid ED/TD
 	// Making a separate thread for mapUpdates
 	boost::thread* map_update_thread_;
 	bool map_update_thread_shutdown_;
-	bool received_scans;
+	bool received_scans, processed_scans;
 	void mapUpdateLoop(double freq);
+
+	// Making a thread for mapCB as well:
+	boost::thread* map_scan_cb_thread_;
+	bool map_scan_cb_thread_shutdown_;
+	sensor_msgs::LaserScan latest_scan_recv; // this is what'll be processed by the mapScanCBLoop.
+	void mapScanCBLoop(double freq);
+	void processLatestScan();
+	double mMapScanUpdateRate; // Oct: period of scanCB thread.
+
+	boost::mutex scan_lock; // to lock usage of latest_scan_recv.
+
+	ros::Publisher map_cb_exec_info_pub, map_upd_exec_info_pub;
+
+	// For fractional scheduling:
+	int mDropFraction;
 
 private:
 	// Private methods
@@ -99,7 +129,7 @@ private:
 	double mRangeThreshold;     // Maximum range of laser sensor. (All robots MUST use the same due to Karto-Mapper!)
 	double mMaxCovariance;      // When to accept the result of the particle filter?
 	int mState;	                // What am I doing? (waiting, localizing, mapping)
-	int mMapUpdateRate;	        // Publish the map every # received updates.
+	double mMapUpdateRate;	        // Publish the map every # received updates.
 	bool mPublishPoseGraph;	    // Whether or not to publish the pose graph as marker-message.
 	int mNodesAdded;            // Number of nodes added to the pose graph.
 	int mMinMapSize;            // Minimum map size (# of nodes) needed for localization.

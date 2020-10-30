@@ -42,6 +42,16 @@ public:
 	double mReplanningPeriod;
 	void navGenerateCmdLoop();
 
+	// For measuring tput of NavPlan and navCmd subchains:
+	std::vector<double> tput_nav_plan, tput_nav_cmd;
+	// TS of the inputs used when the node ran last time:
+	double nav_cmd_last_tf_used, nav_cmd_last_plan_used;
+	double nav_plan_last_tf_used, nav_plan_last_map_used;
+	
+	double last_nav_cmd_out, last_nav_plan_out;
+
+	ros::Publisher navp_exec_info_pub, navc_exec_info_pub;
+
 private:
 	bool isLocalized();
 	// For measuring RT:
