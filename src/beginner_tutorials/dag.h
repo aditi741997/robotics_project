@@ -161,6 +161,7 @@ public:
 	void print_dvec(std::vector<double>& v, std::string s);
 	void print_global_vars_desc();
 	void print_mono_map(std::map<std::string, Monomial>& s);
+	bool is_edge_in_cc(int a, int b);
 	
 	void add_constraints_for_max_monos(int total_vars, Variable::t all_lfrac_vars);
 	void add_constraints_for_min_monos(int total_vars, Variable::t all_lfrac_vars);

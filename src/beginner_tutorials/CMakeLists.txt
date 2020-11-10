@@ -1,9 +1,9 @@
 cmake_minimum_required(VERSION 2.8.3)
-SET(CMAKE_CXX_FLAGS "-std=c++11")
+SET(CMAKE_CXX_FLAGS "-O2 -std=c++11")
 project(beginner_tutorials)
 
 ## Find catkin and any catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs cv_bridge sensor_msgs genmsg dynamic_reconfigure)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs cv_bridge sensor_msgs genmsg)
 
 find_package(OpenCV REQUIRED)
 find_package(PythonLibs REQUIRED)
@@ -11,15 +11,29 @@ find_package(PythonLibs REQUIRED)
 ## Generate added messages and services
 generate_messages(DEPENDENCIES std_msgs sensor_msgs)
 
-generate_dynamic_reconfigure_options(
-cfg/BinSize.cfg)
-
 ## Declare a catkin package
-catkin_package()
+catkin_package(INCLUDE_DIRS include)
 
 include_directories(include ${catkin_INCLUDE_DIRS}
 ${OpenCV_INCLUDE_DIRS}
 ${PYTHON_INCLUDE_DIRS})
+
+find_library(MOSEK_LIBRARY mosek64 /home/ubuntu/mosek/9.2/tools/platform/linux64x86/bin)
+
+set(MOSEK_LIB_SRC
+        src/BaseModel.cc
+        src/BaseModel.os
+        src/Debug.cc
+        src/fusion.cc
+        src/IntMap.cc
+        src/mosektask.cc
+        src/SolverInfo.cc
+        src/StringBuffer.cc)
+
+add_library(${PROJECT_NAME}
+        src/dag.cpp
+	src/dag_controller_node.cpp
+        ${MOSEK_LIB_SRC})
 
 add_executable(publisher src/publisher.cpp)
 target_link_libraries(publisher ${catkin_LIBRARIES})
@@ -37,7 +51,7 @@ add_executable(objdetector src/obj_detector.cpp)
 target_link_libraries(objdetector ${catkin_LIBRARIES}
 ${OpenCV_LIBRARIES}
 ${PYTHON_LIBRARIES})
-add_dependencies(objdetector beginner_tutorials_generate_messages_cpp ${PROJECT_NAME}_gencfg)
+add_dependencies(objdetector beginner_tutorials_generate_messages_cpp)
 
 add_executable(objtracker src/obj_tracker.cpp)
 target_link_libraries(objtracker ${catkin_LIBRARIES})
@@ -47,22 +61,10 @@ add_executable(controller src/controller_node.cpp)
 target_link_libraries(controller ${catkin_LIBRARIES})
 add_dependencies(controller beginner_tutorials_generate_messages_cpp)
 
-add_executable(newcontroller src/new_controller_node.cpp)
-target_link_libraries(newcontroller ${catkin_LIBRARIES})
-add_dependencies(newcontroller beginner_tutorials_generate_messages_cpp)
+add_executable(shimfreqnode src/shim_freq_node.cpp)
+target_link_libraries(shimfreqnode ${catkin_LIBRARIES})
+add_dependencies(shimfreqnode beginner_tutorials_generate_messages_cpp)
 
-add_executable(dag_controller src/dag_controller_node.cpp)
-target_link_libraries(dag_controller ${catkin_LIBRARIES})
+add_executable(dag_controller src/dag_controller_node.cpp src/dag_controller_be.cpp src/dag.cpp ${MOSEK_LIB_SRC})
+target_link_libraries(dag_controller ${catkin_LIBRARIES} ${MOSEK_LIBRARY})
 add_dependencies(dag_controller beginner_tutorials_generate_messages_cpp)
-
-add_executable(dsubscriber src/dummy_subscriber.cpp)
-target_link_libraries(dsubscriber ${catkin_LIBRARIES})
-add_dependencies(dsubscriber beginner_tutorials_generate_messages_cpp)
-
-add_executable(localplanner src/local_planner.cpp)
-target_link_libraries(localplanner ${catkin_LIBRARIES})
-add_dependencies(localplanner beginner_tutorials_generate_messages_cpp)
-
-add_executable(globalcmptd src/globalcmp_td.cpp)
-target_link_libraries(globalcmptd ${catkin_LIBRARIES})
-add_dependencies(globalcmptd beginner_tutorials_generate_messages_cpp)
