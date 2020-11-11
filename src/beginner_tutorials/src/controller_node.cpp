@@ -311,7 +311,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < m; i++)
         topic_list[i] = argv[8+i];
 
-    FreqController fc(topic_list, k, 10.0, freq_thresh, epsi, offln_durn, offln_freq, use_med);
+    FreqController fc(topic_list, k, 20.0, freq_thresh, epsi, offln_durn, offln_freq, use_med);
     ros::spin();
 
     return 0;
