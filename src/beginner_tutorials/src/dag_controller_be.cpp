@@ -95,13 +95,15 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, int f_mc, int f_mu, int f
                         else
                                 ret = changePrioritySubChain(i, 1);
 			if (ret != 0)
+				0;
                                 // ROS_WARN("Weird: Ret value %i for setting priority of subchain node %s, ind to be exec : %i", ret, node_dag.id_name_map[exec_order[i][0]].c_str(), curr_exec_index);
 		}
 		checkTriggerExec(ind);
 	}
 
-	void DAGControllerBE::changePrioritySubChain(int ind, int prio)
+int DAGControllerBE::changePrioritySubChain(int ind, int prio)
 	{
+		return 0;
 	}
 
 	// checks if all nodes' tid/pid info has been received.

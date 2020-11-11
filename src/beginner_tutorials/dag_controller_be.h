@@ -46,7 +46,7 @@ public:
 
 	void changePriority(int ind);
 
-	void changePrioritySubChain(int ind, int prio);
+	int changePrioritySubChain(int ind, int prio);
 
 	void recv_node_info();
 
