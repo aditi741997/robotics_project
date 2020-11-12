@@ -9,6 +9,7 @@
 #include <assert.h>
 #include <math.h>
 
+#include <dag_controller_fe.h>
 #include <dag.h>
 
 class DAGControllerBE
@@ -37,23 +38,38 @@ public:
 	std::string dag_name;
 	
 	DAGControllerBE();
-        DAGControllerBE(std::string dag_file, int f_mc, int f_mu, int f_nc, int f_np);
+        DAGControllerBE(std::string dag_file, DAGControllerFE* fe, int f_mc, int f_mu, int f_nc, int f_np);
+
+	DAGControllerBE(const DAGControllerBE&) = delete;
 
 	// FE will call this for each msg from the CC.
         void recv_critical_exec_end();
 
 	void handle_noncritical_exec();
 
+	void handle_noncritical_loop();
+
 	void changePriority(int ind);
 
 	int changePrioritySubChain(int ind, int prio);
 
-	void recv_node_info();
+	void recv_node_info(std::string node_name, int tid, int pid=0);
 
+	std::string get_last_node_cc_name();
 private:
 	double get_timeout(int ind);  
 	double get_sum_ci_ith(int ind);
 	bool got_all_info();
 	void checkTriggerExec(int ind);
+
+	boost::thread timer_thread;
+	void timer_thread_func(double timeout);
+
+	boost::thread handle_sched_thread;
+	boost::mutex sched_thread_mutex;
+	bool cc_end, ready_sched;
+	boost::condition_variable cv_sched_thread;
+
+	DAGControllerFE* frontend;
 };
 

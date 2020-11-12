@@ -38,7 +38,7 @@ private:
 	int node_pid;
 };
 
-class DAGController
+class DAGController: public DAGControllerFE
 {
         ros::NodeHandle nh;
 	// Store tid, pid for each node:
@@ -57,25 +57,27 @@ class DAGController
 	// Oct: just for offline expts:
 	std::map<std::string, double> offline_fracs;
 
+	std::vector<double> reset_count;
 	ros::Subscriber critical_exec_end_sub;
-	std::vector< ros::Publisher > trigger_nc_exec; // may want to trigger CC's first node too, in the future, for a pure RTC thing.
+	std::map<std::string, ros::Publisher> trigger_nc_exec; // may want to trigger CC's first node too, in the future, for a pure RTC thing.
 	int nav_client_fd, srv_fd, port_no; 
 	bool nav_socket_connected; // for IPC with the Navigator node. 	
 	boost::thread socket_conn_thread; // thread to accept client cnn.
 
 	long int total_period_count = 0; // increment each time we get a CC's end or at end of period.
 	bool sched_started = false; // becomes true when we get tid for all nodes.
-	std::vector<double> reset_count; // Nov: to reset counters of NC'.
 	ros::WallTimer exec_prio_timer;
 
-	DAG node_dag;
-
-	DAGControllerBE controller_be;
+	DAG node_dag; // Nov: not used now.
+	DAGControllerBE* controller;
 
 public:
         DAGController(int x, std::string dag_file, int f_mc, int f_mu, int f_nc, int f_np)
         {
 		ROS_INFO("Initializing DAGController class");
+		controller = new DAGControllerBE(dag_file, this, f_mc, f_mu, f_nc, f_np);		
+
+		/*
 		// reads DAG from text file and sorts chains based on criticality. 
 		node_dag = DAG(dag_file);
 		
@@ -98,18 +100,7 @@ public:
 		// each elem in this array is a subchain (list of nodes).
 		exec_order = node_dag.get_exec_order();
 		
-                /* hard coding for testing : aug15
-                node_ci.insert({"globalcmp", 205});
-                node_ci.insert({"nncmp", 57});
-
-                node_fi.insert({"globalcmp", 10});
-                node_fi.insert({"nncmp", 4});
-
-		exec_order.push_back("globalcmp");
-		exec_order.push_back("nncmp");
-		*/
-
-		// Oct: for offline : 
+                // Oct: for offline : 
 		// need to assign fraction to all NC nodes.
 		offline_fracs["s"] = 1.0;
 		offline_fracs["mapcb"] = 1.0/f_mc;
@@ -121,29 +112,39 @@ public:
 		// [more collisions?] period for 1,2,2,2,2 : 222ms.
 
 		ROS_INFO("DAGController, 1/f for mc %i, mu %i, nc %i, np %i", f_mc, f_mu, f_nc, f_np);
+		*/
+
 		ROS_INFO("DAGController : Subscribe to 'exec_start' topics for ALL nodes, to get tid/pid.");
-                for(std::map<std::string,int>::iterator it = node_dag.name_id_map.begin(); it != node_dag.name_id_map.end(); ++it)
+                for(std::map<std::string,int>::iterator it = controller->node_dag.name_id_map.begin(); it != controller->node_dag.name_id_map.end(); ++it)
                 {
                         std::string topic = "/robot_0/exec_start_" + it->first;
 			ROS_INFO("Subscribing to %s", topic.c_str());
 			ros::Subscriber si = nh.subscribe<std_msgs::Header>(topic, 1, &DAGController::exec_start_cb, this, ros::TransportHints().tcpNoDelay());
 			exec_start_subs.push_back(si);
+
+			std::string pubtopic = "/robot_0/trigger_exec_" + it->first;
+			ROS_INFO("Publishing TRIGGER stuff to %s", pubtopic.c_str());
+			ros::Publisher tpub = nh.advertise <std_msgs::Header> (pubtopic, 1, false);
+			trigger_nc_exec[it->first] = (tpub);
+
                 }
 		
-		int last_node_cc_id = exec_order[0][ exec_order[0].size() - 1 ];
-		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/robot_0/exec_end_" + node_dag.id_name_map[last_node_cc_id], 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
+		std::string last_node_cc_name = controller->get_last_node_cc_name();
+		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/robot_0/exec_end_" + last_node_cc_name, 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
 
+		/*
 		if (exec_order.size() > 1)
 		{
 			for (int i = 1; i < exec_order.size(); i++)
 			{
 				int id = exec_order[i][0];
-				ROS_INFO("Making publisher for trigger_exec_%s", node_dag.id_name_map[id].c_str());
-				ros::Publisher tpub = nh.advertise <std_msgs::Header> ("/robot_0/trigger_exec_" + node_dag.id_name_map[id], 1, false);
-				trigger_nc_exec.push_back(tpub);
-				reset_count.push_back(false);
+				std::string name = node_dag.id_name_map[id];
+				ROS_INFO("Making publisher for trigger_exec_%s", name.c_str());
+				ros::Publisher tpub = nh.advertise <std_msgs::Header> ("/robot_0/trigger_exec_" + name, 1, false);
+				trigger_nc_exec[name] = (tpub);
 			}
 		}
+		*/
 
 		// Nov: for IPC with navigator node:
 		srv_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -197,8 +198,10 @@ public:
 	// Cb to handle end of critical chain exec. Need to start dynamic sched stuff:
 	void critical_exec_end_cb(const std_msgs::Header::ConstPtr& msg)
 	{
-		// controller_be.recv_critical_exec_end();
-		// when crit exec ends, always start with ind=0.
+		ROS_WARN("GOT exec_end msg from cc!!! Calling the BE.");
+		controller->recv_critical_exec_end();
+
+		/*
 		// Oct: shouldnt we start with ind=1, since ind=0 is the CC.
 		int ind = 1;
 		double timeout = get_timeout(ind);
@@ -226,6 +229,7 @@ public:
 			for (int i = 1; i < exec_order.size(); i++)
 				trigger_exec(i);
 		}
+		*/
 
 	}
 
@@ -315,7 +319,7 @@ public:
 			}
 			hdr.frame_id += "\n";
 			if (name.find("nav") == std::string::npos)
-				trigger_nc_exec[ind-1].publish(hdr); // TODO:Later: ind-1 cuz CC does not have a trigger, so ind ka triggerPub is at ind-1.
+				trigger_nc_exec[name].publish(hdr); // TODO:Later: ind-1 cuz CC does not have a trigger, so ind ka triggerPub is at ind-1.
 			else
 			{
 				// Use socket here.
@@ -328,6 +332,32 @@ public:
 				else
 					ROS_ERROR("nav_socket_connected IS false!!! Nav-DAGController SOCKET NOT connected!!");
 			}
+		}
+	}
+
+	// this func will be called by BE to trigger NC nodes:
+	void trigger_node(std::string name, bool reset)
+	{
+		std_msgs::Header hdr;
+                hdr.frame_id = name;
+		if (reset)
+		{
+			hdr.frame_id += " RESETCOUNT";
+                        ROS_WARN("RESETTING trigger_ct for NC %s", name.c_str());
+		}
+		hdr.frame_id += "\n";
+                if (name.find("nav") == std::string::npos)
+                	trigger_nc_exec[name].publish(hdr);
+		else
+		{
+			if (nav_socket_connected)
+                        {
+				char msg[1+hdr.frame_id.length()];
+                                strcpy(msg, hdr.frame_id.c_str());
+                                send(nav_client_fd, msg, strlen(msg), 0);
+			}
+			else
+				ROS_ERROR("nav_socket_connected IS false!!! Nav-DAGController SOCKET NOT connected!!");
 		}
 	}
 
@@ -352,12 +382,15 @@ public:
                 ss << msg->frame_id;
                 ss >> pid >> node_name >> tid;
                 ROS_INFO("Got exec_start msg %s from node %s, pid : %i, tid : %i", msg->frame_id.c_str(), node_name.c_str(), pid, tid);
+
+		controller->recv_node_info(node_name, tid, pid);
+
+		/*
                 // add tid, pid if not already there :
                 node_pid[node_name] = pid;
 		node_tid[node_name] = tid;
 
 		// float timeout = node_ci[node_name]/(float)(node_fi[node_name]);
-		// Oct: Do work for 1period, so as to avoid any other node to start before the CC.
 		if (node_name.find("navc") != std::string::npos )
 		{
 			changePriority(0); // make prio CC = 2, all others = 1.
@@ -370,6 +403,7 @@ public:
 			}
 			// do_sieve(dummy_work_timeout*0.001 + 0.002);
 		}
+		*/
 		
         }
 

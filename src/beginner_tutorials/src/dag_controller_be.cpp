@@ -16,11 +16,26 @@
 
 #include <dag_controller_be.h>
 
+double get_monotime_now()
+{
+	struct timespec ts;
+        clock_gettime(CLOCK_MONOTONIC, &ts);
+	return (ts.tv_sec + 1e-9*ts.tv_nsec);
+}
+
+double get_realtime_now()
+{
+	struct timespec ts;
+        clock_gettime(CLOCK_REALTIME, &ts);
+	return (ts.tv_sec + 1e-9*ts.tv_nsec - 1605000000.0);
+}
+
 DAGControllerBE::DAGControllerBE()
 	{
 	}
 
-DAGControllerBE::DAGControllerBE(std::string dag_file, int f_mc, int f_mu, int f_nc, int f_np)
+// todo:Later: maybe a lock for reset_count.
+DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, int f_mc, int f_mu, int f_nc, int f_np)
 	{
 		// Note that the last 4 inputs are just for the offline stage.
 		node_dag = DAG(dag_file);
@@ -47,32 +62,46 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, int f_mc, int f_mu, int f
 		
 		for (int i = 1; i < exec_order.size(); i++)
 			reset_count.push_back(false);
+	
+		curr_exec_index = 0;
+		ready_sched = false;
+
+		frontend = fe;
 	}
 
 	// FE will call this for each msg from the CC.
 	void DAGControllerBE::recv_critical_exec_end()
 	{
-		int ind = 1;
-		double to = get_timeout(ind);
                 total_period_count += 1;
 
 		if (got_all_info())
 		{
 			if (!sched_started)
 			{
-				std::cout << "$$$$$ DAGControllerBE:: STARTING SCHEDULING!!! \n";
+				std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " $$$$$ DAGControllerBE:: STARTING SCHEDULING!!! \n";
 				sched_started = true;
 				for (int i = 0; i < reset_count.size(); i++)
 					reset_count[i] = true;
 				total_period_count = 1;
+
+				// Make the thread that handles scheduling.
+				handle_sched_thread = boost::thread(&DAGControllerBE::handle_noncritical_loop, this);
+				std::this_thread::sleep_for (std::chrono::milliseconds(2));
 			}
-			// ROS_WARN("GOT exec_end msg. Making timer for time : %f", timeout);
-			changePriority(ind);
-			// todo: timer...
+		
+			// Notify the thread.	
+			boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
+			cc_end = true;
+			ready_sched = true;
+			printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
+			cv_sched_thread.notify_all();
 		}
 		else
 		{
-			// todo
+			std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " | GOT exec_end msg. NOT making a timer,Will trigger nodes" << std::endl;
+			for (int i = 1; i < exec_order.size(); i++)
+				checkTriggerExec(i);
+				//frontend->trigger_node(node_dag.id_name_map[exec_order[i][0]], false);
 		}
 			
 	}
@@ -83,10 +112,49 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, int f_mc, int f_mu, int f
 	{
 	}
 
+	std::string DAGControllerBE::get_last_node_cc_name()
+	{
+		int id = exec_order[0][exec_order[0].size()-1];
+		return node_dag.id_name_map[id];
+	}
+
+	void DAGControllerBE::handle_noncritical_loop()
+	{
+		while (true)
+		{
+			boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
+			while (!ready_sched)
+			{
+				cv_sched_thread.wait(lock);
+				printf("ABOUT to run noncritical_loop!!!");
+			}
+			bool do_work = true;	
+
+			if (cc_end)
+				curr_exec_index = 1;
+			else if (curr_exec_index > 0)
+				curr_exec_index = (curr_exec_index+1)%(exec_order.size());
+			else
+				do_work = false;
+			std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " NC Loop: curr_exec_index: " << curr_exec_index << ", do_work: " << do_work << std::endl;
+
+			if (do_work)
+			{
+				changePriority(curr_exec_index);
+				double timeout = get_timeout(curr_exec_index);
+				pthread_cancel(timer_thread.native_handle());
+				timer_thread = boost::thread(&DAGControllerBE::timer_thread_func, this, timeout);
+			}
+			
+			cc_end = false;
+			ready_sched = false;
+		}
+	}
+
 	// Changes subchain[ind] prio = 2, all others = 1.
 	void DAGControllerBE::changePriority(int ind)
 	{
-		curr_exec_index = ind;
+		// curr_exec_index = ind;
 		for (int i = 0; i < exec_order.size(); i++)
                 {
                         int ret = 7;
@@ -95,13 +163,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, int f_mc, int f_mu, int f
                         else
                                 ret = changePrioritySubChain(i, 1);
 			if (ret != 0)
-				0;
+				std::cerr << "WEIRD, Ret value " << ret << " for setting prio of SC node " << node_dag.id_name_map[exec_order[i][0]] << " curr_exec_index: " << curr_exec_index << std::endl;
                                 // ROS_WARN("Weird: Ret value %i for setting priority of subchain node %s, ind to be exec : %i", ret, node_dag.id_name_map[exec_order[i][0]].c_str(), curr_exec_index);
 		}
 		checkTriggerExec(ind);
 	}
 
-int DAGControllerBE::changePrioritySubChain(int ind, int prio)
+	int DAGControllerBE::changePrioritySubChain(int ind, int prio)
 	{
 		return 0;
 	}
@@ -116,8 +184,12 @@ int DAGControllerBE::changePrioritySubChain(int ind, int prio)
 	}
 
 	// Called by FE when tid/pid info is received for any node.
-	void DAGControllerBE::recv_node_info()
+	void DAGControllerBE::recv_node_info(std::string node_name, int tid, int pid)
 	{
+		node_tid[node_name] = tid;
+		node_pid[node_name] = pid;
+		// todo: do we need to inc priority of CC here?
+		// not if it starts with p>=2 already : True for ROS.
 	}
 
 	// Returns sum ci of subchain ind, for current ci vals.
@@ -138,8 +210,31 @@ int DAGControllerBE::changePrioritySubChain(int ind, int prio)
                 return tot;
 	}
 
+	// Func to just sleep for timeout millisec and then notify cv.
+	void DAGControllerBE::timer_thread_func(double timeout)
+	{
+		printf("MonoTime: %f, RealTime: %f, making TIMER for to %f \n", get_monotime_now(), get_realtime_now(), timeout);
+		// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " | making TIMER for to " << timeout << std::endl;
+		long to = timeout*1000;
+		std::this_thread::sleep_for (std::chrono::microseconds(to));
+		boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
+		// cc_end = false;
+		ready_sched = true;
+		printf("MonoTime %f, RealTime %f ABOUT to NOTIFY the main thread, cc_end is false! \n");
+		cv_sched_thread.notify_all();
+	}
+
 	// checks if SC ind needs to be triggered, if yes, calls the FE func.
 	void DAGControllerBE::checkTriggerExec(int ind)
 	{
-		// todo
+		int id = exec_order[ind][0];
+                int ind_p = round(1.0/offline_fracs[node_dag.id_name_map[id] ]);
+		std::string name = node_dag.id_name_map[id];
+		if ( (ind > 0) && (total_period_count%ind_p == 1) && (node_tid.find(name) != node_tid.end() ) )
+		{
+			printf("MonoTime: %f, RealTime: %f, About to trigger node: %s, frac: %i, period_count: %i \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, total_period_count);
+			
+			frontend->trigger_node(name, reset_count[ind-1]);
+			reset_count[ind-1] = false;
+		}
 	}
