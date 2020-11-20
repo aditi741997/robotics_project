@@ -171,7 +171,16 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, int 
 
 	int DAGControllerBE::changePrioritySubChain(int ind, int prio)
 	{
-		return 0;
+		bool ret = true;
+		struct sched_param sp = { .sched_priority = prio,};
+		// Nov: Change priorities in reverse order, so that if any later node in subchain is preempted,
+		// it executes first. [since it'll be ahead in the list of same prio.]
+		for (int j = exec_order[ind].size()-1 ; j >= 0; j-- )
+		{
+			std::cerr << "Changing prio for node exec_order" << ind << "-" << j << " to " << prio << std::endl;
+			ret = ( ret && ( sched_setscheduler( node_tid[node_dag.id_name_map[exec_order[ind][j]] ] , SCHED_FIFO, &sp) ) );
+		}
+		return ret;
 	}
 
 	// checks if all nodes' tid/pid info has been received.
@@ -230,11 +239,14 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, int 
 		int id = exec_order[ind][0];
                 int ind_p = round(1.0/offline_fracs[node_dag.id_name_map[id] ]);
 		std::string name = node_dag.id_name_map[id];
-		if ( (ind > 0) && (total_period_count%ind_p == 1) && (node_tid.find(name) != node_tid.end() ) )
+		if ( (ind > 0) && (ind_p == 1 || (total_period_count%ind_p == 1) ) && (node_tid.find(name) != node_tid.end() ) )
 		{
 			printf("MonoTime: %f, RealTime: %f, About to trigger node: %s, frac: %i, period_count: %i \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, total_period_count);
-			
-			frontend->trigger_node(name, reset_count[ind-1]);
+		
+			//Nov: We just want there to be a bool at the nodes: Never a trigger_count.
+                	// This is because we always want the node to run exactly once whenever it wakes up, and hence only a bool is needed.	
+			// frontend->trigger_node(name, reset_count[ind-1]);
+			frontend->trigger_node(name, true);
 			reset_count[ind-1] = false;
 		}
 	}
