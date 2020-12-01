@@ -12,7 +12,7 @@ public:
 		mOccupancyGrid = grid;
 		mMapWidth = mOccupancyGrid.info.width;
 		mMapHeight = mOccupancyGrid.info.height;
-		ROS_DEBUG("Got new map of size %d x %d", mMapWidth, mMapHeight);
+		ROS_INFO("Got new map of size %d x %d", mMapWidth, mMapHeight);
 
 		last_scan_mapCB_mapUpd_used_ts = grid.header.stamp.toSec();
 		ROS_WARN("RECEIVED map from Mapper, Has scans with TS : %f", last_scan_mapCB_mapUpd_used_ts);
@@ -35,6 +35,7 @@ public:
 	{
 		if(x >= mMapWidth || y >= mMapHeight)
 		{
+			ROS_ERROR("iN GridMap::getIndex, x: %i, y: %i, mMapWidth: %i, mMapHeight: %i", x,y, mMapWidth, mMapHeight);
 			return false;
 		}
 		i = y * mMapWidth + x;

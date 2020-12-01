@@ -105,7 +105,10 @@ private:
 	std::string mExplorationStrategy;
 	boost::shared_ptr<ExplorationPlanner> mExplorationPlanner;
 	GridMap mCurrentMap;
+	boost::mutex currentMapMutex; // Need this since navC, navP are separate threads.
 	double* mCurrentPlan;
+	int currentPlanSize;
+	boost::mutex currentPlanMutex; // need to take this lock when reading,writing on mCurrentPlan.
 
 	double mFrequency;
 	double mInflationRadius;
@@ -139,5 +142,14 @@ private:
 	double current_mapper_tf_scan_ts; // latest transform's - scan used TS.
 	void updateMapperScanTSUsedTF(const std_msgs::Header& hdr);
 
-	// double explore_start_time;
+	// Nov: For using sockets to communicate with scheduler:
+	int client_sock_fd;
+	boost::thread sock_recv_thread; // to indefinitely listen on the socket fd.
+	void socket_recv();
+
+	// Nov: For managing the triggers recvd from the scheduler:
+	boost::mutex navc_trigger_mutex, navp_trigger_mutex;
+	int navc_trigger_count, navp_trigger_count;
+	boost::condition_variable cv_navc, cv_navp;
+
 };

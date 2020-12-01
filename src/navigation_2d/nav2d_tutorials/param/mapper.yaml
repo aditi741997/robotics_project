@@ -2,7 +2,7 @@
 
 grid_resolution: 0.04
 range_threshold: 10.0
-map_update_rate: 0.963 #5 : default
+map_update_rate: 0.1 
 publish_pose_graph: true
 max_covariance: 0.01
 transform_publish_period: 0.1
@@ -24,5 +24,5 @@ LoopSearchMaximumDistance: 10.0
 
 ###########################################################
 
-map_scan_period: 0.24075
+map_scan_period: 0.1 
 # drop_fraction: 2

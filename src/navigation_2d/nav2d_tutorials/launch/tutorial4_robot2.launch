@@ -5,7 +5,7 @@
         <param name="tf_prefix" value="robot_0"/>
         <rosparam file="$(find nav2d_tutorials)/param/ros.yaml"/>
 
-        <!-- Start the Navigator to move the robot autonomously -->
+	<!-- Start the Navigator to move the robot autonomously -->
         <node name="Navigator" pkg="nav2d_navigator" type="navigator">
             <rosparam file="$(find nav2d_tutorials)/param/navigator.yaml" command="load" />
         </node>

@@ -13,8 +13,16 @@
 #include <fstream>
 #include <sstream>
 
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
+
 #include <unistd.h>
 #include <sys/syscall.h>
+#include <cmath>
 #define gettid() syscall(SYS_gettid)
 
 #define PI 3.14159265
@@ -80,6 +88,7 @@ RobotNavigator::RobotNavigator()
 	mStopServer = robotNode.advertiseService(NAV_STOP_SERVICE, &RobotNavigator::receiveStop, this);
 	mPauseServer = robotNode.advertiseService(NAV_PAUSE_SERVICE, &RobotNavigator::receivePause, this);
 	mCurrentPlan = NULL;
+	currentPlanSize = 0;
 
 	NodeHandle navigatorNode("~/");
 	ROS_ERROR("INitializing NAV2D::Navigator Node. Publishing plan to plan topic and markers AND PUBLISHES nav2d_operator::cmd on cmd topic.");
@@ -134,12 +143,15 @@ RobotNavigator::RobotNavigator()
 	}
 
 	// Create action servers
+	ROS_ERROR("NOT making localize, moveGoal servers for now!!!");
+	/*
 	mMoveActionServer = new MoveActionServer(mMoveActionTopic, boost::bind(&RobotNavigator::receiveMoveGoal, this, _1), false);
 	mMoveActionServer->start();
 	
 	mLocalizeActionServer = new LocalizeActionServer(mLocalizeActionTopic, boost::bind(&RobotNavigator::receiveLocalizeGoal, this, _1), false);
 	mLocalizeActionServer->start();
-	
+	*/
+
 	if(mRobotID == 1)
 	{
 		mGetMapActionServer = new GetMapActionServer(mGetMapActionTopic, boost::bind(&RobotNavigator::receiveGetMapGoal, this, _1), false);
@@ -169,6 +181,87 @@ RobotNavigator::RobotNavigator()
 
 	nav_cmd_thread_ = NULL;
 	nav_cmd_thread_shutdown_ = false;
+
+	// For conencting socket to Controller.
+	client_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+	if (client_sock_fd < 0) ROS_ERROR("RobotNavigator:: SOCKET: client_sock_fd is NEGATIVE!!");
+
+	struct sockaddr_in serv_addr;
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_port = htons(7727);
+
+	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+	if ( pton_ret <= 0 )
+		ROS_ERROR("RobotNavigator:: SOCKET: Error in inet_pton %i", pton_ret);
+
+	if ( connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0 )
+		ROS_ERROR("RobotNavigator:: SOCKET: ERROR in connecting!!!");
+
+	// Nov: need a thread to continually listen on the socket.
+	sock_recv_thread = boost::thread(&RobotNavigator::socket_recv, this);
+	ROS_INFO("RobotNavigator:: SOCKET: DONE with socket stuff!");
+
+	navc_trigger_count = 0;
+	navp_trigger_count = 0;
+}
+
+void RobotNavigator::socket_recv()
+{
+	int read_size;
+	char msg [2048];
+
+
+	// Setting priority=2 so that this gets notified at the right time.
+	int ret = 7;
+	struct sched_param sp = { .sched_priority = 2,};
+	ret = sched_setscheduler(::gettid(), SCHED_FIFO, &sp);
+	
+	ROS_ERROR("RobotNavigator::socket_recv THREAD: tid %i, pid %i, Changed prio to 2, retval: %i", ::gettid(), ::getpid(), ret);	
+
+	// recv call waits for a message, thats why this is in a separate thread.
+	while ( (read_size = recv(client_sock_fd, msg, 2048, 0) ) > 0 )
+	{
+		// Got a message:
+		std::string s_msg = msg;
+		ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s", s_msg.c_str());
+		memset(msg, 0, 2048); // clear the arr
+		std::stringstream ss(s_msg);
+		std::string to;
+		while(std::getline(ss,to,'\n'))
+		{
+			ROS_ERROR("Processing line : %s", to.c_str());
+			if (to.find("navc") != std::string::npos)
+			{
+				boost::unique_lock<boost::mutex> lock(navc_trigger_mutex);
+				ROS_ERROR("Got a trigger for navc, curr count %i", navc_trigger_count);
+				if (to.find("RESETCOUNT") != std::string::npos)
+				{
+					navc_trigger_count = 1;
+					ROS_ERROR("Resetting the navc count to 1!!!!");
+				}
+				else
+					navc_trigger_count += 1;
+				cv_navc.notify_all();
+			}
+			else
+			{
+				boost::unique_lock<boost::mutex> lock(navp_trigger_mutex);
+				ROS_ERROR("Got a trigger for navp, curr_count %i", navp_trigger_count);
+				if (to.find("RESETCOUNT") != std::string::npos)
+                                {
+					navp_trigger_count = 1;
+					ROS_ERROR("Resetting the navp count to 1!!!!");
+				}
+				else
+					navp_trigger_count += 1;
+				cv_navp.notify_all();
+			}
+		}
+	}
+	if(read_size == 0)
+		ROS_ERROR("RobotNavigator::socket_recv THREAD: Client disconnected!!");
+	else if(read_size == -1)
+		ROS_ERROR("RobotNavigator::socket_recv THREAD: Client read error!!");
 }
 
 RobotNavigator::~RobotNavigator()
@@ -179,6 +272,7 @@ RobotNavigator::~RobotNavigator()
 	delete mGetMapActionServer;
 	mExplorationPlanner.reset();
 	delete mPlanLoader;
+	close(client_sock_fd);
 }
 
 void RobotNavigator::updateMapperScanTSUsedTF(const std_msgs::Header& hdr)
@@ -205,10 +299,13 @@ bool RobotNavigator::getMap()
 		return false;
 	}
 	mCurrentMap.update(srv.response.map);
-	
+
+	currentPlanMutex.lock();	
 	if(mCurrentPlan) delete[] mCurrentPlan;
 	mCurrentPlan = new double[mCurrentMap.getSize()];
-	
+	currentPlanSize = mCurrentMap.getSize();
+	currentPlanMutex.unlock();	
+
 	if(mCellInflationRadius == 0)
 	{
 		ROS_INFO("Navigator is now initialized.");
@@ -313,18 +410,23 @@ bool RobotNavigator::createPlan()
 	}
 	
 	Queue queue;
-	
-	// Reset the plan
+
 	int mapSize = mCurrentMap.getSize();
+	// Done: First make a new planObj, make it ready. Then, just copy to mCurrentPlan with lock.	
+	double* newPlan = new double[mapSize];	
+
+	// Reset the plan
 	for(int i = 0; i < mapSize; i++)
 	{
-		mCurrentPlan[i] = -1;
+		// mCurrentPlan[i] = -1;
+		newPlan[i] = -1;
 	}
 
 	if(mCurrentMap.isFree(mGoalPoint))
 	{
 		queue.insert(Entry(0.0, mGoalPoint));
-		mCurrentPlan[mGoalPoint] = 0;
+		// mCurrentPlan[mGoalPoint] = 0;
+		newPlan[mGoalPoint] = 0;
 	}else
 	{
 		// Initialize the queue with area around the goal point
@@ -333,7 +435,8 @@ bool RobotNavigator::createPlan()
 		for(unsigned int i = 0; i < neighbors.size(); i++)
 		{
 			queue.insert(Entry(0.0, neighbors[i]));
-			mCurrentPlan[neighbors[i]] = 0;
+			// mCurrentPlan[neighbors[i]] = 0;
+			newPlan[neighbors[i]] = 0;
 		}
 	}
 	ROS_ERROR("IN ROBOTNavigator:: createPlan, added %i nodes (Goal/NearGoal) to queue.", queue.size());
@@ -356,8 +459,9 @@ bool RobotNavigator::createPlan()
 		
 		count += 1;
 
-		if(mCurrentPlan[index] >= 0 && mCurrentPlan[index] < distance) continue;
-		
+		// if(mCurrentPlan[index] >= 0 && mCurrentPlan[index] < distance) continue;
+		if ( newPlan[index] >= 0 && newPlan[index] < distance ) continue;		
+
 //		if(index == mStartPoint) break;
 		
 		// Add all adjacent cells
@@ -379,16 +483,27 @@ bool RobotNavigator::createPlan()
 			{
 				double delta = (it < 4) ? linear : diagonal;
 				double newDistance = distance + delta + (10 * delta * (double)mCurrentMap.getData(i) / (double)mCostObstacle);
-				if(mCurrentPlan[i] == -1 || newDistance < mCurrentPlan[i])
+				// if(mCurrentPlan[i] == -1 || newDistance < mCurrentPlan[i])
+				if(newPlan[i] == -1 || newDistance < newPlan[i])
 				{
 					queue.insert(Entry(newDistance, i));
-					mCurrentPlan[i] = newDistance;
+					// mCurrentPlan[i] = newDistance;
+					newPlan[i] = newDistance;
 				}
 			}
 		}
-		if (count%2500 == 77)
+		if (count%12500 == 77)
 			ROS_ERROR("In navPlan createPlan, curr que sz : %i, count %i", queue.size(), count);
 	}
+
+	currentPlanMutex.lock();
+	// copy newPlan to mCurrentPlan
+	mCurrentPlan = newPlan;
+	for (int i = 0; i < mapSize; i++)
+		if (mCurrentPlan[i] != newPlan[i])
+			ROS_ERROR("SHITTTTTTTTT Plan was NOT COPIED CORRECTLY!!! In createPlan()");
+	currentPlanSize = mapSize;
+	currentPlanMutex.unlock();
 	
 	if(mCurrentPlan[mStartPoint] < 0)
 	{
@@ -539,6 +654,23 @@ bool RobotNavigator::generateCommand()
 		return false;
 	}
 
+	// TODO: make a copy of currentPlan here
+	//Note that currentMap is only updated when navPlan starts executing.
+	// It might happen that we pick up a larger mapSize here, than the currentPlan size...Maybe also store currentSz with CurrentPlan.
+	currentPlanMutex.lock();
+	double* currentPlan_copy = new double[currentPlanSize];
+	// std::memcpy(currentPlan_copy, mCurrentPlan, currentPlanSize*sizeof(double) );
+	for (int i = 0; i < currentPlanSize; i++)
+		currentPlan_copy[i] = mCurrentPlan[i];
+	int wrong_count = 0;
+	for (int i = 0; i < currentPlanSize; i++)
+		if (std::abs(mCurrentPlan[i] - currentPlan_copy[i]) > 0.01)
+			wrong_count += 1;
+	if (wrong_count > 0)
+		ROS_ERROR("SHITTTTT!!!!! Could not copy mCurrentPlan correctly!!!! In generateCmd call, wrong_count %i, total %i", wrong_count, currentPlanSize);
+	// maybe just copy elem by elem if this doesnt work.
+	currentPlanMutex.unlock();
+
 	unsigned int target = mStartPoint;
 	int steps = mCommandTargetDistance / mCurrentMap.getResolution();
 	for(int i = 0; i < steps; i++)
@@ -548,7 +680,8 @@ bool RobotNavigator::generateCommand()
 		std::vector<unsigned int> neighbors = mCurrentMap.getFreeNeighbors(target);
 		for(unsigned int i = 0; i < neighbors.size(); i++)
 		{
-			if(mCurrentPlan[neighbors[i]] >= (unsigned int)0 && mCurrentPlan[neighbors[i]] < mCurrentPlan[bestPoint])
+			// if(mCurrentPlan[neighbors[i]] >= (unsigned int)0 && mCurrentPlan[neighbors[i]] < mCurrentPlan[bestPoint])
+			if (currentPlan_copy[neighbors[i]] >= (unsigned int)0 && currentPlan_copy[neighbors[i]] < currentPlan_copy[bestPoint])	
 				bestPoint = neighbors[i];
 		}	
 		target = bestPoint;
@@ -573,17 +706,20 @@ bool RobotNavigator::generateCommand()
 	if(msg.Turn < -1) msg.Turn = -1;
 	if(msg.Turn >  1) msg.Turn = 1;
 	
-	if(mCurrentPlan[mStartPoint] > mNavigationHomingDistance || mStatus == NAV_ST_EXPLORING)
+	// if(mCurrentPlan[mStartPoint] > mNavigationHomingDistance || mStatus == NAV_ST_EXPLORING)
+	if(currentPlan_copy[mStartPoint] > mNavigationHomingDistance || mStatus == NAV_ST_EXPLORING)
 		msg.Mode = 0;
 	else
 		msg.Mode = 1;
 		
-	if(mCurrentPlan[mStartPoint] > 1.0 || mCurrentPlan[mStartPoint] < 0)
+	// if(mCurrentPlan[mStartPoint] > 1.0 || mCurrentPlan[mStartPoint] < 0)
+	if(currentPlan_copy[mStartPoint] > 1.0 || currentPlan_copy[mStartPoint] < 0)
 	{
 		msg.Velocity = 1.0;
 	}else
-	{
-		msg.Velocity = 0.5 + (mCurrentPlan[mStartPoint] / 2.0);
+	{	
+		msg.Velocity = 0.5 + (currentPlan_copy[mStartPoint] / 2.0);
+		// msg.Velocity = 0.5 + (mCurrentPlan[mStartPoint] / 2.0);
 	}
 
 	// For measuring RT:
@@ -967,6 +1103,13 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 
 	navp_exec_info_pub.publish(hdr);
 
+	ros::NodeHandle nh;
+	std::string use_td;
+        nh.param<std::string>("/use_td", use_td, "");
+
+        bool use_timer = ( use_td.find("yes") != std::string::npos );
+        ROS_ERROR("In navPlanLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
+
 	while(true)
 	{
 		struct timespec cb_start, cb_end;
@@ -1101,6 +1244,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 
 			explore_cb_plan_times.push_back(plan_t);
 			explore_cb_plan_ts.push_back(exec_rt_end);
+			ROS_WARN("Exploration planning took %f cputime using CLOCK_THREAD_CPUTIME_ID", plan_t);
 
 			// Making a separate thread for Navigator generateCommand
 			// It should start after a plan has been made.
@@ -1146,16 +1290,29 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 
 		// Moved spinOnce to setCurrentPosition function.
 
-		planUpdateLoopRate.sleep();
-		
-		// if(loopRate.cycleTime() > ros::Duration(1.0 / mFrequency))
-		// 	ROS_WARN("Missed desired rate of %.2fHz! Loop actually took %.4f seconds!",mFrequency, loopRate.cycleTime().toSec());
 	
 		if (explore_cb_plan_ts.size()%20 == 7)
 		{
 			write_arrs_to_file(explore_cb_plan_times, explore_cb_plan_ts, "nav2d_navigator_plan");
 			write_arr_to_file(tput_nav_plan, "nav2d_navigator_plan");
 		}
+		
+		// Nov: Scheduler triggers navPlan.
+		// planUpdateLoopRate.sleep();
+		if (use_timer)
+			planUpdateLoopRate.sleep();
+		else
+		{
+			boost::unique_lock<boost::mutex> lock(navp_trigger_mutex);
+			if (navp_trigger_count > 0)
+				navp_trigger_count -= 1;
+			while (navp_trigger_count == 0)
+			{
+				cv_navp.wait(lock);
+				ROS_ERROR("About to run navPlan ct:%i", navp_trigger_count);
+			}
+		}
+	
 	}
 }
 
@@ -1164,15 +1321,13 @@ void RobotNavigator::navGenerateCmdLoop()
 	ros::NodeHandle nh;
 	ROS_ERROR("In RobotNavigator::navGenerateCmdLoop frequency : %f", mFrequency);
 	ros::WallRate r(mFrequency);
-	int cycle;
+	int cycle = 0;
 
-	ROS_ERROR("Publishing node navCmd tid %i, pid %i to controller.", ::gettid(), ::getpid());
-        std_msgs::Header hdr;
-        
-        std::stringstream ss_e;
-        ss_e << ::getpid() << " navc " << ::gettid();
-        hdr.frame_id = ss_e.str();
-	navc_exec_info_pub.publish(hdr);	
+	std::string use_td;
+        nh.param<std::string>("/use_td", use_td, "");
+
+        bool use_timer = ( use_td.find("yes") != std::string::npos );
+        ROS_ERROR("In navCmdLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
 
 	while (nh.ok() && !nav_cmd_thread_shutdown_)
 	{
@@ -1241,13 +1396,44 @@ void RobotNavigator::navGenerateCmdLoop()
 			}
 		}
 		cycle++;
-		r.sleep();
+
+		// if (explore_cb_cmd_ts.size() == 1)
+		// This only needs to be published exactly once.
+		if (cycle == 1)
+		{
+			// Publish tid after 1st comd has been generated. Indicates that at this TS, mC,mU, nC,nP all are waiting for triggers.
+			ROS_ERROR("Publishing node navCmd tid %i, pid %i to controller.", ::gettid(), ::getpid());
+			std_msgs::Header hdr;
+			
+			std::stringstream ss_e;
+			ss_e << ::getpid() << " navc " << ::gettid();
+			hdr.frame_id = ss_e.str();
+			navc_exec_info_pub.publish(hdr);	
+		}
+
 
 		if (explore_cb_cmd_ts.size()%50 == 20)
 		{
 			write_arrs_to_file(explore_cb_cmd_times, explore_cb_cmd_ts, "nav2d_navigator_cmd");
 			write_arr_to_file(tput_nav_cmd, "nav2d_navigator_cmd");
 		}
+		
+		// Nov: NavC triggered by scheduler.
+		// r.sleep();
+		if (use_timer)
+			r.sleep();
+		else
+		{
+			boost::unique_lock<boost::mutex> lock(navc_trigger_mutex);
+			if (navc_trigger_count > 0)
+				navc_trigger_count -= 1;
+			while (navc_trigger_count == 0)
+			{
+				cv_navc.wait(lock);
+				ROS_ERROR("About to generateCmd NAVC ct:%i", navc_trigger_count);
+			}
+		}
+	
 	}
 }
 
@@ -1272,7 +1458,7 @@ bool RobotNavigator::setCurrentPosition(int x)
 		// ROS_WARN("IN ROBOTNavigator:: setCurrentPosition, TS of TF bw /map and /base_footp : %f, x: %i", current_mapper_tf_scan_ts, x);
 	}catch(TransformException ex)
 	{
-		ROS_ERROR("Could not get robot position: %s", ex.what());
+		ROS_ERROR("In setCurrentPosition() : Could not get robot position: %s", ex.what());
 		return false;
 	}
 	double world_x = transform.getOrigin().x();
@@ -1288,7 +1474,7 @@ bool RobotNavigator::setCurrentPosition(int x)
 	{
 		if(mHasNewMap || !getMap() || !mCurrentMap.getIndex(current_x, current_y, i))
 		{
-			ROS_ERROR("Is the robot out of the map?");
+			ROS_ERROR("Is the robot out of the map? Called by %i navC:0,P:1", x);
 			return false;
 		}
 	}

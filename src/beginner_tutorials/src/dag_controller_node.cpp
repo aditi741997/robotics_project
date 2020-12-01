@@ -72,10 +72,10 @@ class DAGController: public DAGControllerFE
 	DAGControllerBE* controller;
 
 public:
-        DAGController(int x, std::string dag_file, int f_mc, int f_mu, int f_nc, int f_np)
+        DAGController(int x, std::string dag_file, std::string use_td, int f_mc, int f_mu, int f_nc, int f_np)
         {
 		ROS_INFO("Initializing DAGController class");
-		controller = new DAGControllerBE(dag_file, this, f_mc, f_mu, f_nc, f_np);		
+		controller = new DAGControllerBE(dag_file, this, use_td, f_mc, f_mu, f_nc, f_np);		
 
 		/*
 		// reads DAG from text file and sorts chains based on criticality. 
@@ -456,12 +456,13 @@ int main (int argc, char **argv)
         ROS_INFO("Init node name %s", node_name.c_str());
         ros::init(argc, argv, node_name);
 	std::string dag_fname = argv[1];
+	std::string use_td = argv[2];
 	// for offline:
-	int f_mc = atoi(argv[2]);
-	int f_mu = atoi(argv[3]);
-	int f_nc = atoi(argv[4]);
-	int f_np = atoi(argv[5]);
-        DAGController dagc(0, "/home/ubuntu/catkin_ws/" + dag_fname + "_dag.txt", f_mc, f_mu, f_nc, f_np);
+	int f_mc = atoi(argv[3]);
+	int f_mu = atoi(argv[4]);
+	int f_nc = atoi(argv[5]);
+	int f_np = atoi(argv[6]);
+        DAGController dagc(0, "/home/ubuntu/catkin_ws/" + dag_fname + "_dag.txt", use_td, f_mc, f_mu, f_nc, f_np);
         ros::spin();
 
         return 0;

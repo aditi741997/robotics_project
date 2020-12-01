@@ -35,7 +35,7 @@ DAGControllerBE::DAGControllerBE()
 	}
 
 // todo:Later: maybe a lock for reset_count.
-DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, int f_mc, int f_mu, int f_nc, int f_np)
+DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std::string use_td, int f_mc, int f_mu, int f_nc, int f_np)
 	{
 		// Note that the last 4 inputs are just for the offline stage.
 		node_dag = DAG(dag_file);
@@ -51,6 +51,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, int 
 		exec_order = node_dag.get_exec_order();
 
 		// Nov: Assigning fractions for offline stage
+		offline_use_td = (use_td.find("yes") != std::string::npos);
 		if (dag_name.find("nav") != std::string::npos)
 		{
 			offline_fracs["s"] = 1.0;
@@ -74,34 +75,38 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, int 
 	{
                 total_period_count += 1;
 
-		if (got_all_info())
+		// Nov25: No need to do anything if we're using TD in offline version.
+		if (!offline_use_td)
 		{
-			if (!sched_started)
+			if (got_all_info())
 			{
-				std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " $$$$$ DAGControllerBE:: STARTING SCHEDULING!!! \n";
-				sched_started = true;
-				for (int i = 0; i < reset_count.size(); i++)
-					reset_count[i] = true;
-				total_period_count = 1;
+				if (!sched_started)
+				{
+					std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " $$$$$ DAGControllerBE:: STARTING SCHEDULING!!! \n";
+					sched_started = true;
+					for (int i = 0; i < reset_count.size(); i++)
+						reset_count[i] = true;
+					total_period_count = 1;
 
-				// Make the thread that handles scheduling.
-				handle_sched_thread = boost::thread(&DAGControllerBE::handle_noncritical_loop, this);
-				std::this_thread::sleep_for (std::chrono::milliseconds(2));
+					// Make the thread that handles scheduling.
+					handle_sched_thread = boost::thread(&DAGControllerBE::handle_noncritical_loop, this);
+					std::this_thread::sleep_for (std::chrono::milliseconds(2));
+				}
+			
+				// Notify the thread.	
+				boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
+				cc_end = true;
+				ready_sched = true;
+				printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
+				cv_sched_thread.notify_all();
 			}
-		
-			// Notify the thread.	
-			boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
-			cc_end = true;
-			ready_sched = true;
-			printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
-			cv_sched_thread.notify_all();
-		}
-		else
-		{
-			std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " | GOT exec_end msg. NOT making a timer,Will trigger nodes" << std::endl;
-			for (int i = 1; i < exec_order.size(); i++)
-				checkTriggerExec(i);
-				//frontend->trigger_node(node_dag.id_name_map[exec_order[i][0]], false);
+			else
+			{
+				std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " | GOT exec_end msg. NOT making a timer,Will trigger nodes" << std::endl;
+				for (int i = 1; i < exec_order.size(); i++)
+					checkTriggerExec(i);
+					//frontend->trigger_node(node_dag.id_name_map[exec_order[i][0]], false);
+			}
 		}
 			
 	}
@@ -199,6 +204,25 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, int 
 		node_pid[node_name] = pid;
 		// todo: do we need to inc priority of CC here?
 		// not if it starts with p>=2 already : True for ROS.
+
+		if (offline_use_td && got_all_info() )
+		{
+			for (int i = 0; i < exec_order.size(); i++)
+                	{
+				// Assign all nodes in ith set to core i.
+				for (int j = 0; j < exec_order[i].size(); j++)
+				{
+					cpu_set_t set;
+					CPU_ZERO(&set);
+					CPU_SET(i, &set);
+					int reta = sched_setaffinity( node_tid[node_dag.id_name_map[exec_order[i][j]] ], sizeof(set), &set );
+					std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << ", Assigning core " << i << " to node " << node_dag.id_name_map[exec_order[i][j]] << ", retval: " << reta << ", cpucount: " << CPU_COUNT(&set) << std::endl;
+					struct sched_param sp = { .sched_priority = 1,};
+					int retp = sched_setscheduler( node_tid[node_dag.id_name_map[exec_order[i][j]] ] , SCHED_FIFO, &sp );
+					std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << ", Assigning FIFO,prio=1 to node " << node_dag.id_name_map[exec_order[i][j]] << ", retval: " << retp << std::endl;
+				}	
+			}
+		}
 	}
 
 	// Returns sum ci of subchain ind, for current ci vals.

@@ -59,8 +59,13 @@ public:
 	double last_map_cb_out, last_map_upd_out;
 	// boost::chrono::time_point<boost::chrono::system_clock> last_map_upd_out;
 
+	std::vector<double> trig_tput_map_cb;
+	double trig_last_map_cb_out;
+	long int total_map_cb_trig_count;
+
 	// For measuring how many scans does mapScanCB drop:
 	std::vector<double> scan_drop_ts;
+	std::vector<double> scan_drop_exec_time;
 
 	long int total_mapcb_count, total_mapupdate_count;
 
@@ -87,6 +92,13 @@ public:
 
 	// For fractional scheduling:
 	int mDropFraction;
+
+	// For receiving scheduler's trigger msgs:
+	void recv_trigger_exec(const std_msgs::Header::ConstPtr& msg);
+	boost::mutex mapcb_trigger_mutex, mapupd_trigger_mutex; // take this lock which reading/writing trigger_counts.
+	int mapcb_trigger_count, mapupd_trigger_count;
+	boost::condition_variable cv_mapcb, cv_mapupd; // threads will wait on these CVs.
+	ros::Subscriber mapcb_trigger_sub, mapupd_trigger_sub;
 
 private:
 	// Private methods

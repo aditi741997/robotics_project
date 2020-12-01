@@ -4,12 +4,13 @@ include "floorplan.inc"
  # interval_sim is time in ms bw 2 world updates AND sensor publishes.
 name                    "Navigation-2D Multi-Robot Tutorial"
 interval_sim            100
+interval_real		100
 quit_time                 0
 resolution                0.025
 show_clock                0
 show_clock_interval     100
 threads                 12
-speedup                 10
+speedup                 5
 
 window
 (

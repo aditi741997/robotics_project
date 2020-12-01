@@ -20,6 +20,7 @@
             <rosparam file="$(find nav2d_tutorials)/param/mapper.yaml" command="load" />
         </node>
 
+
     </group>
 
 </launch>

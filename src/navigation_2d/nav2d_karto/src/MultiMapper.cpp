@@ -231,12 +231,22 @@ MultiMapper::MultiMapper()
         total_mapcb_count = 0;
         total_mapupdate_count = 0;
 
-        map_upd_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapupd", 1, true);
-        map_update_thread_ = new boost::thread(boost::bind(&MultiMapper::mapUpdateLoop, this, mMapUpdateRate));
+        
 
-        // For making a separate thread for mapCB:
+        total_map_cb_trig_count = 0;
+
+	// Nov5: subscribe to trigger_Exec topics.
+	mapcb_trigger_count = 0;
+	mapupd_trigger_count = 0;
+	mapcb_trigger_sub = robotNode.subscribe("trigger_exec_mapcb", 1, &MultiMapper::recv_trigger_exec, this, ros::TransportHints().tcpNoDelay());
+	mapupd_trigger_sub = robotNode.subscribe("trigger_exec_mapupd", 1, &MultiMapper::recv_trigger_exec, this, ros::TransportHints().tcpNoDelay());
+
+	// For making a separate thread for mapCB:
         map_cb_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapcb", 1, true);
         map_scan_cb_thread_ = new boost::thread(boost::bind(&MultiMapper::mapScanCBLoop, this, mMapScanUpdateRate));
+
+	map_upd_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapupd", 1, true);
+        map_update_thread_ = new boost::thread(boost::bind(&MultiMapper::mapUpdateLoop, this, mMapUpdateRate));
 }
 
 MultiMapper::~MultiMapper()
@@ -256,6 +266,37 @@ MultiMapper::~MultiMapper()
         delete map_scan_cb_thread_;
 }
 
+void MultiMapper::recv_trigger_exec(const std_msgs::Header::ConstPtr& msg)
+{
+	if (msg->frame_id.find("cb") != std::string::npos)
+	{
+		// its the mapcb trigger.
+		ROS_ERROR("Got a trigger for mapcb, curr count: %i", mapcb_trigger_count);
+		boost::unique_lock<boost::mutex> lock(mapcb_trigger_mutex);
+		if (msg->frame_id.find("RESETCOUNT") != std::string::npos)
+		{
+			mapcb_trigger_count = 1;
+			ROS_ERROR("RESET counter for mapcb to 1.");
+		}
+		else
+			mapcb_trigger_count += 1;
+		cv_mapcb.notify_all();
+	}
+	else
+	{
+		ROS_ERROR("Got a trigger for mapupd, curr count: %i", mapupd_trigger_count);
+		boost::unique_lock<boost::mutex> lock(mapupd_trigger_mutex);
+		if (msg->frame_id.find("RESETCOUNT") != std::string::npos)
+		{
+			mapupd_trigger_count = 1;
+			ROS_ERROR("RESET counter for mapupd to 1.");
+		}
+		else
+			mapupd_trigger_count += 1;
+		cv_mapupd.notify_all();	
+	}
+}
+
 void MultiMapper::mapUpdateLoop(double map_update_rate)
 {
 	if (map_update_rate == 0.0)
@@ -273,11 +314,33 @@ void MultiMapper::mapUpdateLoop(double map_update_rate)
 
 	map_upd_exec_info_pub.publish(hdr);
 
+	std::string use_td;
+        nh.param<std::string>("/use_td", use_td, "");
+
+        bool use_timer = ( use_td.find("yes") != std::string::npos );
+        ROS_ERROR("In mapUpdateLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
+
 	while (nh.ok() && !map_update_thread_shutdown_)
 	{
 		if (processed_scans)
 			sendMap();
-		r.sleep();
+		// r.sleep();
+		// Nov5: To be triggered by Scheduler.
+		// Nov23: if not timer then triggered by scheduler.
+		if (use_timer)
+			r.sleep();
+		else
+		{
+			boost::unique_lock<boost::mutex> lock(mapupd_trigger_mutex);
+			if (mapupd_trigger_count > 0)
+				mapupd_trigger_count -= 1;
+			while (mapupd_trigger_count == 0)
+			{
+				cv_mapupd.wait(lock);
+				ROS_ERROR("About to run updateMap!! %i", mapupd_trigger_count);
+			}
+		}
+		
 	}
 }
 
@@ -417,8 +480,10 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 	struct timespec cb_start, cb_end;
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
 
+	/*
 	if (!processed_scans)
 		publishTransform(); // publish for the first scanCB.
+	*/
 
 	// Ignore own readings until map has been received
 	// ROS_WARN("ROBOT_%i IN nav2d::Mapper receiveLaserScan 1", mRobotID);
@@ -453,6 +518,7 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 	
 		received_scans = true;
 		ROS_WARN("ROBOT_%i IN nav2d::Mapper receiveLaserScan with TS %f", mRobotID, scan->scan_time);
+		publishTransform();
 	}
 	/*	
 
@@ -630,6 +696,8 @@ void MultiMapper::processLatestScan()
 	struct timespec cb_start, cb_end;
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
 
+	bool tf_changed = false;
+
 	{
 		boost::mutex::scoped_lock lock(scan_lock);
 		// process latest_scan_recv.
@@ -741,11 +809,14 @@ void MultiMapper::processLatestScan()
 					v.setZ(0);
 					mMapToOdometry.setOrigin(v);
 
+					tf_changed = true;
+
 					// For measuring RT :
 					// Latest scan used in the mapTOOdom TF:
 					// last_scan_mapCB_tf_processed = scan->header.stamp.toSec();
 					// using real TS:
 					last_scan_mapCB_tf_processed = latest_scan_recv.scan_time;
+					publishTransform();
 				}
 				mNodesAdded++;
 				mMapChanged = true;
@@ -805,6 +876,11 @@ void MultiMapper::processLatestScan()
 			{
 				double sdrop_rt = get_time_now();
 				scan_drop_ts.push_back(sdrop_rt);
+			
+				clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
+                                double dropt = get_time_diff(cb_start, cb_end);
+				scan_drop_exec_time.push_back(dropt);
+			
 			}
 
 		}
@@ -818,12 +894,14 @@ void MultiMapper::processLatestScan()
         	write_arrs_to_file(scan_cb_times, scan_cb_ts, ss);
 		write_arr_to_file(tput_map_cb, ss, "tput");
 		write_arr_to_file(scan_drop_ts, ss, "scanDrop");
+		write_arr_to_file(scan_drop_exec_time, ss, "scanDropExecTimes");
+		write_arr_to_file(trig_tput_map_cb, ss, "trigTput");
 	}
+
 
 	// For converting navigation2d to ED:
 	// Publishing transform from within scanCB
 	// THis has to be at the end of receiveLaserScan so it spublished right after its updated in the func.
-	publishTransform();
 
 }
 
@@ -845,12 +923,46 @@ void MultiMapper::mapScanCBLoop(double per)
 
         map_cb_exec_info_pub.publish(hdr);
 
+	std::string use_td;
+    	nh.param<std::string>("/use_td", use_td, "");
+
+	bool use_timer = ( use_td.find("yes") != std::string::npos );
+	ROS_ERROR("In mapScanCBLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
+
         while (nh.ok() && !map_scan_cb_thread_shutdown_)
 	{
 		// process stored scan.
 		if (received_scans)
+		{
 			processLatestScan();
-		r.sleep();
+		}
+		
+		total_map_cb_trig_count += 1;
+		double time_now = get_time_now();
+		if (total_map_cb_trig_count > 1)
+			trig_tput_map_cb.push_back( time_now - trig_last_map_cb_out);
+		trig_last_map_cb_out = time_now;
+
+		// r.sleep();
+		// Nov5: replace sleep with while-wait on cv_mapcb, so that DAGController triggers this.
+		// This does mapcb_trigger_count -=1 if it is +ve.
+
+		if (use_timer)
+		{
+			r.sleep();
+		}
+		else
+		{	
+			boost::unique_lock<boost::mutex> lock(mapcb_trigger_mutex);
+			if (mapcb_trigger_count > 0)
+				mapcb_trigger_count -= 1;
+			while (mapcb_trigger_count == 0)
+			{
+				cv_mapcb.wait(lock);
+				ROS_ERROR("About to processLatestScan %i", mapcb_trigger_count);
+			}
+		}
+	
 	}
 }
 

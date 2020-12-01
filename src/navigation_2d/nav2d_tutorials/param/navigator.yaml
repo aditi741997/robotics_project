@@ -1,5 +1,5 @@
 # Frequency (Hz) in which to generate new commands
-frequency: 4.153686396 #10 default
+frequency: 20.0 
 
 # Inflation params used for path planning
 map_inflation_radius: 1.0
@@ -20,7 +20,8 @@ exploration_goal_distance: 3.0
 # Replanning period (set any to 0 to ignore)
 min_replanning_period: 5.0 #default 5
 max_replanning_period: 1.0 #default 1
-replanning_period: 0.963 #using this for the separate planning thread.
+replanning_period: 0.2 
+#0.444 #0.963 #using this for the separate planning thread.
 
 # Strategy MinPos
 min_target_area_size: 1.0

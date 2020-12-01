@@ -2196,6 +2196,7 @@ namespace karto
   void OpenMapper::InitializeParameters()
   {
     m_pUseScanMatching = new Parameter<kt_bool>(GetParameterSet(), "UseScanMatching", "Mapper::Use::Scan Matching", "UseScanMatching", true);
+    std::cerr << "In OpenMapper::InitializeParameters, m_pUseScanMatching value: " << m_pUseScanMatching->GetValue() << std::endl;
     m_pUseScanBarycenter = new Parameter<kt_bool>(GetParameterSet(), "UseScanBarycenter", "Mapper::Use::Scan Barycenter", "UseScanBarycenter", true);
     m_pMinimumTravelDistance = new Parameter<kt_double>(GetParameterSet(), "MinimumTravelDistance", "Mapper::Minimum Travel::Distance", "MinimumTravelDistance", 0.2);
     m_pMinimumTravelHeading = new Parameter<kt_double>(GetParameterSet(), "MinimumTravelHeading", "Mapper::Minimum Travel::Heading", "MinimumTravelHeading", math::DegreesToRadians(20));

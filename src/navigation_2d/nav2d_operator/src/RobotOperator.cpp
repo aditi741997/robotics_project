@@ -87,7 +87,7 @@ RobotOperator::RobotOperator(std::condition_variable* cv_robot_op)
 	ros::NodeHandle robotNode;
 	robotNode.param("robot_frame", mRobotFrame, std::string("robot"));
 	robotNode.param("odometry_frame", mOdometryFrame, std::string("odometry_base"));
-	mCommandSubscriber = robotNode.subscribe(COMMAND_TOPIC, 1, &RobotOperator::receiveCommand, this);
+	mCommandSubscriber = robotNode.subscribe(COMMAND_TOPIC, 1, &RobotOperator::receiveCommand, this, ros::TransportHints().tcpNoDelay() );
 	mControlPublisher = robotNode.advertise<geometry_msgs::Twist>(CONTROL_TOPIC, 1);
 	mCostPublisher = robotNode.advertise<geometry_msgs::Vector3>("costs", 1);
 	

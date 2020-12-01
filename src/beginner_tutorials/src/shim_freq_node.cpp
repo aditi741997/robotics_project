@@ -189,7 +189,7 @@ void ShimFreqNode::publishLatestData(const ros::WallTimerEvent& event)
         boost::mutex::scoped_lock lock(data_lock);
 
 	//publish thread id info.
-	if (real_cg_recv_deltas.size()%10 == 7)
+	if (real_cg_recv_deltas.size() < 7)
 	{
 		std_msgs::Header hdr;
 		std::stringstream ss_e;
