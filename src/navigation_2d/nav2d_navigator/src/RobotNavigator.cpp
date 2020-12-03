@@ -376,7 +376,7 @@ bool RobotNavigator::preparePlan()
 
 bool RobotNavigator::createPlan()
 {	
-	ROS_ERROR("In RobotNavigator::createPlan, Map-Value of goal point is %d, lethal threshold is %d.", mCurrentMap.getData(mGoalPoint), mCostLethal);
+	// ROS_ERROR("In RobotNavigator::createPlan, Map-Value of goal point is %d, lethal threshold is %d.", mCurrentMap.getData(mGoalPoint), mCostLethal);
 	unsigned int start_x = 0, start_y = 0;
 	unsigned int goal_x = 0, goal_y = 0;
 	if(mCurrentMap.getCoordinates(goal_x,goal_y,mGoalPoint))
@@ -492,7 +492,7 @@ bool RobotNavigator::createPlan()
 				}
 			}
 		}
-		if (count%12500 == 77)
+		if (count%17500 == 77)
 			ROS_ERROR("In navPlan createPlan, curr que sz : %i, count %i", queue.size(), count);
 	}
 
@@ -736,7 +736,7 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 	ROS_ERROR("IN NAV2D::ROBOTNavigator - Received STartMapping Goal.");
 	if(mStatus != NAV_ST_IDLE)
 	{
-		ROS_WARN("Navigator is busy!");
+		ROS_ERROR("MAPPING Failed. Navigator is busy!");
 		mGetMapActionServer->setAborted();
 		return;
 	}
@@ -756,7 +756,7 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 	{
 		if(!ok() || mGetMapActionServer->isPreemptRequested() || mIsStopped)
 		{
-			ROS_INFO("GetFirstMap has been preempted externally.");
+			ROS_ERROR("MAPPING Failed. GetFirstMap has been preempted externally.");
 			mGetMapActionServer->setPreempted();
 			stop();
 			return;
@@ -775,6 +775,7 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 	{
 		mGetMapActionServer->setAborted();
 		stop();
+		ROS_ERROR("MAPPING Failed. getMap or setCurrentPosition failed.");
 		return;
 	}
 	
@@ -787,7 +788,7 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 	{
 		if(!ok() || mGetMapActionServer->isPreemptRequested() || mIsStopped)
 		{
-			ROS_INFO("GetFirstMap has been preempted externally.");
+			ROS_ERROR("MAPPING Failed. GetFirstMap has been preempted externally.");
 			mGetMapActionServer->setPreempted();
 			stop();
 			return;
@@ -822,10 +823,11 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 	
 	if(getMap() && setCurrentPosition())
 	{
+		ROS_ERROR("MAPPING Successful!!!!");
 		mGetMapActionServer->setSucceeded();
 	}else
 	{
-		ROS_ERROR("Navigator could not be initialized!");
+		ROS_ERROR("MAPPING Failed. Navigator could not be initialized!");
 		mGetMapActionServer->setAborted();
 	}
 }
@@ -1067,8 +1069,9 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 
 	if(mStatus != NAV_ST_IDLE)
 	{
-		ROS_WARN("Navigator is busy!");
+		ROS_ERROR("Exploration failed. Navigator is busy!");
 		mExploreActionServer->setAborted();
+		nav_cmd_thread_shutdown_ = true;
 		return;
 	}
 
@@ -1119,8 +1122,9 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		// Check if we are asked to preempt
 		if(!ok() || mExploreActionServer->isPreemptRequested() || mIsStopped)
 		{
-			ROS_ERROR("Exploration has been preempted externally.");
+			ROS_ERROR("Exploration failed. Exploration has been preempted externally.");
 			mExploreActionServer->setPreempted();
+			nav_cmd_thread_shutdown_ = true;
 			stop();
 			return;
 		}
@@ -1129,8 +1133,9 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		mHasNewMap = false;
 		if(!setCurrentPosition())
 		{
-			ROS_ERROR("Exploration failed, could not get current position.");
+			ROS_ERROR("Exploration failed. could not get current position.");
 			mExploreActionServer->setAborted();
+			nav_cmd_thread_shutdown_ = true;
 			stop();
 			return;
 		}
@@ -1216,7 +1221,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 						if (last_nav_plan_out > 0.0)
 						{
 							tput_nav_plan.push_back(time_now - last_nav_plan_out);
-							ROS_ERROR("MADE NEW NAV PLAN, Tput : %f", (time_now - last_nav_plan_out) );
+							ROS_ERROR("MADE NEW NAV PLAN, Tput : %f , realtime: %f", (time_now - last_nav_plan_out), time_now );
 						}
 
 						last_nav_plan_out = time_now;
@@ -1314,6 +1319,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		}
 	
 	}
+	ROS_ERROR("Exploration failed. THIS IS VERY WEIRD!!! This is the last LoC in receiveExplore CB. Should never reach here!");
 }
 
 void RobotNavigator::navGenerateCmdLoop()
@@ -1368,7 +1374,7 @@ void RobotNavigator::navGenerateCmdLoop()
 
 			// Create a new command and send it to Operator
 			generateCommand();
-			ROS_ERROR("Generated command!");
+			// ROS_ERROR("Generated command!");
 
 			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
 			double cmd_t = get_time_diff(cb_start, cb_end);

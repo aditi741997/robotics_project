@@ -298,7 +298,7 @@ void RobotOperator::receiveCommand(const nav2d_operator::cmd::ConstPtr& msg)
         last_scan_mapCB_navCmd_recv = msg->LastScanTSScanMapCBNavCmd;
         last_scan_mapCB_navPlan_navCmd_recv = msg->LastScanTSScanMapCBNavPlanNavCmd;
 
-        ROS_ERROR("NAV2D : RobotOperator got command : direction %f, velocity %f, MODE : %i, with Scan input wrt Scan-MapCB-MapU-NavP-NavC-LP TS: %f, Scan input wrt S-MapCB-NavC-LP %f, Scan input wrt S-MapCB-NavP-NavC-LP %f", mDesiredDirection, mDesiredVelocity, mDriveMode, last_scan_mapCB_mapUpd_navPlan_navCmd_recv, last_scan_mapCB_navCmd_recv, last_scan_mapCB_navPlan_navCmd_recv);
+        // ROS_ERROR("NAV2D : RobotOperator got command : direction %f, velocity %f, MODE : %i, with Scan input wrt Scan-MapCB-MapU-NavP-NavC-LP TS: %f, Scan input wrt S-MapCB-NavC-LP %f, Scan input wrt S-MapCB-NavP-NavC-LP %f", mDesiredDirection, mDesiredVelocity, mDriveMode, last_scan_mapCB_mapUpd_navPlan_navCmd_recv, last_scan_mapCB_navCmd_recv, last_scan_mapCB_navPlan_navCmd_recv);
 }
 
 void RobotOperator::executeCommand()
