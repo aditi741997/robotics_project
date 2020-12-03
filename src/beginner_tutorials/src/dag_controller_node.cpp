@@ -198,7 +198,7 @@ public:
 	// Cb to handle end of critical chain exec. Need to start dynamic sched stuff:
 	void critical_exec_end_cb(const std_msgs::Header::ConstPtr& msg)
 	{
-		ROS_WARN("GOT exec_end msg from cc!!! Calling the BE.");
+		// ROS_WARN("GOT exec_end msg from cc!!! Calling the BE.");
 		controller->recv_critical_exec_end();
 
 		/*
