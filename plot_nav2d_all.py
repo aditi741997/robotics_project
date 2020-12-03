@@ -10,7 +10,7 @@ import numpy as np
 
 slot = 5 # in seconds.
 #For plotting area covered in first 60sec: change slot=60, end_t=start_t+60+1.
-slot = 10.0
+#slot = 14.0
 
 # return dict: slot# -> aggregate value.
 def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
@@ -95,14 +95,14 @@ def plot_perf_metric(perf_agg_arr, metr_agg_arr, p,m, slt,plot_first=False):
 		xi_arr = [x[0] for x in s_di_arr]
 		yi_arr = [x[1] for x in s_di_arr]
 		# divide by num expts for each Fraci : 
-		plt.scatter(xi_arr, yi_arr, color=colors[a//4])
+		plt.scatter(xi_arr, yi_arr, color=colors[a//10])
 	s_data_arr = sorted(data_arr, key=lambda x: x[0])
 	xarr = [x[0] for x in s_data_arr]
 	yarr = [x[1] for x in s_data_arr]
 	#plt.scatter(xarr, yarr)
 	plt.title('Perf metric %s vs Low-Level metric %s, Agg over %f'%(p,m, slt) )
 	#plt.show()
-	plt.savefig("Nov18_nav2d/" + p + "_" + m + "_" + str(int(slt)) + "s.png")
+	plt.savefig("Dec1_nav2d_" + p + "_" + m + "_" + str(int(slt)) + "s.png")
 	if plot_first:
 		s_d0 = sorted(data0_arr,  key=lambda x: x[0])
 		xarr = [x[0] for x in s_d0]
@@ -246,7 +246,7 @@ for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 					end_i = float( fl.split(' ')[-2] )
 		end_i += 0.1 # expl should fail after the collision for the collision to count.
 		# JUST to plot area covered in 1st 60sec: 
-		end_i = start_i + slot + 1.0
+		# end_i = start_i + slot + 1.0
 		print("For i ", i, " Start, end times: ", start_i, end_i)
 		run_total_times.append(end_i - start_i - 0.1)
 
@@ -469,7 +469,7 @@ for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 		for k in new_area_cov_Agg.keys():
 			sum_new_area_cov_agg[k] = sum( new_area_cov_Agg[k] )
 		print("Sum nEW Area covered Agg: ", sum_new_area_cov_agg) # Do this only for first slot.
-		new_area_agg.append(sum_new_area_cov_agg[1])
+		new_area_agg.append(sum_new_area_cov_agg)
 		colln_count += run_collision_hua
 		runlevel_agg_collision_count.append( colln_count )
 	# Run-level perf metrics : #Datapoints = #runs LOL.
@@ -488,6 +488,8 @@ for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 
 print("Collision coUNT ARR: ", runlevel_agg_collision_count)
 print("RunLevel total times: ", run_level_total_times)
+
+'''
 from sklearn.linear_model import LinearRegression
 
 x = np.array( runlevel_agg_lowlevelmetrics )
@@ -501,16 +503,19 @@ print("runlevel LowLevel Agg: ", runlevel_agg_lowlevelmetrics)
 print("runlevel tputs dict: ", runlevel_meantputs)
 print("Order is tput mapU, mapCB, navC, navP, CC then RT Longest, CC, S_MC_NC_LP, s_mC_Np_Nc_lp")
 print("model intercept %f, coeffs : %s"%( model.intercept_, str(model.coef_) ) )
-
 '''
+
 plot_perf_metric(obst_colln_agg, tput_cc_agg, "Collision D<0.8", 'CC Tput', slot)
 plt.clf()
 plot_perf_metric(odom0_frac_agg, tput_cc_agg, 'Vel=0 Fraction', 'CC Tput', slot)
+plt.clf()
+plot_perf_metric(odom0_frac_agg, tput_agg["navigator_cmd"], 'Vel=0 Fraction', 'NavPlan Tput', slot)
 plt.clf()
 plot_perf_metric(obst_colln_agg, rt_agg["Scan_LC_LP"], "Collision D<0.8", 'CC RT', slot)
 plt.clf()
 plot_perf_metric(obst_ccall_agg, rt_agg["Scan_LC_LP"], "Close Call", 'CC RT', slot)
 plt.clf()
+'''
 plot_perf_metric(obst_ccall_agg, tput_agg["navigator_cmd"], "Close Call", 'NavCmd Tput', slot)
 plt.clf()
 plot_perf_metric(obst_colln_agg, tput_agg["navigator_plan"], "Collision D<0.8", 'NavPlan Tput', slot)

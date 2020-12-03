@@ -5,14 +5,76 @@ import matplotlib.pyplot as plt
 fname_pre_str = sys.argv[1]
 fname_post_str = sys.argv[2]
 
-for fname in ["local_map", "mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "operator_loop"]:
+start_t = float(sys.argv[3])
+end_t = float(sys.argv[4])
+
+def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
+        new_m_arr = []
+        new_ts_arr = []
+        start_arr = []
+        # start from startt, any reading 
+        i = 0
+        curr_ts = start_t
+        print "#### Func aggregate_over_time called with params: ", slot, start_t, end_t
+        print "Len of array to be aggregated: ", len(m_arr), " 0th TS:", ts_arr[0]
+        # aggregate until TS > curr_ts + slot. 
+        while (curr_ts + slot) < end_t:
+                # collect all those in this slot.
+                this_slot = []
+                this_slot_ts = []
+                while i < len(m_arr):
+                        if ts_arr[i] < curr_ts:
+                                i += 1
+                        elif ts_arr[i] <= (curr_ts + slot):
+                                this_slot.append(m_arr[i])
+                                this_slot_ts.append(ts_arr[i])
+                                #print "Adding ind ", i, " TS: ", ts_arr[i], " to slot from ", curr_ts
+                                i += 1
+                        else:
+                                break
+                #print "Done with this slot, moving to next, i=", i
+                curr_ts += slot
+                start_arr.append(curr_ts)
+                new_m_arr.append(this_slot)
+                new_ts_arr.append(this_slot_ts)
+        return new_m_arr, start_arr, new_ts_arr
+
+def plot_agg(x,y,start,slot,end, nm, node):
+        agg1_y, agg_end, agg1_ts = aggregate_over_time(y,x,start, slot, end)
+
+        agg_avg = []
+        # need 25%ile
+        # need 75%ile
+        agg_25p = []
+        agg_75p = []
+	agg_end1 = []
+        ind = 0
+        for i in agg1_y:
+                if len(i) > 0:
+			arr = sorted(i)
+                	agg_25p.append( arr[(25*len(i))/100] )
+                	agg_75p.append( arr[(75*len(i))/100] )
+			agg_avg.append ( sum(i)/len(i) )
+			agg_end1.append(agg_end[ind])
+		ind += 1
+        plt.plot(agg_end1, agg_avg, 'b*:', markersize=8, label="Avg " + nm)
+        plt.plot(agg_end1, agg_25p, 'g^-.', markersize=8, label="25p " + nm)
+        plt.plot(agg_end1, agg_75p, 'ro:', markersize=8, label="75p " + nm)
+        plt.xlabel('Time')
+	plt.ylabel(nm + " in s")
+        plt.title('Aggregate %s for subchain %s over %fs period'%( nm, node, slot) )
+	plt.legend()
+	plt.show()
+
+for fname in ["mapper_mapUpdate", "mapper_scanCB", "navigator_plan", "navigator_cmd", "local_map", "operator_loop"]:
     times = []
     ts = []
     scan_count = []
     tputs = []
+    drops_ts = []
     with open(fname_pre_str + fname + fname_post_str, 'r') as f:
         for fl in f.readlines():
-            if "imes:" in fl:
+            if ("times:" in fl) or ("local_map Times" in fl):
                 times += [ float(x) for x in fl.split(" ")[2:-1] ]
             elif "ts:" in fl:
                 ts += [ float(x) for x in fl.split(" ")[2:-1] ]
@@ -20,11 +82,27 @@ for fname in ["local_map", "mapper_mapUpdate", "mapper_scanCB", "navigator_cmd",
                 scan_count += [ int(x) for x in fl.split(" ")[2:-1] ]
     	    elif "tput:" in fl:
 		tputs += [ float(x) for x in fl.split(" ")[2:-1] ]
+		#print("Added to tputs len: %i"%(len(tputs)))
+    	    elif "scanDrop" in fl:
+		drops_ts += [ float(x) for x in fl.split(" ")[2:-1] ]
     # plot times,ts and scan_count.
+    print("Starting node ", fname, "Lengths of all arrs: times: %i, ts: %i, tputs: %i"%(len(times), len(ts), len(tputs) ) )
     plt.plot(ts, times, 'bo-', label=fname + " compute time")
     plt.title("Nav2d Node : %s"%(fname) )
     plt.legend()
     plt.show()
+
+    #plot_agg(ts, times, start_t, 2.0, end_t, "ComputeTime", fname)
+    #plot_agg(ts, times, start_t, 10.0, end_t, "ComputeTime", fname)
+
+    sorted_times = sorted(times)
+    ltimes = len(sorted_times)
+    print("For node %s, ci best case: %f, median: %f, mean %f, 75ile %f, 90ile %f, worst case: %f" % ( fname, sorted_times[0], sorted_times[ltimes/2], sum(sorted_times)/ltimes, sorted_times[(75*ltimes)/100], sorted_times[(90*ltimes)/100], sorted_times[-1] ) )
+
+    sorted_tputs = sorted(tputs)
+    if (len(tputs) > 0):
+        print("For node %s, PERIOD: lowest %f, median %f, mean %f, 75ile %f, 90ile %f, highest %f"% (fname, sorted_tputs[0], sorted_tputs[len(sorted_tputs)/2], sum(sorted_tputs)/len(sorted_tputs), sorted_tputs[(75*len(sorted_tputs))/100], sorted_tputs[(90*len(sorted_tputs))/100], sorted_tputs[-1] ) )
+    '''
     if len(scan_count) > 0:
         msc = max(scan_count)
         # scan_count = [ (x*0.1/msc) for x in scan_count]
@@ -33,7 +111,15 @@ for fname in ["local_map", "mapper_mapUpdate", "mapper_scanCB", "navigator_cmd",
         plt.legend()
         plt.show()
     if len(tputs) > 0:
-	plt.plot(ts[1:], tputs, 'r*-.', label=fname + " Tput")
-	plt.title("nav2d Node : %s Tput"%(fname) )
+	print("Len tputs: %i, Len TS: %i"%(len(tputs), len(ts)) )
+	plt.plot(ts[1:], tputs, 'r*-.', label=fname + " Inter-arrival Time")
+	plt.title("nav2d Node : %s Inter-arrival"%(fname) )
 	plt.legend()
 	plt.show()
+
+	plot_agg(ts[1:], tputs, start_t, 2.0, end_t, "Inter-arrival Time", fname)
+	sorted_tput = sorted(tputs)
+	ltimest = len(tputs)
+	print("For node %s, Tput: median %f, mean %f, 75ile %f, 90ile %f"%( fname, sorted_tput[ltimest/2], sum(sorted_tput)/ltimest, sorted_tput[(75*ltimest)/100], sorted_tput[(90*ltimest)/100] ) )
+	#plot_agg(ts[1:], tputs, start_t, 10.0, end_t, "Inter-arrival Time", fname)
+    '''

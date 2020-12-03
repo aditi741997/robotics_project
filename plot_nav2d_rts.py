@@ -6,6 +6,8 @@ rt_fname = sys.argv[1]
 start_t = float(sys.argv[2])
 end_t = float(sys.argv[3])
 
+exp_cc_tput = float(sys.argv[4])
+
 def plot_smt(x,y,sty,n,chain,yl):
 	plt.plot(x,y,sty, label=n)
 	plt.title('Nav2D %s for chain %s'%(n, chain) )
@@ -104,6 +106,13 @@ for chain in ["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_LC_LP", "Scan_MapCB_NavCmd_L
 	# len(TS) should be = len(lat).
 	# len(TS) should be len(tput)+1.
 	if len(ts) > 1:
+		'''
 		plot_smt(ts, lats, 'bo:', " Latency", chain, yls[chain])
 		plot_smt(ts[1:], tputs, 'g*:', " Inter-arrival Times", chain, yls[chain])
 		plot_smt(ts[1:], rts, 'r^:', " RT", chain, yls[chain])
+		'''
+		if "Scan_LC" in chain:
+			bad_tputs = filter(lambda x: x > 1.1*exp_cc_tput, tputs)
+			vgood_tputs = filter(lambda x: x < 0.9*exp_cc_tput, tputs)
+			print("FOR CRITICAL CHAIN, Total tputs: %i, bad_tputs: %i, vgood_tputs: %i"%(len(tputs), len(bad_tputs), len(vgood_tputs) ) )
+			print("BAD Tputs: ", bad_tputs)

@@ -1,8 +1,10 @@
 # Run this in sudo to allow dag_scheduler to set the right prio, FIFO.
+export ROS_HOSTNAME=localhost
+export ROS_MASTER_URI=http://localhost:11311
 source devel/setup.bash
 sleep 2s
 ct=3320
-mcid=0
+mcid=$1
 mccount=10
 td="yessyessy"
 for navpF in 0.2 #5.0 #1.0 0.2
@@ -74,6 +76,7 @@ do
 								fi
 								# give up after 3 Startmapping tries.
 								if [ $failct -gt 2 ]; then
+									echo "MAPPING DIDNT WORK EVEN AFTER 3 TRIES!!! For ", $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
 									success="1"
 								fi
 								sleep 2s
@@ -109,7 +112,7 @@ do
 								timelimit=800
 								if [ $t = $timelimit ]; then
 									j=2
-									echo "!!!!!~~~%%% EXPLORATION DIDNT FINISH EVEN IN ", $timelimit
+									echo "!!!!!~~~%%% EXPLORATION DIDNT FINISH EVEN IN ", $timelimit, "For: ", $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
 								fi
 							done
 							sleep 10s

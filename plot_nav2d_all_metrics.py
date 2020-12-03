@@ -232,7 +232,7 @@ for ei in range(num_e):
     ename = efs[ei]
     avg_obst_d = 0.0
 
-    for run in [1056]:
+    for run in [3]:
         r_avg_obst_dist = 0.0
         num_read = 0
 	# for plotting TimeSeries of ObstDist:
@@ -331,7 +331,7 @@ for ei in range(num_e):
     avg_obst_dist_arr[ei] = avg_obst_d/num_r
 
 print "Avg obst dist :", avg_obst_dist_arr
-plot_smt(avg_obst_dist_arr, "Avg dist (m)", "Avg Distance of Robot to Closest Obstacle [In room]")
+#plot_smt(avg_obst_dist_arr, "Avg dist (m)", "Avg Distance of Robot to Closest Obstacle [In room]")
 
 sty = ['g-', 'b*', 'r--']
 # Plotting cdf of distance:
@@ -339,7 +339,7 @@ for ei in range(num_e):
     arr = obst_dist_arr[ei]
     arr = np.sort(arr)
     pr = 1. * np.arange(len(arr))/(len(arr) - 1)
-    plt.plot(arr, pr, sty[ei], label=efs[ei])
+    #plt.plot(arr, pr, sty[ei], label=efs[ei])
 
 plt.ylabel('CDF')
 plt.legend()
