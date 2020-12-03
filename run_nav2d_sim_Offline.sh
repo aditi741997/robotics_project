@@ -3,26 +3,26 @@ export ROS_HOSTNAME=localhost
 export ROS_MASTER_URI=http://localhost:11311
 source devel/setup.bash
 sleep 2s
-ct=3320
+ct=0
 mcid=$1
 mccount=10
 td="yessyessy"
-for navpF in 0.2 #5.0 #1.0 0.2
+for navpF in 5.0 1.0 0.2
 do
-	for mcbF in 0.5 #10.0 #5.0 2.5 0.5
+	for mcbF in 10.0 5.0 2.5 0.5
 	do
-		for muF in 0.25 #10.0 #5.0 1.0 0.25
+		for muF in 10.0 5.0 1.0 0.4
 		do
-			for navcF in 1.0 #10.0 #5.0 1.0 #20.0
+			for navcF in 20.0 10.0 5.0 1.0
 			do
-				for ccF in 1.0 #20.0 10.0 #5.0 2.5 1.0 
+				for ccF in 20.0 10.0 5.0 2.5 1.0 
 				do
 					#check machine id, run this only if ct%mccount == mcid
 					div=$((ct%mccount))
 					echo "CHECKING division, ct: ", $ct, " mcid: ", $mcid, " ct%mccount: ", $div 
 					if [ $div -eq $mcid ]; then
 						echo "WILL run this expt cuz div=mcID!!!!"
-						for run in 13 # 2 3 4 5 #6 7 8 9 10 
+						for run in 1 2 3 4 5 #6 7 8 9 10 
 						do
 							rm ../robot_nav2d_obstacleDist_logs_.txt
 							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage.launch &
