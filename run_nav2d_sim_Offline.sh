@@ -102,6 +102,7 @@ do
 								fi
 								if [ $j -lt 2 ]; then
 									# Exploration failed
+									# Exploration failed.
 									j=`grep "Exploration failed." $robofname | wc -l`
 									j=$((2*j))
 									echo "j is still<2, Checked for Exploration failed. j: ", $j
@@ -117,10 +118,10 @@ do
 							done
 							sleep 10s
 							echo "SAVING map to file!!"
-							rosrun map_server map_saver -f $ename map:=/robot_0/map
+							rosrun map_server map_saver -f $ename map:=/robot_0/map &
 							sleep 10s
 							echo "Killing all procs now!"
-							for pname in measure_cpu dag_controller operator navigator mapper joy_node shimfreqnode rviz remote_joy stage get_map_client explore_client set_goal_client move_dynamic_obstacles_nav2d
+							for pname in measure_cpu dag_controller operator navigator map_saver mapper joy_node shimfreqnode rviz remote_joy stage get_map_client explore_client set_goal_client move_dynamic_obstacles_nav2d
 							do
 							    echo "Killing_$pname"
 							    kill -15 $(ps -ef | grep $pname | grep -v grep | awk '{print $2}') #| xargs kill -15
