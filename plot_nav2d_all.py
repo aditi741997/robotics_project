@@ -25,7 +25,8 @@ def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
 	#print("#### Func aggregate_over_time called with params: ", slot, start_t, end_t)
 	#print("Len of array to be aggregated: ", len(m_arr), " 0th TS:", ts_arr[0])
 	# aggregate until TS > curr_ts + slot. 
-	while (curr_ts + slot) < end_t:
+	'''
+        while (curr_ts + slot) < end_t:
 		# collect all those in this slot.
 		this_slot = []
 		this_slot_ts = []
@@ -47,7 +48,20 @@ def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
 			m_dict[slot_count] = this_slot
 		new_m_arr.append(this_slot)
 		new_ts_arr.append(this_slot_ts)
-	return m_dict
+        '''
+        while i < (len(m_arr)-1):
+            # the whole array has not been covered.
+            if ts_arr[i] < start_t:
+                i += 1
+            elif ts_arr[i] > end_t:
+                i += 1
+            else:
+                sl_ct = (ts_arr[i] - start_t)//slot # this is the slot# for this element.
+                if sl_ct not in m_dict:
+                    m_dict[sl_ct] = []
+                m_dict[sl_ct].append(m_arr[i])
+                i += 1
+        return m_dict
 
 # For intra run metrics:
 # 2.5s windows....
@@ -102,7 +116,7 @@ def plot_perf_metric(perf_agg_arr, metr_agg_arr, p,m, slt,plot_first=False):
 	#plt.scatter(xarr, yarr)
 	plt.title('Perf metric %s vs Low-Level metric %s, Agg over %f'%(p,m, slt) )
 	#plt.show()
-	plt.savefig("Dec1_nav2d_" + p + "_" + m + "_" + str(int(slt)) + "s.png")
+	plt.savefig("Dec4_nav2d_" + p + "_" + m + "_" + str(int(slt)) + "s.png")
 	if plot_first:
 		s_d0 = sorted(data0_arr,  key=lambda x: x[0])
 		xarr = [x[0] for x in s_d0]
@@ -111,8 +125,15 @@ def plot_perf_metric(perf_agg_arr, metr_agg_arr, p,m, slt,plot_first=False):
 		plt.title('Perf metric %s vs Low-level metric %s, In first slot of %f s'%(p,m, slt) )
 		plt.show()
 
-def plot_runlevel_agg(xarr, yarr, p, m, col):
-	plt.scatter(xarr, yarr, color=col)
+def plot_runlevel_agg(xarr, yarr, titl, yl, xl, yli=0.0):
+	#plt.scatter(xarr, yarr, color=col)
+        plt.plot(xarr, yarr, 'b*--', markersize=9, linewidth=3, label=yl)
+        plt.xlabel(xl)
+        plt.ylabel(yl)
+        if yli>0.0:
+            plt.ylim(0.0,yli)
+        plt.title(titl)
+        plt.show()
 
 # return true of e11-e21 line segment intersets with e21-e22
 # treat each wall as 2 lines, thickness apart
@@ -210,17 +231,23 @@ def get_closest_wall_dist(x,y):
 
 letter = 'N'
 runlevel_agg_totalarea = [] # one no for each i.
-runlevel_agg_lowlevelmetrics = [] # list of lists.
+runlevel_agg_lowlevelmetrics = [] # list of lists. 
 runlevel_agg_collision_count = [] # one no for each i.
+runlevel_agg_lowlevelmetrics_dict = {} # metric name -> value. [median in runs, then ?]
 run_level_total_times = [] # list of lists
+runlevel_agg_lowestTTC = [] # lowest time to collision. Inf. if no collision.
 
 full_expl_map_area = 0.0
 
+exptn = "OfflineNC_L"
+expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
-for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
-	run_totalareas = []
+#for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
+for i in expts:
+        run_totalareas = []
 	run_tputs = {} # name -> list
 	run_rts = {} # chain name -> list
+        run_ttc = []
 
 	runs = [1,2,3,4,5,6,7,8,9,10]
 	if i == 2:
@@ -256,34 +283,46 @@ for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 		runlevel_meantputs[exp_id] = []
 		for fname in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan"]:
 			print("Starting ", fname)
-			if fname not in tput_agg:
+                        if fname not in runlevel_agg_lowlevelmetrics_dict:
+                            runlevel_agg_lowlevelmetrics_dict[fname] = []
+                        if fname not in tput_agg:
 				tput_agg[fname] = []
 			tput_agg_i = {}
 			tput_arr = []
 			ts_arr = []
-			with open("../robot_nav2d_" + fname + "_stats_" + exp_id + ".txt", 'r') as f:
-				for fl in f.readlines():
-					if "tput:" in fl:
-						tput_arr += [ float(x) for x in fl.split(" ")[2:-1] ]		
-					elif "ts:" in fl:
-						ts_arr += [ float(x) for x in fl.split(" ")[2:-1] ]
-			tput_agg_i = aggregate_over_time(tput_arr, ts_arr[1:], start_i, slot, end_i) 
-			meantput_agg_i = {}
-			# ignore the first tput reading, might be delay due to gap bw StartMap, StartExpl.
-			mink = min(tput_agg_i.keys() )
-			for k in tput_agg_i.keys():
-				if  (k == mink):
-					# Delete first tput elem.
-					if ( len( tput_agg_i[k][1:] ) > 0 ):
-						meantput_agg_i[k] = sum( tput_agg_i[k][1:] ) / len( tput_agg_i[k][1:] )
-				else:
-					meantput_agg_i[k] = sum( tput_agg_i[k] ) / len ( tput_agg_i[k] )
-					#print("For Frac%i%s_run%i : tput of SC%s for bin %i has just 1 elem!"%(i,letter, run,fname,k))
-			tput_agg[fname].append(meantput_agg_i)
-			runlevel_meantputs[exp_id].append( sum(tput_arr)/len(tput_arr) ) #Saving tput means
-			if fname not in run_tputs:
-				run_tputs[fname] = []
-			run_tputs[fname].append( sum(tput_arr)/len(tput_arr) )
+                        try:
+                            with open("../robot_nav2d_" + fname + "_stats_" + exp_id + ".txt", 'r') as f:
+                                    for fl in f.readlines():
+                                            if "tput:" in fl:
+                                                    tput_arr += [ float(x) for x in fl.split(" ")[2:-1] ]		
+                                            elif "ts:" in fl:
+                                                    ts_arr += [ float(x) for x in fl.split(" ")[2:-1] ]
+                            tput_agg_i = aggregate_over_time(tput_arr, ts_arr[1:], start_i, slot, end_i) 
+                            if "mapU" in fname:
+                                print(tput_agg_i, tput_arr, ts_arr, ":::: HERE'S the tput_agg_i")
+                            meantput_agg_i = {}
+                            # ignore the first tput reading, might be delay due to gap bw StartMap, StartExpl.
+                            mink = min(tput_agg_i.keys() )
+                            for k in tput_agg_i.keys():
+                                    if  (k == mink):
+                                            # Delete first tput elem.
+                                            if ( len( tput_agg_i[k][1:] ) > 0 ):
+                                                    meantput_agg_i[k] = sum( tput_agg_i[k][1:] ) / len( tput_agg_i[k][1:] )
+                                    else:
+                                            meantput_agg_i[k] = sum( tput_agg_i[k] ) / len ( tput_agg_i[k] )
+                                            #print("For Frac%i%s_run%i : tput of SC%s for bin %i has just 1 elem!"%(i,letter, run,fname,k))
+                            tput_agg[fname].append(meantput_agg_i)
+                            runlevel_meantputs[exp_id].append( sum(tput_arr)/len(tput_arr) ) #Saving tput means
+                            if fname not in run_tputs:
+                                    run_tputs[fname] = []
+                            #run_tputs[fname].append( sum(tput_arr)/len(tput_arr) ) : Mean over each run.
+                            run_tputs[fname].append( sorted(tput_arr)[ len(tput_arr)/2 ] )
+                            
+                        except:
+                            if "_cmd" in fname and "H5_5c_run6" in exp_id:
+                                if fname not in run_tputs:
+                                    run_tputs[fname] = []
+                                run_tputs[fname].append(1.25)
 
 	# Get RT, Lat, Tput for each chain
 		runlevel_meanRTs[exp_id] = []
@@ -296,6 +335,8 @@ for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 				tputs = []
 				if chain not in rt_agg:
 					rt_agg[chain] = []
+                                if chain not in runlevel_agg_lowlevelmetrics_dict:
+                                    runlevel_agg_lowlevelmetrics_dict[chain] = []
 				for l in fl:
 					if chain in l:
 						if "RT_" in l:
@@ -311,7 +352,7 @@ for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 
 				if chain not in run_rts:
 					run_rts[chain] = []
-				run_rts[chain].append( 5.0 )				
+                                run_rts[chain].append( sorted(rts)[ len(rts)/2 ] )
 
 				if "LC_LP" in chain:
 					# print "Here's CC RT: ", rt_agg[chain][-1]
@@ -319,10 +360,13 @@ for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 					tput_cc_agg.append(mean_aggregate(tput_cc_agg_i) )
 					# print "GOT CC tput", tput_cc_agg[-1]
 					runlevel_meantputs[exp_id].append( sum(tputs)/len(tputs) )
-					if chain not in run_tputs:
-						run_tputs[chain] = []
-					run_tputs[chain].append( sum(tputs)/len(tputs) )
-					for x in tput_cc_agg[-1].keys():
+					if chain+"_tput" not in run_tputs:
+						run_tputs[chain+"_tput"] = []
+                                        if chain + "_tput" not in runlevel_agg_lowlevelmetrics_dict:
+                                                runlevel_agg_lowlevelmetrics_dict[chain + "_tput"] = []
+					#run_tputs[chain].append( sum(tputs)/len(tputs) )
+					run_tputs[chain+"_tput"].append( sorted(tputs)[len(tputs)/2] ) # Median over each run
+                                        for x in tput_cc_agg[-1].keys():
 						if tput_cc_agg[-1][x] > 0.35:
 							print("Frac",i,",run",run,"TPUT CC is HIGH!! for t=",x," tput:",tput_cc_agg[-1][x], tput_cc_agg_i[x])
 
@@ -471,7 +515,9 @@ for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 		print("Sum nEW Area covered Agg: ", sum_new_area_cov_agg) # Do this only for first slot.
 		new_area_agg.append(sum_new_area_cov_agg)
 		colln_count += run_collision_hua
-		runlevel_agg_collision_count.append( colln_count )
+                if run_collision_hua:
+                    run_ttc.append(end_i - start_i - 0.1)
+	runlevel_agg_collision_count.append( colln_count )
 	# Run-level perf metrics : #Datapoints = #runs LOL.
 	# aggregate runlevel metrics over all runs. [to remove randommess]
 	numrun = len(runs)//2
@@ -480,14 +526,28 @@ for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 	print("For i= ", i, ", run-TotalArea Explored:", run_totalareas)
 	runlevel_agg_totalarea.append( sorted(run_totalareas)[ numrun ] ) #median over all runs.
 	ith_lowlevel_arr = []
-	for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP"]:
-		ith_lowlevel_arr.append( sum(run_tputs[sc])/len(runs) )
+	for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP_tput"]:
+		ith_lowlevel_arr.append( sorted(run_tputs[sc])[len(runs)/2] ) # Median across runs
+                runlevel_agg_lowlevelmetrics_dict[sc].append( sorted(run_tputs[sc])[len(runs)/2] )
 	for ch in ["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_LC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]:
-		ith_lowlevel_arr.append( sum(run_rts[ch])/len(runs) )
-	runlevel_agg_lowlevelmetrics.append( [-1.0*x for x in ith_lowlevel_arr] )
+		ith_lowlevel_arr.append(  sorted(run_rts[ch])[len(runs)/2] )
+	        runlevel_agg_lowlevelmetrics_dict[ch].append( sorted(run_rts[ch])[len(runs)/2] )
+        runlevel_agg_lowlevelmetrics.append( [-1.0*x for x in ith_lowlevel_arr] )
+        if len(run_ttc) > 0:
+            runlevel_agg_lowestTTC.append( min(run_ttc) )
+        else:
+            runlevel_agg_lowestTTC.append( 1000.0 ) # INF.
 
 print("Collision coUNT ARR: ", runlevel_agg_collision_count)
 print("RunLevel total times: ", run_level_total_times)
+
+# title, yl, xl
+pxl = ["NavCmd Tput", "RT S_Mcb_NC_LP"] #"CC RT", "MapScanCB Tput", "CC Tput"]
+pxnm = ["navigator_cmd", "Scan_MapCB_NavCmd_LP"] #, "Scan_LC_LP", "mapper_scanCB", "Scan_LC_LP_tput"]
+for i in range(len(pxl)):
+        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_collision_count, pxl[i]+" vs #Collisions/10", "#Collisions /10", pxl[i])
+        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_totalarea, pxl[i]+ " vs TotalArea", "TotalArea [Mapper]", pxl[i])
+        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_lowestTTC, pxl[i]+ " vs LowestTimeToColln", "TTC(sec)", pxl[i], yli=400.0)
 
 '''
 from sklearn.linear_model import LinearRegression
@@ -509,9 +569,10 @@ plot_perf_metric(obst_colln_agg, tput_cc_agg, "Collision D<0.8", 'CC Tput', slot
 plt.clf()
 plot_perf_metric(odom0_frac_agg, tput_cc_agg, 'Vel=0 Fraction', 'CC Tput', slot)
 plt.clf()
-plot_perf_metric(odom0_frac_agg, tput_agg["navigator_cmd"], 'Vel=0 Fraction', 'NavPlan Tput', slot)
+plot_perf_metric(odom0_frac_agg, tput_agg["navigator_cmd"], 'Vel=0 Fraction', 'NavCmd Tput', slot)
 plt.clf()
-plot_perf_metric(obst_colln_agg, rt_agg["Scan_LC_LP"], "Collision D<0.8", 'CC RT', slot)
+#plot_perf_metric(obst_colln_agg, rt_agg["Scan_LC_LP"], "Collision D<0.8", 'CC RT', slot)
+plot_perf_metric(obst_ccall_agg, tput_agg["navigator_cmd"], "Close Call", 'NavCmd Tput', slot)
 plt.clf()
 plot_perf_metric(obst_ccall_agg, rt_agg["Scan_LC_LP"], "Close Call", 'CC RT', slot)
 plt.clf()
