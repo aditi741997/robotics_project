@@ -3,7 +3,7 @@ export ROS_HOSTNAME=localhost
 export ROS_MASTER_URI=http://localhost:11311
 source devel/setup.bash
 sleep 2s
-ct=4
+ct=2
 td="yessyessy"
 for navpF in 0.1 #1.0 0.2
 do
@@ -13,7 +13,7 @@ do
 		do
 			for navcF in 0.8 #20.0 #10.0 5.0 1.0
 			do
-				for ccF in 2.5 1.0 #20.0 10.0 5.0 2.5 1.0 
+				for ccF in 10.0 #20.0 10.0 5.0 2.5 1.0 
 				do
 					#check machine id, run this only if ct%mccount == mcid
 					#div=$((ct%mccount))
@@ -22,7 +22,7 @@ do
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in 1 #2 #3 4 5 6 7 8 9 10 
+						for run in 9 #3 4 5 6 7 8 #9 10 
 						do
 							rm ../robot_nav2d_obstacleDist_logs_.txt
 							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage.launch &
@@ -109,7 +109,7 @@ do
 								t=$((t+1))
 								sleep 5s
 								echo "j&t: ", $j, $t
-								timelimit=160 # divide timelimit=800s by sleeptime=5s.
+								timelimit=180 # divide timelimit=800s by sleeptime=5s.
 								if [ $t = $timelimit ]; then
 									j=2
 									echo "!!!!!~~~%%% EXPLORATION DIDNT FINISH EVEN IN ", $timelimit, "For: ", $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
