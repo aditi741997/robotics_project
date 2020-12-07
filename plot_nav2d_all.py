@@ -12,7 +12,7 @@ slot = 5 # in seconds.
 #For plotting area covered in first 60sec: change slot=60, end_t=start_t+60+1.
 #slot = 14.0
 
-all_CHAINS = ["Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]
+all_CHAINS = ["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]
 
 # return dict: slot# -> aggregate value.
 def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
@@ -136,7 +136,7 @@ def plot_runlevel_agg(xarr, yarr, titl, yl, xl, yli=0.0, mean=[], tail=[]):
             plt.plot(xarr, tail, 'r^:', markersize=9, linewidth=3, label="Tail "+yl)
         plt.xlabel(xl)
         plt.ylabel(yl)
-        plt.legend()
+        plt.legend(loc='best')
         if yli>0.0:
             plt.ylim(0.0,yli)
         plt.title(titl)
@@ -274,7 +274,7 @@ runs_med_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 full_expl_map_area = 0.0
 
-exptn = "OfflineNP_H"
+exptn = "OfflineNP_L"
 expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 #for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
@@ -361,7 +361,7 @@ for i in expts:
 
                         except:
                             print("EXCEPTION In exp %s, for getting tput of node %s"% (exp_id, fname) )
-                            if "_cmd" in fname and "H5_5c_run6" in exp_id:
+                            if "_cmd" in fname and ("H5_5c_run6" in exp_id or ("L" in exp_id) ):
                                 if fname not in run_tputs:
                                     run_tputs[fname] = []
                                     irun_75p_tput[fname] = []
@@ -587,16 +587,16 @@ for i in expts:
 
         ith_lowlevel_arr = []
 	for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP_tput"]:
-		ith_lowlevel_arr.append( sorted(run_tputs[sc])[len(runs)/2] ) # Median across runs
-                runlevel_agg_lowlevelmetrics_dict[sc].append( sorted(run_tputs[sc])[len(runs)/2] )
+		ith_lowlevel_arr.append( sorted(run_tputs[sc])[len(run_tputs[sc])/2] ) # Median across runs
+                runlevel_agg_lowlevelmetrics_dict[sc].append( sorted(run_tputs[sc])[len(run_tputs[sc])/2] )
                 if sc not in runs_med_tputs:
                     runs_med_tputs[sc] = []
                     runs_75p_tputs[sc] = []
                 runs_med_tputs[sc].append(run_tputs[sc]) #median of run tput
                 runs_75p_tputs[sc].append(irun_75p_tput[sc]) # 75%ile of run tput
         for ch in all_CHAINS: #["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]: #"Scan_MapCB_NavCmd_LP",
-		ith_lowlevel_arr.append(  sorted(run_rts[ch])[len(runs)/2] )
-	        runlevel_agg_lowlevelmetrics_dict[ch].append( sorted(run_rts[ch])[len(runs)/2] )
+		ith_lowlevel_arr.append( sorted(run_rts[ch])[len(run_rts[ch])/2] )
+	        runlevel_agg_lowlevelmetrics_dict[ch].append( sorted(run_rts[ch])[len(run_rts[ch])/2] )
         runlevel_agg_lowlevelmetrics.append( [-1.0*x for x in ith_lowlevel_arr] )
        
         print("For expt %s, vel0_frac_arr: %s"%(exp_id, str(vel0_frac_arr) ) )
@@ -619,7 +619,7 @@ expected_tputs = [0.2, 1.0, 2.0, 5.0, 10.0] # NavPlan
 for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP_tput"]:
     scn = (sc + "_tput") if "tput" not in sc else sc
     print("Plotting ScatterPlot for %s, runs_75p_tputs: %s"%(scn, str(runs_75p_tputs[sc]) ) )
-    plot_scatter(expected_tputs, runs_med_tputs[sc], runs_75p_tputs[sc], 'NPlan', scn) # plt.scatter(expected_tputs[i], all vals of med[i] array.)
+    #plot_scatter(expected_tputs, runs_med_tputs[sc], runs_75p_tputs[sc], 'NPlan', scn) # plt.scatter(expected_tputs[i], all vals of med[i] array.)
 
 # title, yl, xl
 pxl = ["NavPlan Tput", "RT S_Mcb_Np_Nc_LP", "CC Tput", "CC RT", "NavCmd Tput", "RT S_Mcb_NC_LP"] #"CC RT", "MapScanCB Tput", "CC Tput"]
