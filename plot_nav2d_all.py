@@ -12,6 +12,8 @@ slot = 5 # in seconds.
 #For plotting area covered in first 60sec: change slot=60, end_t=start_t+60+1.
 #slot = 14.0
 
+all_CHAINS = ["Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]
+
 # return dict: slot# -> aggregate value.
 def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
 	m_dict = {}
@@ -272,7 +274,7 @@ runs_med_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 full_expl_map_area = 0.0
 
-exptn = "OfflineCC_H"
+exptn = "OfflineNP_H"
 expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 #for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
@@ -370,7 +372,7 @@ for i in expts:
 		runlevel_meanRTs[exp_id] = []
 		with open('../robot_nav2d_' + exp_id + "_rt_stats.txt", 'r') as f:
 			fl = f.readlines()
-			for chain in ["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]: #"Scan_MapCB_NavCmd_LP", 
+                        for chain in all_CHAINS: #["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]: #"Scan_MapCB_NavCmd_LP", 
 				print("Starting chain ", chain)
 				rts = []
 				ts = []
@@ -592,7 +594,7 @@ for i in expts:
                     runs_75p_tputs[sc] = []
                 runs_med_tputs[sc].append(run_tputs[sc]) #median of run tput
                 runs_75p_tputs[sc].append(irun_75p_tput[sc]) # 75%ile of run tput
-        for ch in ["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]: #"Scan_MapCB_NavCmd_LP",
+        for ch in all_CHAINS: #["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]: #"Scan_MapCB_NavCmd_LP",
 		ith_lowlevel_arr.append(  sorted(run_rts[ch])[len(runs)/2] )
 	        runlevel_agg_lowlevelmetrics_dict[ch].append( sorted(run_rts[ch])[len(runs)/2] )
         runlevel_agg_lowlevelmetrics.append( [-1.0*x for x in ith_lowlevel_arr] )
@@ -610,19 +612,22 @@ for i in expts:
 print("Collision coUNT ARR: ", runlevel_agg_collision_count)
 print("RunLevel total times: ", run_level_total_times)
 
-expected_tputs = [0.05, 0.1, 0.2, 0.4, 1.0] # the tputs set for the experiments 1-5.
+#CC:expected_tputs = [0.05, 0.1, 0.2, 0.4, 1.0] # the tputs set for the experiments 1-5.
+
+expected_tputs = [0.2, 1.0, 2.0, 5.0, 10.0] # NavPlan
+
 for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP_tput"]:
     scn = (sc + "_tput") if "tput" not in sc else sc
     print("Plotting ScatterPlot for %s, runs_75p_tputs: %s"%(scn, str(runs_75p_tputs[sc]) ) )
-    #plot_scatter(expected_tputs, runs_med_tputs[sc], runs_75p_tputs[sc], 'CC', scn) # plt.scatter(expected_tputs[i], all vals of med[i] array.)
+    plot_scatter(expected_tputs, runs_med_tputs[sc], runs_75p_tputs[sc], 'NPlan', scn) # plt.scatter(expected_tputs[i], all vals of med[i] array.)
 
 # title, yl, xl
-pxl = ["CC Tput", "CC RT", "NavCmd Tput", "RT S_Mcb_NC_LP"] #"CC RT", "MapScanCB Tput", "CC Tput"]
-pxnm = ["Scan_LC_LP_tput", "Scan_LC_LP", "navigator_cmd", "Scan_MapCB_NavCmd_LP"] #, "Scan_LC_LP", "mapper_scanCB", "Scan_LC_LP_tput"]
+pxl = ["NavPlan Tput", "RT S_Mcb_Np_Nc_LP", "CC Tput", "CC RT", "NavCmd Tput", "RT S_Mcb_NC_LP"] #"CC RT", "MapScanCB Tput", "CC Tput"]
+pxnm = ["navigator_plan", "Scan_MapCB_NavPlan_NavCmd_LP", "Scan_LC_LP_tput", "Scan_LC_LP", "navigator_cmd", "Scan_MapCB_NavCmd_LP"] #, "Scan_LC_LP", "mapper_scanCB", "Scan_LC_LP_tput"]
 for i in range(len(pxl)):
         plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_0veltime, pxl[i]+" vs MedianVel=0 Fraction", "Median Vel=0 Fraction of Run", pxl[i], yli=1.0, mean=runlevel_mean_0veltime, tail=runlevel_tail_0veltime)
         plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_collision_count, pxl[i]+" vs #Collisions/10", "#Collisions /10", pxl[i], yli=10.5)
-        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_totalarea, pxl[i]+ " vs TotalArea", "TotalArea [Mapper]", pxl[i], mean=runlevel_mean_totalarea, tail=runlevel_tail_totalarea)
+        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_totalarea, pxl[i]+ " vs TotalArea", "TotalArea [Mapper]", pxl[i], yli=1.0, mean=runlevel_mean_totalarea, tail=runlevel_tail_totalarea)
         plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_lowestTTC, pxl[i]+ " vs LowestTimeToColln", "TTC(sec)", pxl[i], yli=400.0)
 
 '''
