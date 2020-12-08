@@ -375,6 +375,9 @@ for i in expts:
                             #if "mapU" in fname:
                                 #print(tput_agg_i, tput_arr, ts_arr, ":::: HERE'S the tput_agg_i")
                             meantput_agg_i = {}
+                            
+                            new_tput_arr = [] # only keep the ones within start_i, end_i.
+                            
                             # ignore the first tput reading, might be delay due to gap bw StartMap, StartExpl.
                             mink = min(tput_agg_i.keys() )
                             for k in tput_agg_i.keys():
@@ -382,27 +385,31 @@ for i in expts:
                                             # Delete first tput elem.
                                             if ( len( tput_agg_i[k][1:] ) > 0 ):
                                                     meantput_agg_i[k] = sum( tput_agg_i[k][1:] ) / len( tput_agg_i[k][1:] )
+                                                    new_tput_arr += tput_agg_i[k][1:]
                                     else:
                                             meantput_agg_i[k] = sum( tput_agg_i[k] ) / len ( tput_agg_i[k] )
+                                            new_tput_arr += tput_agg_i[k]
                                             #print("For Frac%i%s_run%i : tput of SC%s for bin %i has just 1 elem!"%(i,letter, run,fname,k))
                             tput_agg[fname].append(meantput_agg_i)
-                            runlevel_meantputs[exp_id].append( sum(tput_arr)/len(tput_arr) ) #Saving tput means
+                            runlevel_meantputs[exp_id].append( np.mean(new_tput_arr) ) #sum(tput_arr)/len(tput_arr) ) #Saving tput means
                             if fname not in run_tputs:
                                     run_tputs[fname] = []
                                     irun_75p_tput[fname] = []
                             #run_tputs[fname].append( sum(tput_arr)/len(tput_arr) ) : Mean over each run.
-                            run_tputs[fname].append( sorted(tput_arr)[ len(tput_arr)/2 ] )
-                            irun_75p_tput[fname].append( sorted(tput_arr)[ (75*len(tput_arr))/100 ] )
+                            run_tputs[fname].append( np.median(new_tput_arr) ) #sorted(tput_arr)[ len(tput_arr)/2 ] )
+                            irun_75p_tput[fname].append( sorted(new_tput_arr)[ (75*len(new_tput_arr))/100 ] )
 
                         except:
                             print("EXCEPTION In exp %s, for getting tput of node %s"% (exp_id, fname) )
+                            '''
                             if "_cmd" in fname and "H5_5c_run6" in exp_id:
                                 if fname not in run_tputs:
                                     run_tputs[fname] = []
                                     irun_75p_tput[fname] = []
                                 run_tputs[fname].append(1.25)
                                 irun_75p_tput[fname].append(1.25)
-                            if "_plan" in fname and "L" in exp_id:
+                            '''
+                            if "_plan" in fname and "NP" not in exp_id and "L" in exp_id:
                                 if fname not in run_tputs:
                                     run_tputs[fname] = []
                                     irun_75p_tput[fname] = []
@@ -450,20 +457,22 @@ for i in expts:
 					tput_cc_agg_i = aggregate_over_time(tputs, ts[1:], start_i, slot, end_i)
 					tput_cc_agg.append(mean_aggregate(tput_cc_agg_i) )
 					# print "GOT CC tput", tput_cc_agg[-1]
-					runlevel_meantputs[exp_id].append( sum(tputs)/len(tputs) )
+                                        if len(tputs) > 0:
+                                            runlevel_meantputs[exp_id].append( np.mean(tputs) ) #sum(tputs)/len(tputs) )
 					if chain+"_tput" not in run_tputs:
 						run_tputs[chain+"_tput"] = []
                                                 irun_75p_tput[chain+"_tput"] = []
                                         if chain + "_tput" not in runlevel_agg_lowlevelmetrics_dict:
                                                 runlevel_agg_lowlevelmetrics_dict[chain + "_tput"] = []
 					#run_tputs[chain].append( sum(tputs)/len(tputs) )
-					run_tputs[chain+"_tput"].append( sorted(tputs)[len(tputs)/2] ) # Median over each run
-                                        irun_75p_tput[chain+"_tput"].append( sorted(tputs)[(75*len(tputs))/100] ) # 75%ile over each run.
-                                        '''
-                                        for x in tput_cc_agg[-1].keys():
-						if tput_cc_agg[-1][x] > 0.35:
-							print("Frac",i,",run",run,"TPUT CC is HIGH!! for t=",x," tput:",tput_cc_agg[-1][x], tput_cc_agg_i[x])
-                                        '''
+                                        try:
+                                            run_tputs[chain+"_tput"].append( sorted(tputs)[len(tputs)/2] ) # Median over each run
+                                            irun_75p_tput[chain+"_tput"].append( sorted(tputs)[(75*len(tputs))/100] ) # 75%ile over each run.
+                                        except:
+                                            print("Exception in CC_Tput reading!!! len of tputs: ", len(tputs))
+                                            if "CC" not in exp_id and "L" in exp_id:
+                                                run_tputs[chain+"_tput"].append(1.0)
+                                                irun_75p_tput[chain+"_tput"].append(1.0)
 
 	# Get intra run perf metrics
 	# 1. Odometry v=0 fraction per 2s
@@ -657,16 +666,16 @@ for i in expts:
         # Throughputs and RTs:
         ith_lowlevel_arr = []
 	for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP_tput"]:
-		ith_lowlevel_arr.append( sorted(run_tputs[sc])[len(runs)/2] ) # Median across runs
-                runlevel_agg_lowlevelmetrics_dict[sc].append( sorted(run_tputs[sc])[len(runs)/2] )
+		ith_lowlevel_arr.append( np.median(run_tputs[sc]) ) #sorted(run_tputs[sc])[len(runs)/2] ) # Median across runs
+                runlevel_agg_lowlevelmetrics_dict[sc].append( np.median(run_tputs[sc]) ) #sorted(run_tputs[sc])[len(runs)/2] )
                 if sc not in runs_med_tputs:
                     runs_med_tputs[sc] = []
                     runs_75p_tputs[sc] = []
                 runs_med_tputs[sc].append(run_tputs[sc]) #median of run tput
                 runs_75p_tputs[sc].append(irun_75p_tput[sc]) # 75%ile of run tput
         for ch in all_CHAINS: #["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]: #
-		ith_lowlevel_arr.append(  sorted(run_rts[ch])[len(runs)/2] )
-	        runlevel_agg_lowlevelmetrics_dict[ch].append( sorted(run_rts[ch])[len(runs)/2] )
+		ith_lowlevel_arr.append( np.median(run_rts[ch]) ) #sorted(run_rts[ch])[len(runs)/2] )
+	        runlevel_agg_lowlevelmetrics_dict[ch].append( np.median(run_rts[ch]) ) #sorted(run_rts[ch])[len(runs)/2] )
         runlevel_agg_lowlevelmetrics.append( [-1.0*x for x in ith_lowlevel_arr] )
        
         # Fraction of time v=0.
@@ -696,26 +705,26 @@ for i in expts:
         # Time to cover 40/60% of totalArea.
         print("FOR expt %s, Time taken to cover 40p area arr: %s"%(i, str(time_40area)) )
         print("FOR expt %s, Time taken to cover 60p area arr: %s"%(i, str(time_60area)) )
-        runlevel_med_time40area.append( sorted(time_40area)[ len(time_40area)/2 ] )
-        runlevel_tail_time40area.append( sorted(time_40area)[ (8*len(time_40area))/10 ] )
-        runlevel_mean_time40area.append( sum(time_40area)/len(time_40area) )
+        runlevel_med_time40area.append( np.median(time_40area) ) #sorted(time_40area)[ len(time_40area)/2 ] )
+        runlevel_tail_time40area.append( np.percentile(time_40area, 80, interpolation='nearest') ) #[ (8*len(time_40area))/10 ] )
+        runlevel_mean_time40area.append( np.mean(time_40area) ) #sum(time_40area)/len(time_40area) )
 
         if len(time_60area) > 0:
-            runlevel_med_time60area.append( sorted(time_60area)[ len(time_60area)/2 ] )
-            runlevel_tail_time60area.append( sorted(time_60area)[ (8*len(time_60area))/10 ] )
-            runlevel_mean_time60area.append( sum(time_60area)/len(time_60area) )
+            runlevel_med_time60area.append( np.median(time_60area) ) #sorted(time_60area)[ len(time_60area)/2 ] )
+            runlevel_tail_time60area.append( np.percentile(time_60area, 80, interpolation='nearest') ) 
+            runlevel_mean_time60area.append( np.mean(time_60area) ) #sum(time_60area)/len(time_60area) )
 
         # Path Length covered by robot:
         print("For expt %s, pathlength covered by robot: %s"%(i, str(run_pathlens)) )
-        runlevel_med_pathlen.append( sorted(run_pathlens)[len(run_pathlens)/2] )
-        runlevel_tail_pathlen.append( sorted(run_pathlens)[(8*len(run_pathlens))/10] )
-        runlevel_mean_pathlen.append( sum(run_pathlens)/len(run_pathlens) )
+        runlevel_med_pathlen.append( np.median(run_pathlens) ) #sorted(run_pathlens)[len(run_pathlens)/2] )
+        runlevel_tail_pathlen.append( np.percentile(run_pathlens, 80, interpolation='nearest') ) #sorted(run_pathlens)[(8*len(run_pathlens))/10] )
+        runlevel_mean_pathlen.append( np.mean(run_pathlens) ) #sum(run_pathlens)/len(run_pathlens) )
 
         # Area covered / Path Length:
         print("For expt %s, Area/pathLen: %s"%(i, str(run_areabypaths) ) )
-        runlevel_med_areabypath.append( sorted(run_areabypaths)[len(run_areabypaths)/2] )
-        runlevel_tail_areabypath.append( sorted(run_areabypaths)[(8*len(run_areabypaths))/10] )
-        runlevel_mean_areabypath.append( sum(run_areabypaths)/len(run_areabypaths) )
+        runlevel_med_areabypath.append( np.median(run_areabypaths) ) #sorted(run_areabypaths)[len(run_areabypaths)/2] )
+        runlevel_tail_areabypath.append( np.percentile(run_areabypaths, 80,interpolation='nearest') ) #sorted(run_areabypaths)[(8*len(run_areabypaths))/10] )
+        runlevel_mean_areabypath.append( np.mean(run_areabypaths) ) #sum(run_areabypaths)/len(run_areabypaths) )
 
 print("#Explorations which finished fully per-expt: ", runlevel_agg_fullExpl_count)
 print("Collision coUNT ARR: ", runlevel_agg_collision_count)
