@@ -12,7 +12,7 @@ slot = 5 # in seconds.
 #For plotting area covered in first 60sec: change slot=60, end_t=start_t+60+1.
 #slot = 14.0
 
-all_CHAINS = ["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]
+all_CHAINS = ["Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]
 
 # return dict: slot# -> aggregate value.
 def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
@@ -139,6 +139,10 @@ def plot_runlevel_agg(xarr, yarr, titl, yl, xl, yli=0.0, mean=[], tail=[]):
         plt.legend(loc='best')
         if yli>0.0:
             plt.ylim(0.0,yli)
+        elif len(tail) > 0:
+            plt.ylim(0.0, max(tail))
+        else:
+            plt.ylim(0.0, max(yarr))
         plt.title(titl)
         plt.show()
 
@@ -275,10 +279,27 @@ runlevel_mean_fullExplTime = []
 runlevel_med_fullExplTime = [] #For each expt i, Median of expl time over all runs that finished & explored >=0.9*totalArea.
 runlevel_tail_fullExplTime = []
 
+runlevel_med_time40area = [] # Median Time taken to cover 40% area.
+runlevel_tail_time40area = [] # Tail Time taken to cover 40% area.
+runlevel_mean_time40area = []
+
+runlevel_med_time60area = [] # Median Time taken to cover 60% area.
+runlevel_tail_time60area = [] # Tail Time taken to cover 60% area.
+runlevel_mean_time60area = []
+
+runlevel_med_pathlen = []
+runlevel_mean_pathlen = []
+runlevel_tail_pathlen = []
+
+runlevel_med_areabypath = []
+runlevel_mean_areabypath = []
+runlevel_tail_areabypath = []
+
+
 runs_med_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
-exptn = "OfflineNP_L"
+exptn = "OfflineMCB_H"
 expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 #for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
@@ -297,6 +318,12 @@ for i in expts:
 	
         vel0_frac_arr = [] # vel0 fraction for each run.
         fullExplTimes = [] # include expl time only if finished & area > 0.9*opt.
+
+        time_40area = [] # for each run, time to cover 40% of area. [in terms of known_area]
+        time_60area = [] # for each run, time to cover 60% of area. [in terms of known_area]
+
+        run_pathlens = [] # Distance travelled by robot
+        run_areabypaths = [] # ratio of area covered to path length.
 
         for run in runs: #1,2]:
 		run_collision_hua = False
@@ -369,7 +396,7 @@ for i in expts:
 
                         except:
                             print("EXCEPTION In exp %s, for getting tput of node %s"% (exp_id, fname) )
-                            if "_cmd" in fname and ("H5_5c_run6" in exp_id or ("L" in exp_id) ):
+                            if "_cmd" in fname and "H5_5c_run6" in exp_id:
                                 if fname not in run_tputs:
                                     run_tputs[fname] = []
                                     irun_75p_tput[fname] = []
@@ -440,6 +467,7 @@ for i in expts:
 
 	# Get intra run perf metrics
 	# 1. Odometry v=0 fraction per 2s
+                run_path_len_sum = 0.0
 		with open('../robot_nav2d_obstacleDist_logs_' + exp_id + '.txt', 'r') as f:
 			num_obst = 8
 			obfl = f.readlines()
@@ -450,6 +478,10 @@ for i in expts:
 			obst_dist_arr = []
 			obst_ts_arr = []
 			wall_dist_arr = []
+
+                        old_pos_x = 0.0
+                        old_pos_y = 0.0
+                        path_started = False
 			for o in range(len(obfl)//numl):
 				rob_pos = o*numl + 1
 				rob_pos_l = obfl[rob_pos].split(' ')
@@ -466,7 +498,16 @@ for i in expts:
 				pos_rt_ts = float(obfl[o*numl].split(' ')[3])
 
 				if ( (pos_rt_ts > start_i) and (pos_rt_ts < end_i) ):
-					vx = float( obfl[o*numl + num_obst + 2].split(' ')[1] )
+				        # Calculating dist travelled for pathlen:
+                                        if not path_started:
+                                            path_started = True
+                                        else:
+                                            run_path_len_sum += get_dist(rob_x,rob_y,old_pos_x,old_pos_y)
+
+                                        old_pos_x = rob_x
+                                        old_pos_y = rob_y
+
+                                        vx = float( obfl[o*numl + num_obst + 2].split(' ')[1] )
 					vy = float( obfl[o*numl + num_obst + 2].split(' ')[2] )
 					robo_odom_arr.append( math.sqrt( vx*vx + vy*vy ) )
 					try:
@@ -576,7 +617,11 @@ for i in expts:
 					known = mpsz - unk
 					new_area_covered.append(known - last_known_area)
 					new_area_covered_ts.append( float(l.split(' ')[4] ) )
-					last_known_area = known
+                                        if ( (known >= 0.4*opt_total_Area) and (last_known_area < 0.4*opt_total_Area) ):
+                                            time_40area.append( float(l.split(' ')[4]) - start_i )
+                                        if ( (known >= 0.6*opt_total_Area) and (last_known_area < 0.6*opt_total_Area) ):
+                                            time_60area.append( float(l.split(' ')[4]) - start_i )
+                                        last_known_area = known
 		runlevel_total_area_expl[exp_id] = last_known_area
 		run_totalareas.append(last_known_area)
 		new_area_cov_Agg = aggregate_over_time(new_area_covered, new_area_covered_ts, start_i, slot, end_i)
@@ -590,10 +635,18 @@ for i in expts:
                     run_ttc.append(end_i - start_i - 0.1)
                 if (run_expl_finished and (last_known_area > (0.9*opt_total_Area)) ):
                     fullExplTimes.append(end_i - start_i - 0.1)
-	runlevel_agg_collision_count.append( colln_count )
+	        
+                run_pathlens.append(run_path_len_sum)
+                run_areabypaths.append( last_known_area / run_path_len_sum )
+        
 	# Run-level perf metrics : #Datapoints = #runs LOL.
 	# aggregate runlevel metrics over all runs. [to remove randommess]
+        
+        # Collision count: [based on stage Stalled]
+        runlevel_agg_collision_count.append( colln_count )
 	numrun = len(runs)//2
+
+        # Total Area explored
 	#print("NEW Area Agg array across runs: ", new_area_agg)
 	run_level_total_times.append(run_total_times)
 	print("For i= ", i, ", run-TotalArea Explored:", run_totalareas)
@@ -601,30 +654,34 @@ for i in expts:
 	runlevel_mean_totalarea.append( (sum(run_totalareas)/len(runs))/opt_total_Area ) # mean totalArea
         runlevel_tail_totalarea.append( (sorted(run_totalareas)[ (8*len(runs))/10 ])/opt_total_Area ) # tail totalArea
 
+        # Throughputs and RTs:
         ith_lowlevel_arr = []
 	for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP_tput"]:
-		ith_lowlevel_arr.append( sorted(run_tputs[sc])[len(run_tputs[sc])/2] ) # Median across runs
-                runlevel_agg_lowlevelmetrics_dict[sc].append( sorted(run_tputs[sc])[len(run_tputs[sc])/2] )
+		ith_lowlevel_arr.append( sorted(run_tputs[sc])[len(runs)/2] ) # Median across runs
+                runlevel_agg_lowlevelmetrics_dict[sc].append( sorted(run_tputs[sc])[len(runs)/2] )
                 if sc not in runs_med_tputs:
                     runs_med_tputs[sc] = []
                     runs_75p_tputs[sc] = []
                 runs_med_tputs[sc].append(run_tputs[sc]) #median of run tput
                 runs_75p_tputs[sc].append(irun_75p_tput[sc]) # 75%ile of run tput
-        for ch in all_CHAINS: #["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]: #"Scan_MapCB_NavCmd_LP",
-		ith_lowlevel_arr.append( sorted(run_rts[ch])[len(run_rts[ch])/2] )
-	        runlevel_agg_lowlevelmetrics_dict[ch].append( sorted(run_rts[ch])[len(run_rts[ch])/2] )
+        for ch in all_CHAINS: #["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]: #
+		ith_lowlevel_arr.append(  sorted(run_rts[ch])[len(runs)/2] )
+	        runlevel_agg_lowlevelmetrics_dict[ch].append( sorted(run_rts[ch])[len(runs)/2] )
         runlevel_agg_lowlevelmetrics.append( [-1.0*x for x in ith_lowlevel_arr] )
        
+        # Fraction of time v=0.
         print("For expt %s, vel0_frac_arr: %s"%(exp_id, str(vel0_frac_arr) ) )
         runlevel_med_0veltime.append( sorted(vel0_frac_arr)[len(runs)/2] )
         runlevel_mean_0veltime.append( sum(vel0_frac_arr)/len(runs) )
         runlevel_tail_0veltime.append( sorted(vel0_frac_arr)[(8*len(runs))/10] )
 
+        # Lowest TimeToCollision:
         if len(run_ttc) > 0:
             runlevel_agg_lowestTTC.append( min(run_ttc) )
         else:
             runlevel_agg_lowestTTC.append( 1000.0 ) # INF.
 
+        # Time taken for full explorations:
         print("For expt %s, FullExplTimes Array: %s"%( i, str(fullExplTimes) ) )
         if len(fullExplTimes) > 0:
             runlevel_med_fullExplTime.append( sorted(fullExplTimes)[len(fullExplTimes)/2] )
@@ -636,28 +693,57 @@ for i in expts:
             runlevel_mean_fullExplTime.append(2000.0)
         runlevel_agg_fullExpl_count.append( len(fullExplTimes) )
 
+        # Time to cover 40/60% of totalArea.
+        print("FOR expt %s, Time taken to cover 40p area arr: %s"%(i, str(time_40area)) )
+        print("FOR expt %s, Time taken to cover 60p area arr: %s"%(i, str(time_60area)) )
+        runlevel_med_time40area.append( sorted(time_40area)[ len(time_40area)/2 ] )
+        runlevel_tail_time40area.append( sorted(time_40area)[ (8*len(time_40area))/10 ] )
+        runlevel_mean_time40area.append( sum(time_40area)/len(time_40area) )
+
+        if len(time_60area) > 0:
+            runlevel_med_time60area.append( sorted(time_60area)[ len(time_60area)/2 ] )
+            runlevel_tail_time60area.append( sorted(time_60area)[ (8*len(time_60area))/10 ] )
+            runlevel_mean_time60area.append( sum(time_60area)/len(time_60area) )
+
+        # Path Length covered by robot:
+        print("For expt %s, pathlength covered by robot: %s"%(i, str(run_pathlens)) )
+        runlevel_med_pathlen.append( sorted(run_pathlens)[len(run_pathlens)/2] )
+        runlevel_tail_pathlen.append( sorted(run_pathlens)[(8*len(run_pathlens))/10] )
+        runlevel_mean_pathlen.append( sum(run_pathlens)/len(run_pathlens) )
+
+        # Area covered / Path Length:
+        print("For expt %s, Area/pathLen: %s"%(i, str(run_areabypaths) ) )
+        runlevel_med_areabypath.append( sorted(run_areabypaths)[len(run_areabypaths)/2] )
+        runlevel_tail_areabypath.append( sorted(run_areabypaths)[(8*len(run_areabypaths))/10] )
+        runlevel_mean_areabypath.append( sum(run_areabypaths)/len(run_areabypaths) )
+
 print("#Explorations which finished fully per-expt: ", runlevel_agg_fullExpl_count)
 print("Collision coUNT ARR: ", runlevel_agg_collision_count)
 print("RunLevel total times: ", run_level_total_times)
 
-#CC:expected_tputs = [0.05, 0.1, 0.2, 0.4, 1.0] # the tputs set for the experiments 1-5.
-
-expected_tputs = [0.2, 1.0, 2.0, 5.0, 10.0] # NavPlan
-
+# CC: expected_tputs = [0.05, 0.1, 0.2, 0.4, 1.0] # the tputs set for the experiments 1-5.
+# MCB:
+expected_tputs = [0.1, 0.143, 0.25, 1.0, 2.5]
 for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP_tput"]:
     scn = (sc + "_tput") if "tput" not in sc else sc
     print("Plotting ScatterPlot for %s, runs_75p_tputs: %s"%(scn, str(runs_75p_tputs[sc]) ) )
     #plot_scatter(expected_tputs, runs_med_tputs[sc], runs_75p_tputs[sc], 'MCb', scn) # plt.scatter(expected_tputs[i], all vals of med[i] array.)
 
-pxl = ["NavPlan Tput", "RT S_Mcb_Np_Nc_LP", "CC Tput", "CC RT", "NavCmd Tput", "RT S_Mcb_NC_LP"] #"CC RT", "MapScanCB Tput", "CC Tput"]
-pxnm = ["navigator_plan", "Scan_MapCB_NavPlan_NavCmd_LP", "Scan_LC_LP_tput", "Scan_LC_LP", "navigator_cmd", "Scan_MapCB_NavCmd_LP"] #, "Scan_LC_LP", "mapper_scanCB", "Scan_LC_LP_tput"]
+# title, yl, xl
+pxl = ["MapCB Tput", "RT S_Mcb_NC_LP", "CC Tput", "mapUpd Tput", "CC RT", "NavCmd Tput"] #"CC RT", "MapScanCB Tput", "CC Tput"]
+pxnm = ["mapper_scanCB", "Scan_MapCB_NavCmd_LP", "Scan_LC_LP_tput", "mapper_mapUpdate", "Scan_LC_LP", "navigator_cmd"] #, "Scan_LC_LP", "mapper_scanCB", "Scan_LC_LP_tput"]
 for i in range(len(pxl)):
+        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_pathlen, pxl[i]+" vs RobotPathLength", "RobotpathLength (m)", pxl[i], mean=runlevel_mean_pathlen, tail=runlevel_tail_pathlen)
+        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_areabypath, pxl[i]+" vs Area/PathLength", "Area/PathLength", pxl[i], mean=runlevel_mean_areabypath, tail=runlevel_tail_areabypath)
+        if len(runlevel_med_time60area) == len(expts):
+            plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_time60area, pxl[i]+" vs TimeToCover 60p Area", "Time to cover 0.6*area (s)", pxl[i], mean=runlevel_mean_time60area, tail=runlevel_tail_time60area)
+        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_time40area, pxl[i]+" vs TimeToCover 40p Area", "Time to cover 0.4*area (s)", pxl[i], mean=runlevel_mean_time40area, tail=runlevel_tail_time40area)
         plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_fullExpl_count, pxl[i]+" vs #FullExplorations", "#FullExplorations/10", pxl[i], yli=10.5)
         plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_fullExplTime, pxl[i]+" vs Full Exploration RunTime", "Full Exploration Time(s)", pxl[i], yli=600.0, mean=runlevel_mean_fullExplTime, tail=runlevel_tail_fullExplTime)
-        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_0veltime, pxl[i]+" vs MedianVel=0 Fraction", "Median Vel=0 Fraction of Run", pxl[i], yli=1.0, mean=runlevel_mean_0veltime, tail=runlevel_tail_0veltime)
-        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_collision_count, pxl[i]+" vs #Collisions/10", "#Collisions /10", pxl[i], yli=10.5)
-        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_totalarea, pxl[i]+ " vs TotalArea", "TotalArea [Mapper]", pxl[i], yli=1.2, mean=runlevel_mean_totalarea, tail=runlevel_tail_totalarea)
-        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_lowestTTC, pxl[i]+ " vs LowestTimeToColln", "TTC(sec)", pxl[i], yli=400.0)
+        #plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_0veltime, pxl[i]+" vs MedianVel=0 Fraction", "Median Vel=0 Fraction of Run", pxl[i], yli=1.0, mean=runlevel_mean_0veltime, tail=runlevel_tail_0veltime)
+        #plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_collision_count, pxl[i]+" vs #Collisions/10", "#Collisions /10", pxl[i], yli=10.5)
+        #plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_totalarea, pxl[i]+ " vs TotalArea", "TotalArea [Mapper]", pxl[i], yli=1.2, mean=runlevel_mean_totalarea, tail=runlevel_tail_totalarea)
+        #plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_lowestTTC, pxl[i]+ " vs LowestTimeToColln", "TTC(sec)", pxl[i], yli=400.0)
 
 '''
 from sklearn.linear_model import LinearRegression
