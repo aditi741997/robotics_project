@@ -152,6 +152,19 @@ def plot_runlevel_agg(xarr, yarr, titl, yl, xl, yli=0.0, mean=[], tail=[], count
         plt.title(titl)
         plt.show()
 
+def plot_cdfs(arrs, labels, titl, xl):
+    print("PLOTTING CDFs, Len(arrs): %i, Til: %s, Xlabel: %s"%( len(arrs), titl, xl ) )
+    cols = ['olive', 'magenta', 'teal', 'chocolate', 'red', 'blue', 'cyan', 'purple', 'green', 'orange'] #['b.:', 'r.:', 'g.:', '']
+    for i in range(len(arrs)):
+        arr = arrs[i]
+        sa = np.sort(arr)
+        pr = 1. * np.arange(len(arr))/(len(arr) - 1)
+        plt.plot(sa, pr, '.:', color=cols[i], linewidth=2, label=labels[i])
+    plt.title(titl + " CDF")
+    plt.xlabel(xl)
+    plt.legend(loc='best')
+    plt.show()
+
 def plot_scatter(xarr, medyarr_arr_d, tailyarr_arr_d, x_name, y_name):
     colors = ['red', 'blue', 'cyan', 'purple', 'green', 'orange']
     for i in range(len(xarr)):
@@ -307,12 +320,13 @@ runlevel_med_areabypath = []
 runlevel_mean_areabypath = []
 runlevel_tail_areabypath = []
 
-
+runs_tput_arrs = {} # i_subchainName -> array of [tputs] for each run.
 runs_med_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_L"
 expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
+runs = [1,2,3,4,5,6,7,8,9,10]
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 #for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 for i in expts:
@@ -321,7 +335,6 @@ for i in expts:
 	run_rts = {} # chain name -> list
         run_ttc = []
 
-	runs = [1,2,3,4,5,6,7,8,9,10]
 	if i == 2:
 		runs = [1,3,4,5]
 	colln_count = 0 # #runs with collision.
@@ -371,8 +384,6 @@ for i in expts:
 			print("Starting ", fname)
                         if fname not in runlevel_agg_lowlevelmetrics_dict:
                             runlevel_agg_lowlevelmetrics_dict[fname] = []
-                        if fname not in tput_agg:
-				tput_agg[fname] = []
                         tput_agg_i = {}
 			tput_arr = []
 			ts_arr = []
@@ -389,7 +400,8 @@ for i in expts:
                             meantput_agg_i = {}
                             
                             new_tput_arr = [] # only keep the ones within start_i, end_i.
-                            
+                            new_ts_arr = [] # APPROXIMATE TS of the tput values.
+
                             # ignore the first tput reading, might be delay due to gap bw StartMap, StartExpl.
                             mink = min(tput_agg_i.keys() )
                             for k in tput_agg_i.keys():
@@ -398,10 +410,15 @@ for i in expts:
                                             if ( len( tput_agg_i[k][1:] ) > 0 ):
                                                     meantput_agg_i[k] = sum( tput_agg_i[k][1:] ) / len( tput_agg_i[k][1:] )
                                                     new_tput_arr += tput_agg_i[k][1:]
+                                                    new_ts_arr += [ (k*slot + start_i)  for x in tput_agg_i[k][1:] ]
                                     else:
                                             meantput_agg_i[k] = sum( tput_agg_i[k] ) / len ( tput_agg_i[k] )
                                             new_tput_arr += tput_agg_i[k]
+                                            new_ts_arr += [ (k*slot + start_i)  for x in tput_agg_i[k] ]
                                             #print("For Frac%i%s_run%i : tput of SC%s for bin %i has just 1 elem!"%(i,letter, run,fname,k))
+                            print("A")
+                            if fname not in tput_agg:
+                                tput_agg[fname] = []
                             tput_agg[fname].append(meantput_agg_i)
                             runlevel_meantputs[exp_id].append( np.mean(new_tput_arr) ) #sum(tput_arr)/len(tput_arr) ) #Saving tput means
                             if fname not in run_tputs:
@@ -410,9 +427,18 @@ for i in expts:
                             #run_tputs[fname].append( sum(tput_arr)/len(tput_arr) ) : Mean over each run.
                             run_tputs[fname].append( np.median(new_tput_arr) ) #sorted(tput_arr)[ len(tput_arr)/2 ] )
                             irun_75p_tput[fname].append( sorted(new_tput_arr)[ (75*len(new_tput_arr))/100 ] )
+                            
+                            if "H4" in exp_id and "CB" in fname:
+                                tput_ts = zip(new_tput_arr, new_ts_arr)
+                                if (i + "_" + fname) not in runs_tput_arrs:
+                                    runs_tput_arrs[i + "_" + fname] = []
+                                runs_tput_arrs[i + "_" + fname].append( new_tput_arr )
+                            
+                                print("Here's the sorted tput array: ", sorted(tput_ts, key=lambda x: x[0]), len(new_tput_arr))
+                                print("NP Median %f, sorted[1/2]: %f"%( np.median(new_tput_arr), sorted(new_tput_arr)[len(new_tput_arr)/2] ) )
 
                         except:
-                            print("EXCEPTION In exp %s, for getting tput of node %s"% (exp_id, fname) )
+                            print("EXCEPTION In exp %s, for getting tput of node %s, Exception: %s"% (exp_id, fname, sys.exc_info()[0]) )
                             '''
                             if "_cmd" in fname and "H5_5c_run6" in exp_id:
                                 if fname not in run_tputs:
@@ -677,6 +703,7 @@ for i in expts:
 
         # Throughputs and RTs:
         ith_lowlevel_arr = []
+        print("FOR EXPT: %s, run_meds_tputs for MapCB: %s"%(i, str(run_tputs["mapper_scanCB"] ) ) )
 	for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP_tput"]:
 		ith_lowlevel_arr.append( np.median(run_tputs[sc]) ) #sorted(run_tputs[sc])[len(runs)/2] ) # Median across runs
                 runlevel_agg_lowlevelmetrics_dict[sc].append( np.median(run_tputs[sc]) ) #sorted(run_tputs[sc])[len(runs)/2] )
@@ -756,6 +783,9 @@ for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan
     scn = (sc + "_tput") if "tput" not in sc else sc
     print("Plotting ScatterPlot for %s, runs_75p_tputs: %s"%(scn, str(runs_75p_tputs[sc]) ) )
     #plot_scatter(expected_tputs, runs_med_tputs[sc], runs_75p_tputs[sc], 'MCb', scn) # plt.scatter(expected_tputs[i], all vals of med[i] array.)
+
+for k in runs_tput_arrs:
+    plot_cdfs(runs_tput_arrs[k], ["run"+str(r) for r in runs], k, k + " Inter-arrival (s)")
 
 # title, yl, xl
 pxl = ["MapCB period", "RT S_Mcb_NC_LP", "CC Tput", "mapUpd Tput", "CC RT", "NavCmd Tput"] #"CC RT", "MapScanCB Tput", "CC Tput"]
