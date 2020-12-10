@@ -7,6 +7,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 #from sympy import *
 #from sympy.geometry import *
+import random
 
 slot = 5 # in seconds.
 #For plotting area covered in first 60sec: change slot=60, end_t=start_t+60+1.
@@ -127,13 +128,18 @@ def plot_perf_metric(perf_agg_arr, metr_agg_arr, p,m, slt,plot_first=False):
 		plt.title('Perf metric %s vs Low-level metric %s, In first slot of %f s'%(p,m, slt) )
 		plt.show()
 
-def plot_runlevel_agg(xarr, yarr, titl, yl, xl, yli=0.0, mean=[], tail=[]):
+def plot_runlevel_agg(xarr, yarr, titl, yl, xl, yli=0.0, mean=[], tail=[], counts=[]):
 	#plt.scatter(xarr, yarr, color=col)
         plt.plot(xarr, yarr, 'b*--', markersize=9, linewidth=3, label=yl)
         if len(mean) > 0:
             plt.plot(xarr, mean, 'g.-.', markersize=9, linewidth=3, label="Mean "+yl)
         if len(tail) > 0:
             plt.plot(xarr, tail, 'r^:', markersize=9, linewidth=3, label="Tail "+yl)
+        if len(counts) > 0:
+            print("ABOUT to print texts, xarr: ", xarr, " At ht: ", 0.9*min(yarr), " Counts: ", counts)
+            for i in range(len(xarr)):
+                # random no b/w i - i+1 / len(xarr)
+                plt.text(xarr[i], 0.5*min(yarr)+random.uniform( (i*min(yarr)*0.5)/(len(xarr)), ((i+1)*min(yarr)*0.5)/len(xarr) ), str(counts[i]) )
         plt.xlabel(xl)
         plt.ylabel(yl)
         plt.legend(loc='best')
@@ -279,13 +285,19 @@ runlevel_mean_fullExplTime = []
 runlevel_med_fullExplTime = [] #For each expt i, Median of expl time over all runs that finished & explored >=0.9*totalArea.
 runlevel_tail_fullExplTime = []
 
+runlevel_means = {"TotalExplTime": []}
+runlevel_meds = {"TotalExplTime": []}
+runlevel_tails = {"TotalExplTime": []}
+
 runlevel_med_time40area = [] # Median Time taken to cover 40% area.
 runlevel_tail_time40area = [] # Tail Time taken to cover 40% area.
 runlevel_mean_time40area = []
+counts_40area = [] # no. of runs per expt which cover atleast 40p area.
 
 runlevel_med_time60area = [] # Median Time taken to cover 60% area.
 runlevel_tail_time60area = [] # Tail Time taken to cover 60% area.
 runlevel_mean_time60area = []
+counts_60area = []
 
 runlevel_med_pathlen = []
 runlevel_mean_pathlen = []
@@ -299,7 +311,7 @@ runlevel_tail_areabypath = []
 runs_med_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
-exptn = "OfflineMCB_H"
+exptn = "OfflineMCB_L"
 expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 #for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
@@ -709,6 +721,9 @@ for i in expts:
         runlevel_tail_time40area.append( np.percentile(time_40area, 80, interpolation='nearest') ) #[ (8*len(time_40area))/10 ] )
         runlevel_mean_time40area.append( np.mean(time_40area) ) #sum(time_40area)/len(time_40area) )
 
+        counts_40area.append( len(time_40area) )
+
+        counts_60area.append( len(time_60area) )
         if len(time_60area) > 0:
             runlevel_med_time60area.append( np.median(time_60area) ) #sorted(time_60area)[ len(time_60area)/2 ] )
             runlevel_tail_time60area.append( np.percentile(time_60area, 80, interpolation='nearest') ) 
@@ -726,6 +741,10 @@ for i in expts:
         runlevel_tail_areabypath.append( np.percentile(run_areabypaths, 80,interpolation='nearest') ) #sorted(run_areabypaths)[(8*len(run_areabypaths))/10] )
         runlevel_mean_areabypath.append( np.mean(run_areabypaths) ) #sum(run_areabypaths)/len(run_areabypaths) )
 
+        runlevel_means["TotalExplTime"].append( np.mean(run_total_times) )
+        runlevel_meds["TotalExplTime"].append( np.median(run_total_times) )
+        runlevel_tails["TotalExplTime"].append( np.percentile(run_total_times, 80,interpolation='nearest') )
+
 print("#Explorations which finished fully per-expt: ", runlevel_agg_fullExpl_count)
 print("Collision coUNT ARR: ", runlevel_agg_collision_count)
 print("RunLevel total times: ", run_level_total_times)
@@ -739,16 +758,18 @@ for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan
     #plot_scatter(expected_tputs, runs_med_tputs[sc], runs_75p_tputs[sc], 'MCb', scn) # plt.scatter(expected_tputs[i], all vals of med[i] array.)
 
 # title, yl, xl
-pxl = ["MapCB Tput", "RT S_Mcb_NC_LP", "CC Tput", "mapUpd Tput", "CC RT", "NavCmd Tput"] #"CC RT", "MapScanCB Tput", "CC Tput"]
+pxl = ["MapCB period", "RT S_Mcb_NC_LP", "CC Tput", "mapUpd Tput", "CC RT", "NavCmd Tput"] #"CC RT", "MapScanCB Tput", "CC Tput"]
 pxnm = ["mapper_scanCB", "Scan_MapCB_NavCmd_LP", "Scan_LC_LP_tput", "mapper_mapUpdate", "Scan_LC_LP", "navigator_cmd"] #, "Scan_LC_LP", "mapper_scanCB", "Scan_LC_LP_tput"]
 for i in range(len(pxl)):
+        for k in runlevel_meds.keys(): 
+            plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_meds[k], pxl[i]+" vs "+k, k, pxl[i], mean=runlevel_means[k], tail=runlevel_tails[k])
         plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_pathlen, pxl[i]+" vs RobotPathLength", "RobotpathLength (m)", pxl[i], mean=runlevel_mean_pathlen, tail=runlevel_tail_pathlen)
-        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_areabypath, pxl[i]+" vs Area/PathLength", "Area/PathLength", pxl[i], mean=runlevel_mean_areabypath, tail=runlevel_tail_areabypath)
+        #plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_areabypath, pxl[i]+" vs Area/PathLength", "Area/PathLength", pxl[i], mean=runlevel_mean_areabypath, tail=runlevel_tail_areabypath)
         if len(runlevel_med_time60area) == len(expts):
-            plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_time60area, pxl[i]+" vs TimeToCover 60p Area", "Time to cover 0.6*area (s)", pxl[i], mean=runlevel_mean_time60area, tail=runlevel_tail_time60area)
-        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_time40area, pxl[i]+" vs TimeToCover 40p Area", "Time to cover 0.4*area (s)", pxl[i], mean=runlevel_mean_time40area, tail=runlevel_tail_time40area)
+            plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_time60area, pxl[i]+" vs TimeToCover 60p Area", "Time to cover 0.6*area (s)", pxl[i], mean=runlevel_mean_time60area, tail=runlevel_tail_time60area, counts=counts_60area)
+        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_time40area, pxl[i]+" vs TimeToCover 40p Area", "Time to cover 0.4*area (s)", pxl[i], mean=runlevel_mean_time40area, tail=runlevel_tail_time40area, counts=counts_40area)
         plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_fullExpl_count, pxl[i]+" vs #FullExplorations", "#FullExplorations/10", pxl[i], yli=10.5)
-        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_fullExplTime, pxl[i]+" vs Full Exploration RunTime", "Full Exploration Time(s)", pxl[i], yli=600.0, mean=runlevel_mean_fullExplTime, tail=runlevel_tail_fullExplTime)
+        plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_fullExplTime, pxl[i]+" vs Full Exploration RunTime", "Full Exploration Time(s)", pxl[i], yli=600.0, mean=runlevel_mean_fullExplTime, tail=runlevel_tail_fullExplTime, counts=runlevel_agg_fullExpl_count)
         #plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_0veltime, pxl[i]+" vs MedianVel=0 Fraction", "Median Vel=0 Fraction of Run", pxl[i], yli=1.0, mean=runlevel_mean_0veltime, tail=runlevel_tail_0veltime)
         #plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_agg_collision_count, pxl[i]+" vs #Collisions/10", "#Collisions /10", pxl[i], yli=10.5)
         #plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_med_totalarea, pxl[i]+ " vs TotalArea", "TotalArea [Mapper]", pxl[i], yli=1.2, mean=runlevel_mean_totalarea, tail=runlevel_tail_totalarea)
