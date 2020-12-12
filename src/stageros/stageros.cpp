@@ -849,8 +849,6 @@ StageNode::WorldCallback()
     {
 	if ( std::string( this->robotmodels_[r]->positionmodel->Token() ).find("0") != std::string::npos )
 		of << this->robotmodels_[r]->positionmodel->Token() << " " << all_robos_twist_lin_x[r] << " " << all_robos_twist_lin_y[r] << " " << all_robos_twist_lin_z[r] << " " << all_robos_twist_ang_z[r] << " orient: " << all_robos_orient_z[r] << " " << all_robos_orient_w[r] << " stall: " << rob0_stalled << " ";
-	
-	
 
     }
     if (stalled_robos.size() > 0)
