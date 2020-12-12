@@ -34,10 +34,10 @@
 #include <signal.h>
 
 #include <fstream>
+#include <sstream>
 
 // libstage
 #include <stage.hh>
-
 
 // roscpp
 #include <ros/ros.h>
@@ -55,14 +55,21 @@
 
 #include "tf/transform_broadcaster.h"
 
+// for getting system clock time
+#include <boost/chrono/system_clocks.hpp>
+#include <boost/chrono/ceil.hpp>
+#include <boost/date_time/posix_time/posix_time_duration.hpp>
+
 #define USAGE "stageros <worldfile>"
 #define IMAGE "image"
 #define DEPTH "depth"
 #define CAMERA_INFO "camera_info"
 #define ODOM "odom"
-#define BASE_SCAN "base_scan"
+#define BASE_SCAN "base_scan1"
 #define BASE_POSE_GROUND_TRUTH "base_pose_ground_truth"
 #define CMD_VEL "cmd_vel"
+
+#include <ros/console.h>
 
 // Our node
 class StageNode
@@ -170,8 +177,11 @@ public:
     Stg::World* world;
 
     // For nav2d scheduling experiments:
+    std::vector<std::string> stalled_robos; // to see if robo collided with one of the moving robots.
     std::vector<double > all_robos_pose_x;
     std::vector<double > all_robos_pose_y;
+    std::vector<double > all_robos_twist_lin_z, all_robos_twist_lin_y, all_robos_twist_lin_x, all_robos_twist_ang_z, all_robos_orient_z, all_robos_orient_w;
+    bool rob0_stalled = false;
     std::string expt_name;
     int world_update_count;
 };
@@ -245,7 +255,7 @@ StageNode::ghfunc(Stg::Model* mod, StageNode* node)
      Stg::ModelPosition * p = dynamic_cast<Stg::ModelPosition *>(mod);
       // remember initial poses
       node->positionmodels.push_back(p);
-      ROS_WARN("IN STAGE_ROS, Pushing to positionmodels x: %f, y: %f, z: %f, token: %s", p->est_pose.x, p->est_pose.y, p->est_pose.z, p->Token());
+      ROS_ERROR("IN STAGE_ROS, Pushing to positionmodels x: %f, y: %f, z: %f, token: %s", p->est_pose.x, p->est_pose.y, p->est_pose.z, p->Token());
       node->initial_poses.push_back(p->GetGlobalPose());
     }
   if (dynamic_cast<Stg::ModelCamera *>(mod)) {
@@ -277,6 +287,9 @@ StageNode::cmdvelReceived(int idx, const boost::shared_ptr<geometry_msgs::Twist 
                                         msg->linear.y,
                                         msg->angular.z);
     this->base_last_cmd = this->sim_time;
+    // if ( (this->sim_time.toSec() > 1.0) && (idx == 0) )
+	// ROS_WARN("cmd vel received at curr time %f, for robot id %i, linx %f, liny %f, angz %f ", this->sim_time.toSec(), idx, msg->linear.x, msg->linear.y, msg->angular.z);
+
 }
 
 StageNode::StageNode(int argc, char** argv, bool gui, const char* fname, bool use_model_names)
@@ -366,14 +379,14 @@ StageNode::SubscribeModels()
         }
 
 	// TODO - print the topic names nicely as well
-        ROS_WARN("Robot %s provided %lu rangers and %lu cameras",
+        ROS_INFO("Robot %s provided %lu rangers and %lu cameras",
 		 new_robot->positionmodel->Token(),
 		 new_robot->lasermodels.size(),
 		 new_robot->cameramodels.size() );
 
         new_robot->odom_pub = n_.advertise<nav_msgs::Odometry>(mapName(ODOM, r, static_cast<Stg::Model*>(new_robot->positionmodel)), 10);
         new_robot->ground_truth_pub = n_.advertise<nav_msgs::Odometry>(mapName(BASE_POSE_GROUND_TRUTH, r, static_cast<Stg::Model*>(new_robot->positionmodel)), 10);
-        new_robot->cmdvel_sub = n_.subscribe<geometry_msgs::Twist>(mapName(CMD_VEL, r, static_cast<Stg::Model*>(new_robot->positionmodel)), 10, boost::bind(&StageNode::cmdvelReceived, this, r, _1));
+        new_robot->cmdvel_sub = n_.subscribe<geometry_msgs::Twist>(mapName(CMD_VEL, r, static_cast<Stg::Model*>(new_robot->positionmodel)), 10, boost::bind(&StageNode::cmdvelReceived, this, r, _1) ); // , ros::TransportHints().tcpNoDelay()
 
         for (size_t s = 0;  s < new_robot->lasermodels.size(); ++s)
         {
@@ -443,10 +456,21 @@ StageNode::WorldCallback()
         return;
     }
 
+    // getting current RT corr. to Simulated time, to save current positions of robots.
+    boost::chrono::time_point<boost::chrono::system_clock> rt_now = boost::chrono::system_clock::now();
+    boost::chrono::system_clock::duration rt_tse = rt_now.time_since_epoch();
+    unsigned long long rt_ct = boost::chrono::duration_cast<boost::chrono::milliseconds>(rt_tse).count() - (1603000000000);
+    double real_time = rt_ct / (double)1000.0;
+
+    struct timespec rt_mono1;
+    clock_gettime(CLOCK_MONOTONIC, &rt_mono1);
+    double real_mono_time = rt_mono1.tv_sec + 1e-9*rt_mono1.tv_nsec;
+
     // TODO make this only affect one robot if necessary
     if((this->base_watchdog_timeout.toSec() > 0.0) &&
             ((this->sim_time - this->base_last_cmd) >= this->base_watchdog_timeout))
     {
+	// ROS_WARN("STOPPING ALL ROBOS! Curr time : %f, base_last_cmd %f, timeout %f ", this->sim_time, this->base_last_cmd, this->base_watchdog_timeout);
         for (size_t r = 0; r < this->positionmodels.size(); r++)
             this->positionmodels[r]->SetSpeed(0.0, 0.0, 0.0);
     }
@@ -455,6 +479,39 @@ StageNode::WorldCallback()
     for (size_t r = 0; r < this->robotmodels_.size(); ++r)
     {
         StageRobot const * robotmodel = this->robotmodels_[r];
+
+	//the position of the robot
+        tf.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(),
+                                              sim_time,
+                                              mapName("base_footprint", r, static_cast<Stg::Model*>(robotmodel->positionmodel)),
+                                              mapName("base_link", r, static_cast<Stg::Model*>(robotmodel->positionmodel))));
+
+        // Get latest odometry data
+        // Translate into ROS message format and publish
+        nav_msgs::Odometry odom_msg;
+        odom_msg.pose.pose.position.x = robotmodel->positionmodel->est_pose.x;
+        odom_msg.pose.pose.position.y = robotmodel->positionmodel->est_pose.y;
+        odom_msg.pose.pose.orientation = tf::createQuaternionMsgFromYaw(robotmodel->positionmodel->est_pose.a);
+        Stg::Velocity v = robotmodel->positionmodel->GetVelocity();
+        odom_msg.twist.twist.linear.x = v.x;
+        odom_msg.twist.twist.linear.y = v.y;
+        odom_msg.twist.twist.angular.z = v.a;
+
+	//@todo Publish stall on a separate topic when one becomes available
+        //this->odomMsgs[r].stall = this->positionmodels[r]->Stall();
+        //
+        odom_msg.header.frame_id = mapName("odom", r, static_cast<Stg::Model*>(robotmodel->positionmodel));
+        odom_msg.header.stamp = sim_time;
+
+        robotmodel->odom_pub.publish(odom_msg);
+
+        // broadcast odometry transform
+        tf::Quaternion odomQ;
+        tf::quaternionMsgToTF(odom_msg.pose.pose.orientation, odomQ);
+        tf::Transform txOdom(odomQ, tf::Point(odom_msg.pose.pose.position.x, odom_msg.pose.pose.position.y, 0.0));
+        tf.sendTransform(tf::StampedTransform(txOdom, sim_time,
+                                              mapName("odom", r, static_cast<Stg::Model*>(robotmodel->positionmodel)),
+                                              mapName("base_footprint", r, static_cast<Stg::Model*>(robotmodel->positionmodel))));
 
         //loop on the laser devices for the current robot
         for (size_t s = 0; s < robotmodel->lasermodels.size(); ++s)
@@ -468,6 +525,22 @@ StageNode::WorldCallback()
             // for now we access only the zeroth sensor of the ranger - good
             // enough for most laser models that have a single beam origin
             const Stg::ModelRanger::Sensor& sensor = sensors[0];
+
+	    // Also publish the base->base_laser_link Tx.  This could eventually move
+            // into being retrieved from the param server as a static Tx.
+            Stg::Pose lp = lasermodel->GetPose();
+            tf::Quaternion laserQ;
+            laserQ.setRPY(0.0, 0.0, lp.a);
+            tf::Transform txLaser =  tf::Transform(laserQ, tf::Point(lp.x, lp.y, robotmodel->positionmodel->GetGeom().size.z + lp.z));
+
+            if (robotmodel->lasermodels.size() > 1)
+                tf.sendTransform(tf::StampedTransform(txLaser, sim_time,
+                                                      mapName("base_link", r, static_cast<Stg::Model*>(robotmodel->positionmodel)),
+                                                      mapName("base_laser_link", r, s, static_cast<Stg::Model*>(robotmodel->positionmodel))));
+            else
+                tf.sendTransform(tf::StampedTransform(txLaser, sim_time,
+                                                      mapName("base_link", r, static_cast<Stg::Model*>(robotmodel->positionmodel)),
+                                                      mapName("base_laser_link", r, static_cast<Stg::Model*>(robotmodel->positionmodel))));
 
             if( sensor.ranges.size() )
             {
@@ -492,64 +565,49 @@ StageNode::WorldCallback()
                 else
                     msg.header.frame_id = mapName("base_laser_link", r, static_cast<Stg::Model*>(robotmodel->positionmodel));
 
+		boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
+        	boost::chrono::system_clock::duration tse = now.time_since_epoch();
+        	std::time_t secs = boost::chrono::system_clock::to_time_t(now);
+
                 msg.header.stamp = sim_time;
+
+		// Setting system clock time as scan TS:
+		// Use scan_time field of LaserScan to send real TS. [Changing TS to real tie messes up the timing with TF]
+		unsigned long long ct = boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() - (1603000000000);
+		double rt_boost = ct / (double)(1000.0);
+
+		// Trying clock gettime CLOCK_MONOTONIC
+		struct timespec rt_mono;
+		clock_gettime(CLOCK_MONOTONIC, &rt_mono);
+		double rt_monod = rt_mono.tv_sec + 1e-9*rt_mono.tv_nsec;
+
+		// CLOCK_MONOTONIC_RAW
+		struct timespec rt_mono_raw;
+		clock_gettime(CLOCK_MONOTONIC, &rt_mono_raw);
+		double rt_mono_rawd = rt_mono_raw.tv_sec + 1e-9*rt_mono_raw.tv_nsec;
+
+		// CLOCK_REALTIME 
+		struct timespec rt_realtime;
+                clock_gettime(CLOCK_REALTIME, &rt_realtime);
+		double rt_realtimed = rt_realtime.tv_sec + 1e-9*rt_realtime.tv_nsec;
+
+		rt_realtimed -= 1603000000.00;
+		msg.scan_time = rt_monod;
+
                 robotmodel->laser_pubs[s].publish(msg);
 
-                struct timespec ts;
-                clock_gettime(CLOCK_REALTIME, &ts);
-                // if (r < 2 && (world_update_count % 20 == 7))
-                //     ROS_WARN("Just published scan msg, clock mono Time: %f %f", ts.tv_sec, ts.tv_nsec * 1e-9);
-            }
+		if ( r<1 && (world_update_count%50 == 7) )
+			ROS_WARN("WorldUpdateCount %i, BoostSysRT %f, MonoRT %f, MonoRawRT %f, RealRT %f", world_update_count, rt_boost, rt_monod, rt_mono_rawd, rt_realtimed);
+                
+		if (r < 1 && (world_update_count % 100 == 7))
+                {
+			// std::cerr << " scanTime: " << msg.scan_time << " " << boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() << " ct:" << ct << std::endl;
+			ROS_ERROR("Just published scan msg, scantime: %f, boost time: %f", msg.scan_time, rt_boost);
+            	}
+	    }
 
-            // Also publish the base->base_laser_link Tx.  This could eventually move
-            // into being retrieved from the param server as a static Tx.
-            Stg::Pose lp = lasermodel->GetPose();
-            tf::Quaternion laserQ;
-            laserQ.setRPY(0.0, 0.0, lp.a);
-            tf::Transform txLaser =  tf::Transform(laserQ, tf::Point(lp.x, lp.y, robotmodel->positionmodel->GetGeom().size.z + lp.z));
-
-            if (robotmodel->lasermodels.size() > 1)
-                tf.sendTransform(tf::StampedTransform(txLaser, sim_time,
-                                                      mapName("base_link", r, static_cast<Stg::Model*>(robotmodel->positionmodel)),
-                                                      mapName("base_laser_link", r, s, static_cast<Stg::Model*>(robotmodel->positionmodel))));
-            else
-                tf.sendTransform(tf::StampedTransform(txLaser, sim_time,
-                                                      mapName("base_link", r, static_cast<Stg::Model*>(robotmodel->positionmodel)),
-                                                      mapName("base_laser_link", r, static_cast<Stg::Model*>(robotmodel->positionmodel))));
         }
 
-        //the position of the robot
-        tf.sendTransform(tf::StampedTransform(tf::Transform::getIdentity(),
-                                              sim_time,
-                                              mapName("base_footprint", r, static_cast<Stg::Model*>(robotmodel->positionmodel)),
-                                              mapName("base_link", r, static_cast<Stg::Model*>(robotmodel->positionmodel))));
-
-        // Get latest odometry data
-        // Translate into ROS message format and publish
-        nav_msgs::Odometry odom_msg;
-        odom_msg.pose.pose.position.x = robotmodel->positionmodel->est_pose.x;
-        odom_msg.pose.pose.position.y = robotmodel->positionmodel->est_pose.y;
-        odom_msg.pose.pose.orientation = tf::createQuaternionMsgFromYaw(robotmodel->positionmodel->est_pose.a);
-        Stg::Velocity v = robotmodel->positionmodel->GetVelocity();
-        odom_msg.twist.twist.linear.x = v.x;
-        odom_msg.twist.twist.linear.y = v.y;
-        odom_msg.twist.twist.angular.z = v.a;
-
-        //@todo Publish stall on a separate topic when one becomes available
-        //this->odomMsgs[r].stall = this->positionmodels[r]->Stall();
-        //
-        odom_msg.header.frame_id = mapName("odom", r, static_cast<Stg::Model*>(robotmodel->positionmodel));
-        odom_msg.header.stamp = sim_time;
-
-        robotmodel->odom_pub.publish(odom_msg);
-
-        // broadcast odometry transform
-        tf::Quaternion odomQ;
-        tf::quaternionMsgToTF(odom_msg.pose.pose.orientation, odomQ);
-        tf::Transform txOdom(odomQ, tf::Point(odom_msg.pose.pose.position.x, odom_msg.pose.pose.position.y, 0.0));
-        tf.sendTransform(tf::StampedTransform(txOdom, sim_time,
-                                              mapName("odom", r, static_cast<Stg::Model*>(robotmodel->positionmodel)),
-                                              mapName("base_footprint", r, static_cast<Stg::Model*>(robotmodel->positionmodel))));
 
         // Also publish the ground truth pose and velocity
         Stg::Pose gpose = robotmodel->positionmodel->GetGlobalPose();
@@ -593,8 +651,22 @@ StageNode::WorldCallback()
         // for nav2d scheduling expts:
         all_robos_pose_x.push_back(gt.getOrigin().x());
         all_robos_pose_y.push_back(gt.getOrigin().y());
+	all_robos_orient_z.push_back( gt.getRotation().z() );
+	all_robos_orient_w.push_back( gt.getRotation().w() );
 
-        //cameras
+		all_robos_twist_lin_z.push_back(gvel.z);
+		all_robos_twist_lin_y.push_back(gvel.y);
+		all_robos_twist_lin_x.push_back(gvel.x);
+		all_robos_twist_ang_z.push_back(gvel.a);
+
+	// update rob0_stalled only if 0 in robotName.	
+	if ( std::string( this->robotmodels_[r]->positionmodel->Token() ).find("0") != std::string::npos )
+		rob0_stalled = this->positionmodels[r]->Stalled();        
+	else if (this->positionmodels[r]->Stalled())
+		stalled_robos.push_back( std::string( this->robotmodels_[r]->positionmodel->Token() ) );
+	
+
+	//cameras
         for (size_t s = 0; s < robotmodel->cameramodels.size(); ++s)
         {
             Stg::ModelCamera* cameramodel = robotmodel->cameramodels[s];
@@ -767,14 +839,38 @@ StageNode::WorldCallback()
     // std::cerr << "SET expt_name to " << expt_name << std::endl;
 
     std::ofstream of;
-    of.open("/home/aditi/robot_nav2d_obstacleDist_logs_" + expt_name + ".txt", std::ios_base::app);
-    of << "ST: " << this->sim_time.toSec() << "\n";
+    of.open( ("/home/ubuntu/robot_nav2d_obstacleDist_logs_" + expt_name + ".txt").c_str() , std::ios_base::app);
+    of << "ST: " << this->sim_time.toSec() << " RT: " << (real_mono_time) << " \n";
     for (size_t r = 0; r < this->robotmodels_.size(); ++r)
     {
         of << this->robotmodels_[r]->positionmodel->Token() << " " << all_robos_pose_x[r] << " " << all_robos_pose_y[r] << "\n";
     }
+    for (size_t r = 0; r < this->robotmodels_.size(); ++r)
+    {
+	if ( std::string( this->robotmodels_[r]->positionmodel->Token() ).find("0") != std::string::npos )
+		of << this->robotmodels_[r]->positionmodel->Token() << " " << all_robos_twist_lin_x[r] << " " << all_robos_twist_lin_y[r] << " " << all_robos_twist_lin_z[r] << " " << all_robos_twist_ang_z[r] << " orient: " << all_robos_orient_z[r] << " " << all_robos_orient_w[r] << " stall: " << rob0_stalled << " ";
+	
+	
+
+    }
+    if (stalled_robos.size() > 0)
+	{
+		of << "St_O: ";
+		for (int i = 0; i < stalled_robos.size(); i++)
+			of << stalled_robos[i] << " ";
+	}
+    of << "\n";
+    
     all_robos_pose_x.clear();
     all_robos_pose_y.clear();
+    all_robos_orient_z.clear();
+    all_robos_orient_w.clear();
+    all_robos_twist_lin_x.clear();
+    all_robos_twist_lin_y.clear();
+    all_robos_twist_lin_z.clear();
+    all_robos_twist_ang_z.clear();
+    stalled_robos.clear();
+    rob0_stalled = false;
 
     this->base_last_globalpos_time = this->sim_time;
     rosgraph_msgs::Clock clock_msg;
@@ -792,6 +888,10 @@ main(int argc, char** argv)
     }
 
     ros::init(argc, argv, "stageros");
+
+    if( ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info) ) {
+   	ros::console::notifyLoggerLevelsChanged();
+    }
 
     bool gui = true;
     bool use_model_names = false;
