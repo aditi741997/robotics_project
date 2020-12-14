@@ -29,6 +29,7 @@ public:
 
         // Oct: just for offline expts:
         std::map<std::string, double> offline_fracs;
+	bool offline_use_td; // if we're using the offline TD version. i.e. all nodes are TD.
 
         long int total_period_count = 0; // increment each time we get a CC's end or at end of period.
         bool sched_started = false; // becomes true when we get tid for all nodes.
@@ -38,7 +39,7 @@ public:
 	std::string dag_name;
 	
 	DAGControllerBE();
-        DAGControllerBE(std::string dag_file, DAGControllerFE* fe, int f_mc, int f_mu, int f_nc, int f_np);
+        DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std::string use_td, int f_mc, int f_mu, int f_nc, int f_np);
 
 	DAGControllerBE(const DAGControllerBE&) = delete;
 
