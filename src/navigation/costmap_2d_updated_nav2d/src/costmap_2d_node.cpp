@@ -37,15 +37,12 @@
  *********************************************************************/
 #include <ros/ros.h>
 #include <costmap_2d/costmap_2d_ros.h>
-#include <tf2_ros/transform_listener.h>
 
 int main(int argc, char** argv)
 {
   ros::init(argc, argv, "costmap_node");
-  ROS_INFO("costmap 2d node : Making a TransformListener");
-  tf2_ros::Buffer buffer(ros::Duration(10)); // TF is buffered for <= 10sec.
-  tf2_ros::TransformListener tf(buffer);
-  costmap_2d::Costmap2DROS lcr("costmap", buffer);
+  tf::TransformListener tf(ros::Duration(10));
+  costmap_2d::Costmap2DROS lcr("costmap", tf);
 
   ros::spin();
 

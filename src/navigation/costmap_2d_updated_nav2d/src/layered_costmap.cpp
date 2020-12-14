@@ -130,7 +130,7 @@ void LayeredCostmap::updateMap(double robot_x, double robot_y, double robot_yaw)
                         minx_, miny_, maxx_ , maxy_,
                         (*plugin)->getName().c_str());
     }
-    // ROS_WARN("IN Costmap2DROS:: LayeredCostmap updateMap : PLugin name : %s", (*plugin)->getName().c_str());
+
     latestObsTS = std::max(latestObsTS, (*plugin)->getLatestObsTimeStamp());
   }
 

@@ -39,8 +39,6 @@
 #include <costmap_2d/static_layer.h>
 #include <costmap_2d/costmap_math.h>
 #include <pluginlib/class_list_macros.h>
-#include <tf2/convert.h>
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
 
 PLUGINLIB_EXPORT_CLASS(costmap_2d::StaticLayer, costmap_2d::Layer)
 
@@ -86,7 +84,7 @@ void StaticLayer::onInitialize()
   if (map_sub_.getTopic() != ros::names::resolve(map_topic))
   {
     // we'll subscribe to the latched topic that the map server uses
-    ROS_INFO("Requesting the map... STATIC LAYER subscribing to %s, first_map_only_ %i, subscribe_to_updates_ : %i", map_topic.c_str(), first_map_only_, subscribe_to_updates_);
+    ROS_INFO("Requesting the map...");
     map_sub_ = g_nh.subscribe(map_topic, 1, &StaticLayer::incomingMap, this);
     map_received_ = false;
     has_updated_data_ = false;
@@ -102,7 +100,7 @@ void StaticLayer::onInitialize()
 
     if (subscribe_to_updates_)
     {
-      ROS_INFO("Subscribing to updates STATIC Layer subscribing to %s", (map_topic + "_updates").c_str());
+      ROS_INFO("Subscribing to updates");
       map_update_sub_ = g_nh.subscribe(map_topic + "_updates", 10, &StaticLayer::incomingUpdate, this);
 
     }
@@ -167,7 +165,7 @@ void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
 {
   unsigned int size_x = new_map->info.width, size_y = new_map->info.height;
 
-  ROS_INFO("IN StaticLayer::incomingMap!!!! Received a %d X %d map at %f m/pix", size_x, size_y, new_map->info.resolution);
+  ROS_DEBUG("Received a %d X %d map at %f m/pix", size_x, size_y, new_map->info.resolution);
 
   // resize costmap if size, resolution or origin do not match
   Costmap2D* master = layered_costmap_->getCostmap();
@@ -179,7 +177,7 @@ void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
        master->getOriginY() != new_map->info.origin.position.y))
   {
     // Update the size of the layered costmap (and all layers, including this one)
-    ROS_INFO("IN StaticLayer::incomingMap!!!! Resizing costmap to %d X %d at %f m/pix", size_x, size_y, new_map->info.resolution);
+    ROS_INFO("Resizing costmap to %d X %d at %f m/pix", size_x, size_y, new_map->info.resolution);
     layered_costmap_->resizeMap(size_x, size_y, new_map->info.resolution, new_map->info.origin.position.x,
                                 new_map->info.origin.position.y,
                                 true /* set size_locked to true, prevents reconfigureCb from overriding map size*/);
@@ -190,7 +188,7 @@ void StaticLayer::incomingMap(const nav_msgs::OccupancyGridConstPtr& new_map)
            origin_y_ != new_map->info.origin.position.y)
   {
     // only update the size of the costmap stored locally in this layer
-    ROS_INFO("IN StaticLayer::incomingMap!!!! Resizing static layer to %d X %d at %f m/pix", size_x, size_y, new_map->info.resolution);
+    ROS_INFO("Resizing static layer to %d X %d at %f m/pix", size_x, size_y, new_map->info.resolution);
     resizeMap(size_x, size_y, new_map->info.resolution,
               new_map->info.origin.position.x, new_map->info.origin.position.y);
   }
@@ -313,19 +311,17 @@ void StaticLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int
     unsigned int mx, my;
     double wx, wy;
     // Might even be in a different frame
-    geometry_msgs::TransformStamped transform;
+    tf::StampedTransform transform;
     try
     {
-      transform = tf_->lookupTransform(map_frame_, global_frame_, ros::Time(0));
+      tf_->lookupTransform(map_frame_, global_frame_, ros::Time(0), transform);
     }
-    catch (tf2::TransformException ex)
+    catch (tf::TransformException ex)
     {
       ROS_ERROR("%s", ex.what());
       return;
     }
     // Copy map data given proper transformations
-    tf2::Transform tf2_transform;
-    tf2::convert(transform.transform, tf2_transform);
     for (unsigned int i = min_i; i < max_i; ++i)
     {
       for (unsigned int j = min_j; j < max_j; ++j)
@@ -333,8 +329,8 @@ void StaticLayer::updateCosts(costmap_2d::Costmap2D& master_grid, int min_i, int
         // Convert master_grid coordinates (i,j) into global_frame_(wx,wy) coordinates
         layered_costmap_->getCostmap()->mapToWorld(i, j, wx, wy);
         // Transform from global_frame_ to map_frame_
-        tf2::Vector3 p(wx, wy, 0);
-        p = tf2_transform*p;
+        tf::Point p(wx, wy, 0);
+        p = transform(p);
         // Set master_grid with cell from map
         if (worldToMap(p.x(), p.y(), mx, my))
         {

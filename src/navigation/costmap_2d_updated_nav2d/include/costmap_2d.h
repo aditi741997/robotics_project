@@ -86,7 +86,7 @@ public:
    */
   Costmap2D& operator=(const Costmap2D& map);
 
-  // for Measuring RT:
+   // for Measuring RT:
   ros::Time last_updated_;
   double latest_obs_ts_used;
 

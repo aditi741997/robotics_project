@@ -36,39 +36,28 @@
  *********************************************************************/
 #include <costmap_2d/observation_buffer.h>
 
-#include <tf2_geometry_msgs/tf2_geometry_msgs.h>
-#include <tf2_sensor_msgs/tf2_sensor_msgs.h>
-#include <sensor_msgs/point_cloud2_iterator.h>
-
-#include <string>
-#include <algorithm>
-#include <iterator>
+#include <pcl/point_types.h>
+#include <pcl_ros/transforms.h>
+#include <pcl/conversions.h>
+#include <pcl/PCLPointCloud2.h>
 
 #include <pcl_conversions/pcl_conversions.h>
 
 using namespace std;
-using namespace tf2;
+using namespace tf;
 
 namespace costmap_2d
 {
 ObservationBuffer::ObservationBuffer(string topic_name, double observation_keep_time, double expected_update_rate,
                                      double min_obstacle_height, double max_obstacle_height, double obstacle_range,
-                                     double raytrace_range, tf2_ros::Buffer& tf2_buffer, string global_frame,
+                                     double raytrace_range, TransformListener& tf, string global_frame,
                                      string sensor_frame, double tf_tolerance) :
-    tf2_buffer_(tf2_buffer), observation_keep_time_(observation_keep_time), expected_update_rate_(expected_update_rate),
+    tf_(tf), observation_keep_time_(observation_keep_time), expected_update_rate_(expected_update_rate),
     last_updated_(ros::Time::now()), global_frame_(global_frame), sensor_frame_(sensor_frame), topic_name_(topic_name),
     min_obstacle_height_(min_obstacle_height), max_obstacle_height_(max_obstacle_height),
     obstacle_range_(obstacle_range), raytrace_range_(raytrace_range), tf_tolerance_(tf_tolerance)
 {
-}
-
-std::string convert_point_to_str(const geometry_msgs::PointStamped& pt)
-{
-  std::string a = "";
-  a += to_string(pt.point.x) + " ";
-  a += to_string(pt.point.y) + " ";
-  a += to_string(pt.point.z) + " ";
-  return a;
+	latest_obs_real_ts = 0.0;
 }
 
 ObservationBuffer::~ObservationBuffer()
@@ -77,12 +66,11 @@ ObservationBuffer::~ObservationBuffer()
 
 bool ObservationBuffer::setGlobalFrame(const std::string new_global_frame)
 {
-  ROS_WARN("Inside ObservationBuffer::setGlobalFrame. WHO called this?? new_global_frame : %s", new_global_frame.c_str());
   ros::Time transform_time = ros::Time::now();
   std::string tf_error;
 
-  geometry_msgs::TransformStamped transformStamped;
-  if (!tf2_buffer_.canTransform(new_global_frame, global_frame_, transform_time, ros::Duration(tf_tolerance_), &tf_error))
+  if (!tf_.waitForTransform(new_global_frame, global_frame_, transform_time, ros::Duration(tf_tolerance_),
+                            ros::Duration(0.01), &tf_error))
   {
     ROS_ERROR("Transform between %s and %s with tolerance %.2f failed: %s.", new_global_frame.c_str(),
               global_frame_.c_str(), tf_tolerance_, tf_error.c_str());
@@ -102,11 +90,11 @@ bool ObservationBuffer::setGlobalFrame(const std::string new_global_frame)
       origin.point = obs.origin_;
 
       // we need to transform the origin of the observation to the new global frame
-      tf2_buffer_.transform(origin, origin, new_global_frame);
+      tf_.transformPoint(new_global_frame, origin, origin);
       obs.origin_ = origin.point;
 
       // we also need to transform the cloud of the observation to the new global frame
-      tf2_buffer_.transform(*(obs.cloud_), *(obs.cloud_), new_global_frame);
+      pcl_ros::transformPointCloud(new_global_frame, *obs.cloud_, *obs.cloud_, tf_);
     }
     catch (TransformException& ex)
     {
@@ -123,111 +111,75 @@ bool ObservationBuffer::setGlobalFrame(const std::string new_global_frame)
 
 void ObservationBuffer::bufferCloud(const sensor_msgs::PointCloud2& cloud)
 {
-  geometry_msgs::PointStamped global_origin;
-  // ROS_WARN("In ObservationBuffer::bufferCloud!!!");
+  try
+  {
+    pcl::PCLPointCloud2 pcl_pc2;
+    pcl_conversions::toPCL(cloud, pcl_pc2);
+    // Actually convert the PointCloud2 message into a type we can reason about
+    pcl::PointCloud < pcl::PointXYZ > pcl_cloud;
+    pcl::fromPCLPointCloud2(pcl_pc2, pcl_cloud);
+    bufferCloud(pcl_cloud);
+  }
+  catch (pcl::PCLException& ex)
+  {
+    ROS_ERROR("Failed to convert a message to a pcl type, dropping observation: %s", ex.what());
+    return;
+  }
+}
+
+void ObservationBuffer::bufferCloud(const pcl::PointCloud<pcl::PointXYZ>& cloud)
+{
+  Stamped < tf::Vector3 > global_origin;
+
   // create a new observation on the list to be populated
   observation_list_.push_front(Observation());
 
   // check whether the origin frame has been set explicitly or whether we should get it from the cloud
   string origin_frame = sensor_frame_ == "" ? cloud.header.frame_id : sensor_frame_;
-  if (origin_frame.substr(0,1).compare("/") == 0)
-  {
-    origin_frame = origin_frame.substr(1); // removing 1st char
-    // ROS_WARN("In obsBuffer, origin_frame BEGINS with /, removed it. %s", origin_frame.c_str());
-  }
-  // ROS_WARN("IN ObservationBuffer:: bufferCloud, here is the cloud frame : %s", origin_frame,c_str());
+
   try
   {
-    // ROS_WARN("INside costmap_2d::obstacle_layer::ObservationBuffer bufferCloud(). Will transform bw local frame %s to global_frame_ %s. Cloud's frame : %s", origin_frame.c_str(), global_frame_.c_str(), cloud.header.frame_id.c_str());
     // given these observations come from sensors... we'll need to store the origin pt of the sensor
-    geometry_msgs::PointStamped local_origin;
-    local_origin.header.stamp = cloud.header.stamp;
-    local_origin.header.frame_id = origin_frame;
-    local_origin.point.x = 0;
-    local_origin.point.y = 0;
-    local_origin.point.z = 0;
-    tf2_buffer_.transform(local_origin, global_origin, global_frame_);
+    Stamped < tf::Vector3 > local_origin(tf::Vector3(0, 0, 0),
+                            pcl_conversions::fromPCL(cloud.header).stamp, origin_frame);
+    tf_.waitForTransform(global_frame_, local_origin.frame_id_, local_origin.stamp_, ros::Duration(0.5));
+    tf_.transformPoint(global_frame_, local_origin, global_origin);
 
-    // ROS_WARN("In ObservationBuffer::bufferCloud, got the transform from scan to global frame %s", global_frame_,c_str());
+    // TODO:Oct: or make local_origin with stamp = 0.0 if above not available.    
 
-    // convert global_origin into string : Is the transform always the same during Map/Explore?
-    std::string transform = convert_point_to_str(global_origin);
-    if (last_odom_bll_tf.compare("") == 0)
-    {
-      // ROS_WARN("In ObservationBuffer::bufferCloud. First odom - blaserlink TF : %s", transform.c_str());
-    }
-    else if (last_odom_bll_tf.compare(transform) != 0)
-    {
-      // ROS_WARN("In ObservationBuffer::bufferCloud. Current odom - blaserlink TF : %s, DIfferent from old TF : %s", transform.c_str(), last_odom_bll_tf.c_str());
-    }
-    last_odom_bll_tf = transform;
-
-    tf2::convert(global_origin.point, observation_list_.front().origin_);
+    observation_list_.front().origin_.x = global_origin.getX();
+    observation_list_.front().origin_.y = global_origin.getY();
+    observation_list_.front().origin_.z = global_origin.getZ();
 
     // make sure to pass on the raytrace/obstacle range of the observation buffer to the observations
     observation_list_.front().raytrace_range_ = raytrace_range_;
     observation_list_.front().obstacle_range_ = obstacle_range_;
 
-    sensor_msgs::PointCloud2 global_frame_cloud;
-
-    // TODO: to run with multiple robots, need to copy cloud into a sensor msg
-    // with no / in the frame_id.
-    sensor_msgs::PointCloud2 cloud_fid;
-    cloud_fid.height = cloud.height;
-    cloud_fid.width = cloud.width;
-    cloud_fid.is_bigendian = cloud.is_bigendian;
-    cloud_fid.point_step = cloud.point_step;
-    cloud_fid.row_step = cloud.row_step;
-    cloud_fid.is_dense = cloud.is_dense;
-    // sensor_msgs::PointField cloud_fid_fields [ sizeof(cloud.fields)/sizeof(cloud.fields[0]) ];
-    // std::copy(std::begin(cloud.fields), std::end(cloud.fields), std::begin(cloud_fid.fields));
-    // cloud_fid.fields = cloud_fid_fields;
-    // ROS_WARN("CLoud fid COPIED FIELDs");
-    // std::copy(std::begin(cloud.data), std::end(cloud.data), std::begin(cloud_fid.data));
-    cloud_fid.fields = cloud.fields;
-    cloud_fid.data = cloud.data;
-    cloud_fid.header.frame_id = (cloud.header.frame_id.substr(0,1).compare("/") == 0) ? (cloud.header.frame_id.substr(1)) : cloud.header.frame_id;
-    cloud_fid.header.stamp = cloud.header.stamp;
-    cloud_fid.header.seq = cloud.header.seq;
-
-    // ROS_WARN("IN OBsBuffer:: bufferCloud, Copied cloud data, cloud %i, cloud_fid %i", cloud.data[2], cloud_fid.data[2]);
+    pcl::PointCloud < pcl::PointXYZ > global_frame_cloud;
 
     // transform the point cloud
-    tf2_buffer_.transform(cloud_fid, global_frame_cloud, global_frame_);
+    // TODO: Oct: if this throws, copy cloud to another var & change TS to 0.0 to get latest TF.
+    pcl_ros::transformPointCloud(global_frame_, cloud, global_frame_cloud, tf_);
     global_frame_cloud.header.stamp = cloud.header.stamp;
 
     // now we need to remove observations from the cloud that are below or above our height thresholds
-    sensor_msgs::PointCloud2& observation_cloud = *(observation_list_.front().cloud_);
-    observation_cloud.height = global_frame_cloud.height;
-    observation_cloud.width = global_frame_cloud.width;
-    observation_cloud.fields = global_frame_cloud.fields;
-    observation_cloud.is_bigendian = global_frame_cloud.is_bigendian;
-    observation_cloud.point_step = global_frame_cloud.point_step;
-    observation_cloud.row_step = global_frame_cloud.row_step;
-    observation_cloud.is_dense = global_frame_cloud.is_dense;
-
-    unsigned int cloud_size = global_frame_cloud.height*global_frame_cloud.width;
-    sensor_msgs::PointCloud2Modifier modifier(observation_cloud);
-    modifier.resize(cloud_size);
+    pcl::PointCloud < pcl::PointXYZ > &observation_cloud = *(observation_list_.front().cloud_);
+    unsigned int cloud_size = global_frame_cloud.points.size();
+    observation_cloud.points.resize(cloud_size);
     unsigned int point_count = 0;
 
     // copy over the points that are within our height bounds
-    sensor_msgs::PointCloud2Iterator<float> iter_z(global_frame_cloud, "z");
-    std::vector<unsigned char>::const_iterator iter_global = global_frame_cloud.data.begin(), iter_global_end = global_frame_cloud.data.end();
-    std::vector<unsigned char>::iterator iter_obs = observation_cloud.data.begin();
-    for (; iter_global != iter_global_end; ++iter_z, iter_global += global_frame_cloud.point_step)
+    for (unsigned int i = 0; i < cloud_size; ++i)
     {
-      if ((*iter_z) <= max_obstacle_height_
-          && (*iter_z) >= min_obstacle_height_)
+      if (global_frame_cloud.points[i].z <= max_obstacle_height_
+          && global_frame_cloud.points[i].z >= min_obstacle_height_)
       {
-        std::copy(iter_global, iter_global + global_frame_cloud.point_step, iter_obs);
-        iter_obs += global_frame_cloud.point_step;
-        ++point_count;
+        observation_cloud.points[point_count++] = global_frame_cloud.points[i];
       }
     }
 
     // resize the cloud for the number of legal points
-    modifier.resize(point_count);
+    observation_cloud.points.resize(point_count);
     observation_cloud.header.stamp = cloud.header.stamp;
     observation_cloud.header.frame_id = global_frame_cloud.header.frame_id;
   }
@@ -278,7 +230,8 @@ void ObservationBuffer::purgeStaleObservations()
     {
       Observation& obs = *obs_it;
       // check if the observation is out of date... and if it is, remove it and those that follow from the list
-      if ((last_updated_ - obs.cloud_->header.stamp) > observation_keep_time_)
+      ros::Duration time_diff = last_updated_ - pcl_conversions::fromPCL(obs.cloud_->header).stamp;
+      if (time_diff > observation_keep_time_)
       {
         observation_list_.erase(obs_it, observation_list_.end());
         return;
@@ -295,7 +248,7 @@ bool ObservationBuffer::isCurrent() const
   bool current = (ros::Time::now() - last_updated_).toSec() <= expected_update_rate_.toSec();
   if (!current)
   {
-    ROS_WARN(
+    ROS_ERROR(
         "The %s observation buffer has not been updated for %.2f seconds, and it should be updated every %.2f seconds.",
         topic_name_.c_str(), (ros::Time::now() - last_updated_).toSec(), expected_update_rate_.toSec());
   }
@@ -310,8 +263,7 @@ ros::Time ObservationBuffer::getLatestObsTimeStamp()
    else
    {
        Observation& obs = *(observation_list_.begin());
-       return obs.cloud_->header.stamp;
-       // return pcl_conversions::fromPCL(obs.cloud_->header).stamp;
+       return pcl_conversions::fromPCL(obs.cloud_->header).stamp;
    }
 }
 
@@ -320,4 +272,3 @@ void ObservationBuffer::resetLastUpdated()
   last_updated_ = ros::Time::now();
 }
 }  // namespace costmap_2d
-

@@ -40,7 +40,8 @@
 #include <costmap_2d/costmap_2d.h>
 #include <costmap_2d/layered_costmap.h>
 #include <string>
-#include <tf2_ros/buffer.h>
+#include <tf/tf.h>
+#include <tf/transform_listener.h>
 
 #include <mutex>
 #include <condition_variable>
@@ -54,7 +55,7 @@ class Layer
 public:
   Layer();
 
-  void initialize(LayeredCostmap* parent, std::string name, tf2_ros::Buffer *tf, std::condition_variable* cv_map_upd);
+  void initialize(LayeredCostmap* parent, std::string name, tf::TransformListener *tf, std::condition_variable* cv_map_upd);
 
   /**
    * @brief This is called by the LayeredCostmap to poll this plugin as to how
@@ -98,11 +99,6 @@ public:
     return current_;
   }
 
-  // For measuring RT
-  virtual double getLatestObsTimeStamp() {
-    return 0.0;
-  }
-
   /** @brief Implement this to make this layer match the size of the parent costmap. */
   virtual void matchSize() {}
 
@@ -119,6 +115,11 @@ public:
    * notified of changes to the robot's footprint. */
   virtual void onFootprintChanged() {}
 
+  // For measuring RT
+  virtual double getLatestObsTimeStamp() {
+    return 0.0;
+  }
+
   // For making critical chain ED:
   std::condition_variable* cv_map_update; // store cv, notify at scanCB.
 
@@ -133,8 +134,7 @@ protected:
   bool current_;
   bool enabled_;  ///< Currently this var is managed by subclasses. TODO: make this managed by this class and/or container class.
   std::string name_;
-  tf2_ros::Buffer *tf_;
-  
+  tf::TransformListener* tf_;
 
 private:
   std::vector<geometry_msgs::Point> footprint_spec_;

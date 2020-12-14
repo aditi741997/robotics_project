@@ -38,15 +38,16 @@ Layer::Layer()
   , enabled_(false)
   , name_()
   , tf_(NULL)
-  , cv_map_update(NULL)
 {}
 
-void Layer::initialize(LayeredCostmap* parent, std::string name, tf2_ros::Buffer *tf, std::condition_variable* cv_map_upd)
+void Layer::initialize(LayeredCostmap* parent, std::string name, tf::TransformListener *tf, std::condition_variable* cv_map_upd)
 {
   layered_costmap_ = parent;
   name_ = name;
   tf_ = tf;
+
   cv_map_update = cv_map_upd;
+
   onInitialize();
 }
 
