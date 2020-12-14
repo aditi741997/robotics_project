@@ -515,6 +515,9 @@ bool RobotNavigator::createPlan()
 
 	// For measuring RT: 
 	current_plan_last_scan_mapCB_mapUpd_used_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
+	// current_... denotes the TS for the current copy of navPlan
+	// latest_... denotes the TS for the navPlan being made, i.e. latest_ >= current_.
+	current_mapCB_tf_navPlan_scan_ts = latest_mapCB_tf_navPlan_scan_ts;
 	return true;
 }
 
@@ -1131,7 +1134,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		
 		// Where are we now : Uses the tf output from Mapper Node.
 		mHasNewMap = false;
-		if(!setCurrentPosition())
+		if(!setCurrentPosition(1))
 		{
 			ROS_ERROR("Exploration failed. could not get current position.");
 			mExploreActionServer->setAborted();
@@ -1459,7 +1462,7 @@ bool RobotNavigator::setCurrentPosition(int x)
 		if (x == 0)
 			current_mapCB_tf_navCmd_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavCmd.
 		else if (x == 1)
-			current_mapCB_tf_navPlan_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavPlan.
+			latest_mapCB_tf_navPlan_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavPlan.
 
 		// ROS_WARN("IN ROBOTNavigator:: setCurrentPosition, TS of TF bw /map and /base_footp : %f, x: %i", current_mapper_tf_scan_ts, x);
 	}catch(TransformException ex)
