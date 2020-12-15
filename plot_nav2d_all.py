@@ -324,8 +324,9 @@ runs_tput_arrs = {} # i_subchainName -> array of [tputs] for each run.
 runs_med_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
-exptn = "OfflineMCB_L"
+exptn = "OfflineMCB_H"
 expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
+expts.append(exptn + "7_5c")
 runs = [1,2,3,4,5,6,7,8,9,10]
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 #for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
@@ -416,7 +417,6 @@ for i in expts:
                                             new_tput_arr += tput_agg_i[k]
                                             new_ts_arr += [ (k*slot + start_i)  for x in tput_agg_i[k] ]
                                             #print("For Frac%i%s_run%i : tput of SC%s for bin %i has just 1 elem!"%(i,letter, run,fname,k))
-                            print("A")
                             if fname not in tput_agg:
                                 tput_agg[fname] = []
                             tput_agg[fname].append(meantput_agg_i)
@@ -428,7 +428,7 @@ for i in expts:
                             run_tputs[fname].append( np.median(new_tput_arr) ) #sorted(tput_arr)[ len(tput_arr)/2 ] )
                             irun_75p_tput[fname].append( sorted(new_tput_arr)[ (75*len(new_tput_arr))/100 ] )
                             
-                            if "H4" in exp_id and "CB" in fname:
+                            if ("H4" in exp_id and "CB" in fname):
                                 tput_ts = zip(new_tput_arr, new_ts_arr)
                                 if (i + "_" + fname) not in runs_tput_arrs:
                                     runs_tput_arrs[i + "_" + fname] = []
@@ -506,6 +506,11 @@ for i in expts:
                                         try:
                                             run_tputs[chain+"_tput"].append( sorted(tputs)[len(tputs)/2] ) # Median over each run
                                             irun_75p_tput[chain+"_tput"].append( sorted(tputs)[(75*len(tputs))/100] ) # 75%ile over each run.
+                                            if ("H5" in exp_id):
+                                                # need to plot cdf for cc, H7.
+                                                if (i + "_" + chain) not in runs_tput_arrs:
+                                                    runs_tput_arrs[i + "_" + chain] = []
+                                                runs_tput_arrs[i + "_" + chain].append( tputs )
                                         except:
                                             print("Exception in CC_Tput reading!!! len of tputs: ", len(tputs))
                                             if "CC" not in exp_id and "L" in exp_id:
@@ -573,17 +578,24 @@ for i in expts:
 					
 					
 					ts_arr.append(pos_rt_ts)
-					
-					if ( (pos_rt_ts > start_i) and (pos_rt_ts < end_i) and (int( obfl[o*numl + num_obst + 2].split(' ')[9][:-1] ) == 1) ):
+				
+                                        rob_stalled = obfl[o*numl + num_obst + 2].split(' ')[9]
+                                        if "\n" in rob_stalled:
+                                            rob_stalled = rob_stalled[:-1]
+					if ( (pos_rt_ts > start_i) and (pos_rt_ts < end_i) and (int( rob_stalled ) == 1) ):
 						run_collision_hua = True
 
+					
 					if obst_ind != -1:
 						obst_line = obfl[rob_pos + obst_ind].split(' ')
 						obst_x = float(obst_line[1])
 						obst_y = float(obst_line[2][:-1]) # remove \n.
 						dist = get_dist(rob_x, rob_y, obst_x, obst_y)
-						obst_dist_arr.append(dist)
 						obst_ts_arr.append(pos_rt_ts)
+	                                        obst_dist_arr.append(dist)
+					        if "St_O" in obfl[o*numl + num_obst + 2] and dist < 1.0:
+						# collision! check pos of robot and this obst
+						    run_collision_hua = True
 
 					'''
 					if ( pos_rt_ts > (end_i - (end_i - start_i)/10 ) ) and (pos_rt_ts < (end_i + 1.0) ):
