@@ -136,7 +136,7 @@ private:
 	// For measuring RT:
 	double current_plan_last_scan_mapCB_mapUpd_used_ts;
 	double current_mapCB_tf_navCmd_scan_ts; // current Cmd - Transform's TS wrt latest scan used by mapper.
-	double current_mapCB_tf_navPlan_scan_ts;
+	double current_mapCB_tf_navPlan_scan_ts, latest_mapCB_tf_navPlan_scan_ts;
 
 	ros::Subscriber mScanUsedTSTFSubscriber;
 	double current_mapper_tf_scan_ts; // latest transform's - scan used TS.
