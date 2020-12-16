@@ -1,5 +1,6 @@
 from gpkit import Variable, VectorVariable, Model
 from gpkit.nomials import Monomial, Posynomial, PosynomialInequality
+import time
 
 num_nodes = 7
 
@@ -22,6 +23,7 @@ path_ddl = [0.4, 2.0, 3.2, 4.5] # this works for 1core,prio_nodes_tput,wcet.
 print("pATH LATENCY CONSTRAINTS: ", path_ddl)
 
 # order: s,lc,lp,mc,mu,np,nc
+# based on Default's High Freq.
 prio_nodes_tput = [4, 6, 7, 1, 2, 3, 5]
 #prio_nodes_int = [5,6,7,4,1,2,3]
 
@@ -37,6 +39,7 @@ cores = [0 for i in range(num_nodes)]
 num_cores = 1
 
 # 3core:
+full_start = time.time()
 
 a_si = [Variable("s"+ str(i) ) for i in range(num_nodes)]
 a_ti = [Variable("t"+ str(i) ) for i in range(num_nodes)]
@@ -102,10 +105,13 @@ for ch in range(4):
 	constr.append( sum(c14_ch) <= 1.0 )
 print(constr)
 
+solve_start = time.time()
+
 m = Model(objective, constr)
 
-m.debug()
+#m.debug()
 sol = m.solve(verbosity=1)
 
 print("Main integer variables: ", int_vars)
 print(sol.table())
+print("TIME taken to solve: Total %f, Just solving time %f"%(time.time() - full_start, time.time() - solve_start) )
