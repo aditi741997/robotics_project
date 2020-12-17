@@ -1,0 +1,12 @@
+<launch>
+
+    <!-- Some general parameters -->
+    <param name="use_sim_time" value="true" />
+    <rosparam file="$(find nav2d_tutorials)/param/ros.yaml"/>
+
+    <!-- Start Stage simulator with a given environment -->
+    <node name="Stage" pkg="stage_ros" type="stageros" args="$(find nav2d_tutorials)/world/tutorial.world">
+        <param name="base_watchdog_timeout" value="0" />
+    </node>
+
+</launch>

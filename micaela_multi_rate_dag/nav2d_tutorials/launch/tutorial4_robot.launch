@@ -1,0 +1,26 @@
+<launch>
+
+    <group ns="robot_0">
+        <param name="robot_id" value="1" />
+        <param name="tf_prefix" value="robot_0"/>
+        <rosparam file="$(find nav2d_tutorials)/param/ros.yaml"/>
+
+        <!-- Start the Operator to control the simulated robot -->
+        <node name="Operator" pkg="nav2d_operator" type="operator" >
+            <remap from="scan" to="base_scan"/>
+            <rosparam file="$(find nav2d_tutorials)/param/operator.yaml" command="load" />
+            <rosparam file="$(find nav2d_tutorials)/param/costmap.yaml" ns="local_map" command="load" />
+        </node>
+
+
+        <node name="Mapper" pkg="nav2d_karto" type="mapper">
+            <remap from="scan" to="base_scan"/>
+            <remap from="karto_in" to="/shared_scans_r1"/>
+            <remap from="karto_out" to="/shared_scans_r2"/>
+            <rosparam file="$(find nav2d_tutorials)/param/mapper.yaml" command="load" />
+        </node>
+
+
+    </group>
+
+</launch>

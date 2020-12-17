@@ -1,0 +1,13 @@
+<launch>
+    <node name="GetMap" pkg="nav2d_navigator" type="get_map_client" />
+    <node name="Explore" pkg="nav2d_navigator" type="explore_client" />
+    <node name="SetGoal" pkg="nav2d_navigator" type="set_goal_client" />
+
+    <!-- Start the joystick-driver and remote-controller for operation-->
+    <node name="Joystick" pkg="joy" type="joy_node" />
+    <node name="Remote" pkg="nav2d_remote" type="remote_joy" />
+
+    <!-- RVIZ to view the visualization -->
+    <node name="RVIZ" pkg="rviz" type="rviz" args=" -d $(find nav2d_tutorials)/param/tutorial3.rviz" />
+
+</launch>
