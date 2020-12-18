@@ -64,6 +64,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std:
 			offline_fracs["navc"] = 1.0/f_nc;
 			offline_fracs["navp"] = 1.0/f_np;
 		}
+		else if (dag_name.find("ill") != std::string::npos)
+		{
+			offline_fracs["imu"] = 1.0;
+			// just need render and CS fractions.
+			offline_fracs["4"] = 1.0/f_mc;
+			offline_fracs["0"] = 1.0/f_mu;
+		}
 
 		if (fifo.find("yes") != std::string::npos)
 		{
