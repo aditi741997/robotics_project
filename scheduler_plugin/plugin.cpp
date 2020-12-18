@@ -15,10 +15,13 @@ public:
 	{
 		for (const auto& pair : controller.node_dag.name_id_map) {
 			std::string name = pair.first;
-			sb->schedule<thread_info>(id, name + "_thread_id", [this](switchboard::ptr<const thread_info>, size_t) {
-				controller.recv_node_info(/* TODO */);
-				//TODO: fetch and increment a counter
-			});
+			sb->schedule<thread_info>(
+				id,
+				name + "_thread_id",
+				[this](switchboard::ptr<const thread_info> event, size_t) {
+					controller.recv_node_info(event->name, event->pid, ::getpid());
+				}
+			);
 			triggers.insert(std::make_pair<std::string, switchboard::writer<switchboard::event_wrapper<bool>>>(
 				std::move(name),
 				std::move(sb->get_writer<switchboard::event_wrapper<bool>>(name + "_trigger"))
@@ -27,7 +30,7 @@ public:
 	}
 
 	virtual void trigger_node(std::string name, bool reset) {
-		// TODO
+		triggers.at(name).put(new (triggers.at(name).allocate()) switchboard::event_wrapper<bool> {true});
 	}
 
 private:
