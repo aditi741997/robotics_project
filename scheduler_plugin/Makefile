@@ -1,3 +1,6 @@
+
+MOSEK_LIBDIR := $(HOME)/mosek/9.2/tools/platform/linux64x86/bin/
+LDFLAGS := -lboost_thread -L$(MOSEK_LIBDIR) -Wl,-rpath-link,$(MOSEK_LIBDIR) -Wl,-rpath=$(MOSEK_LIBDIR) -lmosek64 -lfusion64
 CFLAGS := -I./../src/beginner_tutorials
 HPP_FILES := $(shell find ../src/beginner_tutorials/ -name '*.h') $(shell find -L . -name '*.hpp')
 CPP_FILES := $(shell find ../src/beginner_tutorials/src/ -name '*.cpp' \
@@ -11,5 +14,5 @@ CPP_FILES := $(shell find ../src/beginner_tutorials/src/ -name '*.cpp' \
 				-not -name 'obj_tracker.cpp' \
 				-not -name '*publisher.cpp' \
 				-not -name 'shim_freq_node.cpp')
-WARNINGS := -Wall -Wextra -Wno-unsued-function
+WARNINGS := -Wall -Wextra -Wno-unused-function
 include common/common.mk
