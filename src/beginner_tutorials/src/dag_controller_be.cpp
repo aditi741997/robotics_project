@@ -60,7 +60,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std:
 			offline_fracs["navc"] = 1.0/f_nc;
 			offline_fracs["navp"] = 1.0/f_np;
 		}
-		
+		else if (dag_name.find("illixr") != std::string::npos)
+		{
+			offline_fracs["imu"] = 1.0;
+			offline_fracs["0"] = 1.0/f_mc;
+			offline_fracs["4"] = 1.0/f_mu;
+		}
+
 		for (int i = 1; i < exec_order.size(); i++)
 			reset_count.push_back(false);
 	
@@ -123,8 +129,17 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std:
 		return node_dag.id_name_map[id];
 	}
 
+	void DAGControllerBE::set_high_priority(std::string thread_name)
+	{
+		// set prio to 4, with FIFO.
+		struct sched_param sp = { .sched_priority = 4,};
+		int ret = sched_setscheduler(0, SCHED_FIFO, &sp);
+		std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " SETTING priority to 4 retval: " << ret << thread_name << std::endl;
+	}
+
 	void DAGControllerBE::handle_noncritical_loop()
 	{
+		set_high_priority("NonCritical Loop");
 		while (true)
 		{
 			boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
@@ -246,6 +261,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std:
 	// Func to just sleep for timeout millisec and then notify cv.
 	void DAGControllerBE::timer_thread_func(double timeout)
 	{
+		// change priority!
+		set_high_priority("Timer thread");
 		printf("MonoTime: %f, RealTime: %f, making TIMER for to %f \n", get_monotime_now(), get_realtime_now(), timeout);
 		// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " | making TIMER for to " << timeout << std::endl;
 		long to = timeout*1000;

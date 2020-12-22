@@ -58,6 +58,7 @@ public:
 
 	std::string get_last_node_cc_name();
 private:
+	void set_high_priority(std::string thread_name);
 	double get_timeout(int ind);  
 	double get_sum_ci_ith(int ind);
 	bool got_all_info();
