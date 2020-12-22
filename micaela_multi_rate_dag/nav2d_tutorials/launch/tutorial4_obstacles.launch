@@ -1,0 +1,17 @@
+<launch>
+
+    <group ns="robot_1">
+        <param name="robot_id" value="2" />
+        <param name="tf_prefix" type="string" value="robot_1"/>
+        <rosparam file="$(find nav2d_tutorials)/param/ros.yaml"/>
+
+        <node name="Mapper" pkg="nav2d_karto" type="mapper">
+            <remap from="scan" to="base_scan1"/>
+            <remap from="karto_in" to="/shared_scans_r2"/>
+            <remap from="karto_out" to="/shared_scans_r1D"/>
+            <rosparam file="$(find nav2d_tutorials)/param/mapper.yaml"/>
+        </node>
+
+    </group>
+
+</launch>

@@ -35,7 +35,11 @@ DAGControllerBE::DAGControllerBE()
 	}
 
 // todo:Later: maybe a lock for reset_count.
-DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std::string use_td, int f_mc, int f_mu, int f_nc, int f_np)
+// use_td: Whether nodes should be timer driven
+// fifo: denotes if using fifo with static priorities & the #cores for the same
+// if fifo, f_nodeName params will be used as priority,
+// also, for 3cores with navigation: S,LC,LP | MCB,MU | NP,NC. 
+DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp)
 	{
 		// Note that the last 4 inputs are just for the offline stage.
 		node_dag = DAG(dag_file);
@@ -66,6 +70,29 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std:
 			offline_fracs["0"] = 1.0/f_mc;
 			offline_fracs["4"] = 1.0/f_mu;
 		}
+
+
+		if (fifo.find("yes") != std::string::npos)
+		{
+			std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << ", FIFO MODE!!!! Priorities: " << p_s << p_lc << p_lp << f_mc << f_mu << f_nc << f_np << std::endl;
+			if (fifo.find("1c") != std::string::npos)
+				fifo_nc = 1;
+			else if (fifo.find("3c") != std::string::npos)
+				fifo_nc = 3;
+			
+			if (dag_name.find("nav") != std::string::npos)
+			{
+				fifo_prio["s"] = p_s;
+				fifo_prio["lc"] = p_lc;
+				fifo_prio["lp"] = p_lp;
+				fifo_prio["mapcb"] = f_mc;
+				fifo_prio["mapupd"] = f_mu;
+				fifo_prio["navc"] = f_nc;
+				fifo_prio["navp"] = f_np;
+			}
+		}
+		else
+			fifo_nc = -1;
 
 		for (int i = 1; i < exec_order.size(); i++)
 			reset_count.push_back(false);
@@ -222,20 +249,40 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std:
 
 		if (offline_use_td && got_all_info() )
 		{
-			for (int i = 0; i < exec_order.size(); i++)
-                	{
-				// Assign all nodes in ith set to core i.
-				for (int j = 0; j < exec_order[i].size(); j++)
+			if (fifo_nc == -1)
+			{
+				for (int i = 0; i < exec_order.size(); i++)
 				{
-					cpu_set_t set;
-					CPU_ZERO(&set);
-					CPU_SET(i, &set);
-					int reta = sched_setaffinity( node_tid[node_dag.id_name_map[exec_order[i][j]] ], sizeof(set), &set );
-					std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << ", Assigning core " << i << " to node " << node_dag.id_name_map[exec_order[i][j]] << ", retval: " << reta << ", cpucount: " << CPU_COUNT(&set) << std::endl;
-					struct sched_param sp = { .sched_priority = 1,};
-					int retp = sched_setscheduler( node_tid[node_dag.id_name_map[exec_order[i][j]] ] , SCHED_FIFO, &sp );
-					std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << ", Assigning FIFO,prio=1 to node " << node_dag.id_name_map[exec_order[i][j]] << ", retval: " << retp << std::endl;
-				}	
+					// Assign all nodes in ith set to core i.
+					for (int j = 0; j < exec_order[i].size(); j++)
+					{
+						cpu_set_t set;
+						CPU_ZERO(&set);
+						CPU_SET(i, &set);
+						int reta = sched_setaffinity( node_tid[node_dag.id_name_map[exec_order[i][j]] ], sizeof(set), &set );
+						std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << ", Assigning core " << i << " to node " << node_dag.id_name_map[exec_order[i][j]] << ", retval: " << reta << ", cpucount: " << CPU_COUNT(&set) << std::endl;
+						struct sched_param sp = { .sched_priority = 1,};
+						int retp = sched_setscheduler( node_tid[node_dag.id_name_map[exec_order[i][j]] ] , SCHED_FIFO, &sp );
+						std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << ", Assigning FIFO,prio=1 to node " << node_dag.id_name_map[exec_order[i][j]] << ", retval: " << retp << std::endl;
+					}	
+				}
+			}
+			else if (fifo_nc == 1)
+			{
+				// Assign cpu0 to all
+				cpu_set_t set;
+				CPU_ZERO(&set);
+				CPU_SET(0, &set);
+
+				for (auto const& x: node_dag.id_name_map)
+				{
+					int reta = sched_setaffinity( node_tid[ x.second ], sizeof(set), &set );
+					
+					struct sched_param sp = { .sched_priority = fifo_prio[x.second],};
+					int retp = sched_setscheduler( node_tid[x.second], SCHED_FIFO, &sp );
+
+					std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << ", Assigning core0 and prio" << fifo_prio[x.second] << " to " << x.second << ", tid:" << node_tid[x.second] << ", retvals: " << reta << " " << retp << std::endl;
+				}
 			}
 		}
 	}

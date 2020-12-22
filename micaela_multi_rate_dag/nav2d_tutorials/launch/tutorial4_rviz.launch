@@ -1,0 +1,6 @@
+<launch>
+
+    <!-- RVIZ to view the visualization -->
+    <node name="RVIZ" pkg="rviz" type="rviz" args=" -d $(find nav2d_tutorials)/param/tutorial4.rviz" />
+
+</launch>

@@ -1,0 +1,17 @@
+N imu 0.1
+N int 0.25
+N 5 4.2
+N 4 2
+N 0 9.7 
+N 1 13.5
+E imu 1 int X
+E 0 1 X
+E 4 5 X
+E int 4 5 X
+E 1 int X
+C 30 imu int 5 X
+C 200 imu int 4 5 X
+C 300 0 1 int 5 X
+C 400 0 1 int 4 5 X
+C 600 imu 1 int 4 5 X
+C 600 imu 1 int 5 X
