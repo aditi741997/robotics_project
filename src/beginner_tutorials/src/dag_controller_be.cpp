@@ -244,9 +244,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std:
 	{
 		node_tid[node_name] = tid;
 		node_pid[node_name] = pid;
+
 		// todo: do we need to inc priority of CC here?
 		// not if it starts with p>=2 already : True for ROS.
-
+		std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " GOT node info from node " << node_name << ", tid: " << tid << std::endl;
 		if (offline_use_td && got_all_info() )
 		{
 			if (fifo_nc == -1)
