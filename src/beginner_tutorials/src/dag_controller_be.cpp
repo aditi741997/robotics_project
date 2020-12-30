@@ -67,8 +67,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std:
 		else if (dag_name.find("illixr") != std::string::npos)
 		{
 			offline_fracs["imu"] = 1.0;
-			offline_fracs["0"] = 1.0/f_mc;
-			offline_fracs["4"] = 1.0/f_mu;
+			offline_fracs["2"] = 1.0/f_mc; // cam-slam : 2,3
+			offline_fracs["6"] = 1.0/f_mu; // render " 6
 		}
 
 
