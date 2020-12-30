@@ -235,8 +235,15 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std:
 	{
 		if (dag_name.find("nav") != std::string::npos )
 			return (node_tid.find("navc") != node_tid.end());
-		else
-			return true; // modify for illixr
+		else if (dag_name.find("nav") != std::string::npos)
+		{
+			bool ans = true;
+			std::vector<std::string> node_ids {"2", "3", "6", "7"};
+			for (int i = 0; i < node_ids.size(); i++)
+				ans = ans && ( node_tid.find(node_ids[i]) != node_tid.end() );
+			return ans;
+			// return ( (node_tid.find("6") != node_tid.end()) && (node_tid.find("0") != node_tid.end()) && (node_tid.find("5") != node_tid.end()) && (node_tid.find("1") != node_tid.end()) );
+		}
 	}
 
 	// Called by FE when tid/pid info is received for any node.

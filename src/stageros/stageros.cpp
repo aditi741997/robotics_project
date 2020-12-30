@@ -97,7 +97,8 @@ private:
 
         //ros publishers
         ros::Publisher odom_pub; //one odom
-        ros::Publisher ground_truth_pub; //one ground truth
+        ros::Publisher ground_truth_pub; //one ground truth 
+	ros::Publisher odom_ts_pub; // publishes the real TS for when is odom published.
 
         std::vector<ros::Publisher> image_pubs; //multiple images
         std::vector<ros::Publisher> depth_pubs; //multiple depths
@@ -386,7 +387,10 @@ StageNode::SubscribeModels()
 
         new_robot->odom_pub = n_.advertise<nav_msgs::Odometry>(mapName(ODOM, r, static_cast<Stg::Model*>(new_robot->positionmodel)), 10);
         new_robot->ground_truth_pub = n_.advertise<nav_msgs::Odometry>(mapName(BASE_POSE_GROUND_TRUTH, r, static_cast<Stg::Model*>(new_robot->positionmodel)), 10);
-        new_robot->cmdvel_sub = n_.subscribe<geometry_msgs::Twist>(mapName(CMD_VEL, r, static_cast<Stg::Model*>(new_robot->positionmodel)), 10, boost::bind(&StageNode::cmdvelReceived, this, r, _1) ); // , ros::TransportHints().tcpNoDelay()
+        // this->robotmodels_[r]->positionmodel->Token()
+	new_robot->odom_ts_pub = n_.advertise<std_msgs::Header>("/" + std::string(new_robot->positionmodel->Token())  + "/odom_ts", 1 );
+
+	new_robot->cmdvel_sub = n_.subscribe<geometry_msgs::Twist>(mapName(CMD_VEL, r, static_cast<Stg::Model*>(new_robot->positionmodel)), 10, boost::bind(&StageNode::cmdvelReceived, this, r, _1) ); // , ros::TransportHints().tcpNoDelay()
 
         for (size_t s = 0;  s < new_robot->lasermodels.size(); ++s)
         {
@@ -505,6 +509,14 @@ StageNode::WorldCallback()
 
         robotmodel->odom_pub.publish(odom_msg);
 
+	struct timespec rt_mono_o;
+	clock_gettime(CLOCK_MONOTONIC, &rt_mono_o);
+	double rt_monod_o = rt_mono_o.tv_sec + 1e-9*rt_mono_o.tv_nsec;
+
+	std_msgs::Header odom_tf_ts;
+	odom_tf_ts.stamp = ros::Time( rt_monod_o );
+	robotmodel->odom_ts_pub.publish(odom_tf_ts);
+
         // broadcast odometry transform
         tf::Quaternion odomQ;
         tf::quaternionMsgToTF(odom_msg.pose.pose.orientation, odomQ);
@@ -599,7 +611,7 @@ StageNode::WorldCallback()
 		if ( r<1 && (world_update_count%50 == 7) )
 			ROS_WARN("WorldUpdateCount %i, BoostSysRT %f, MonoRT %f, MonoRawRT %f, RealRT %f", world_update_count, rt_boost, rt_monod, rt_mono_rawd, rt_realtimed);
                 
-		if (r < 1 && (world_update_count % 100 == 7))
+		if (r < 1 && (world_update_count % 100 == 7)) // 
                 {
 			// std::cerr << " scanTime: " << msg.scan_time << " " << boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() << " ct:" << ct << std::endl;
 			ROS_ERROR("Just published scan msg, scantime: %f, boost time: %f", msg.scan_time, rt_boost);
@@ -849,6 +861,8 @@ StageNode::WorldCallback()
     {
 	if ( std::string( this->robotmodels_[r]->positionmodel->Token() ).find("0") != std::string::npos )
 		of << this->robotmodels_[r]->positionmodel->Token() << " " << all_robos_twist_lin_x[r] << " " << all_robos_twist_lin_y[r] << " " << all_robos_twist_lin_z[r] << " " << all_robos_twist_ang_z[r] << " orient: " << all_robos_orient_z[r] << " " << all_robos_orient_w[r] << " stall: " << rob0_stalled << " ";
+	
+	
 
     }
     if (stalled_robos.size() > 0)
