@@ -8,6 +8,9 @@
 #include <set>
 #include <assert.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <atomic>
 
 #include <dag_controller_fe.h>
 #include <dag.h>
@@ -22,6 +25,8 @@ public:
         // DAG data structure : to be used by the scheduling algorithm
         std::map<std::string, int> node_ci, node_fi;
 
+	std::map<std::string, boost::circular_buffer<double> > node_ci_arr;
+
         std::vector<std::vector<int> > exec_order; // Output from sched algo: vector of subchains.
         std::map<int, std::vector<int>> period_map;
         std::vector<int> all_frac_values;
@@ -30,6 +35,7 @@ public:
         // Oct: just for offline expts:
         std::map<std::string, double> offline_fracs;
 	bool offline_use_td; // if we're using the offline TD version. i.e. all nodes are TD.
+	std::map<std::string, int> offline_node_core_map; // needed for assigning each node to the right core.
 	int fifo_nc; // for testing Davare et al : denotes #cores for fifo, -1 o.w.
 	std::map<std::string, int> fifo_prio; // for testing Davare et al
 
@@ -41,7 +47,7 @@ public:
 	std::string dag_name;
 	
 	DAGControllerBE();
-        DAGControllerBE(std::string dag_file, DAGControllerFE* fe, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp);
+        DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool dyn_resolve, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp);
 
 	DAGControllerBE(const DAGControllerBE&) = delete;
 
@@ -59,6 +65,7 @@ public:
 	void recv_node_info(std::string node_name, int tid, int pid=0);
 
 	std::string get_last_node_cc_name();
+	void update_ci(std::string node_name, double ci);
 private:
 	void set_high_priority(std::string thread_name);
 	double get_timeout(int ind);  
@@ -66,8 +73,9 @@ private:
 	bool got_all_info();
 	void checkTriggerExec(int ind);
 
-	boost::thread timer_thread;
+	boost::thread* timer_thread;
 	void timer_thread_func(double timeout);
+	std::atomic<bool> timer_thread_running;
 
 	boost::thread handle_sched_thread;
 	boost::mutex sched_thread_mutex;
@@ -75,5 +83,10 @@ private:
 	boost::condition_variable cv_sched_thread;
 
 	DAGControllerFE* frontend;
+	
+	boost::thread reoptimize_thread;
+	bool dynamic_reoptimize;
+	void dynamic_reoptimize_func(); // update the fraction of all nodes.
+	int frac_var_count; // #vars make during fill_trigger, assign_publishing, assign_src.
 };
 

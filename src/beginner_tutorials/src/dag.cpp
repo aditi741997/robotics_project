@@ -519,11 +519,21 @@ std::map<int, std::vector<int>> DAG::get_period()
 				else if (id_node_map[chain[j]].trigger_node == chain[j-1])
 				{
 					std::cout << id_node_map[chain[j-1]].id << id_node_map[chain[j-1]].name << id_node_map[chain[j-1]].out_edges[chain[j]] << " -> " << id_node_map[chain[j]].trigger_node;
-					std::vector<int> a = std::vector<int> ( covered_nodes[chain[j-1]].begin(), covered_nodes[chain[j-1]].end() );
-					if (id_node_map[chain[j-1]].out_edges[chain[j]] != -1)
-						a.push_back( id_node_map[chain[j-1]].out_edges[chain[j]] );
+					// Oct-Dec: Trying a modification where all subchains are independent, and have a separae fi variable
+					// i.e. A->B they're either at the same rate or A:fi, B: fj.
+					if (id_node_map[chain[j-1]].out_edges[chain[j]] == -1)
+					{
+						// A,B at same rate.
+						std::vector<int> a = std::vector<int> ( covered_nodes[chain[j-1]].begin(), covered_nodes[chain[j-1]].end() );
 						// current_frac.insert( id_node_map[chain[j-1]].out_edges[chain[j]] ); // this is the frac. for the rate of publish
-					covered_nodes[chain[j]] = std::vector<int> ( a );
+						covered_nodes[chain[j]] = std::vector<int> ( a );
+					}
+					else
+					{
+						// just one new variable.
+						std::vector<int> a (1, id_node_map[chain[j-1]].out_edges[chain[j]]);
+						covered_nodes[chain[j]] = std::vector<int> ( a );
+					}
 				}
 				else
 					std::cout << "DAMN, this is ERROR!!!" << id_node_map[chain[j-1]].id << id_node_map[chain[j-1]].name << id_node_map[chain[j-1]].out_edges[chain[j]] << " \n";
@@ -558,7 +568,7 @@ void DAG::update_chain_min_rate(std::vector<int>& a, std::vector<std::vector<int
 		std::cout << "Update chain min rate : Doing nothing \n";
 	else
 		x.push_back(a);
-	std::cout << "New len of x :" << x.size() << std::endl;
+	std::cout << "New len of chain_min_rate :" << x.size() << std::endl;
 }
 
 /* Inputs : index of chain in array, map of node id -> its fraction of execution. e.g. f1*f2 will be [1,2].
@@ -611,7 +621,7 @@ void DAG::compute_rt_chain(int i, std::map<int, std::vector<int>>& period_map)
 			
 			if ( (nj1.trigger_node == nj.id) && (nj.out_edges[nj1.id] == -1) )
 			{
-				// Case C1:
+				// Case C1: [Run at the same rate]
 				std::cout << "Case C1 : Do nothing! Wohoo! \n";
 			}
 			else if ( nodes_in_most_critical_chain.find(nj1.id) != nodes_in_most_critical_chain.end() )
@@ -621,6 +631,7 @@ void DAG::compute_rt_chain(int i, std::map<int, std::vector<int>>& period_map)
 				Monomial m (1.0, std::vector<int> (0), mono_len, -1);
 				add_mono_to_map(rt_periods, m);
 			}
+			// TODO: If we go with all subchains-having-independent-fi-variable, we might not need to check subset, just checking equality would be enough.
 			else if ( is_a_subset_of_b( period_map[nj1.id], period_map[nj.id] ) )
 			{
 				std::cout << "Case C3 ";
@@ -834,6 +845,7 @@ Monomial DAG::multiply_monos(Monomial m1, Monomial m2)
 
 void DAG::multiply_monos_with_period(std::map<std::string, Monomial>& period_mono_set)
 {
+	int total_vars = 0;
 	for (int i = 0; i < all_chains.size(); i++)
 	{
 		std::cout << "Starting chain " << i << std::endl;
@@ -850,6 +862,7 @@ void DAG::multiply_monos_with_period(std::map<std::string, Monomial>& period_mon
 				// itp->second.print();
 				Monomial m = multiply_monos(it->second, itp->second);
 				add_mono_to_map(new_mono_set_i, m);
+				total_vars = m.powers.size();
 			}
 		}
 		rt_mono_periods.clear();
@@ -931,12 +944,45 @@ void DAG::add_constraints_for_min_monos(int total_vars, Variable::t all_lfrac_va
 	}
 }
 
+void DAG::clear_old_data(int frac_var_count)
+{
+	global_var_count = frac_var_count;
+	global_var_desc.resize(frac_var_count);
+	std::cout << "CLEARED THE global_vars. New set: " << std::endl;
+	print_global_vars_desc();
+
+	all_rt_periods.clear();
+	all_rt_maxmono_periods.clear();
+	all_rt_minmono_periods.clear();
+}
+
+void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> >& node_ci_arr)
+{
+	for (auto const& x: node_ci_arr)
+	{
+		std::vector<double> cis;
+		if (x.second.size() > 0)
+		{
+			for (auto const& y: x.second)
+				cis.push_back(y);
+			std::sort(cis.begin(), cis.end());
+			std::cout << "UPDATED Compute time of node " << x.first << " from " << id_node_map [ name_id_map [ x.first ] ].compute << " TO " << cis[(75*cis.size())/100]*1000.0 << std::endl;
+			id_node_map [ name_id_map [ x.first ] ].compute = cis[(75*cis.size())/100]*1000.0; // Nodes publish time, DAG operates in ms.
+		}
+	}
+}
+
+// returns the value of each fi variable as rounded off (1/fi).
 std::vector<int> DAG::compute_rt_solve()
 {
 	std::cout << "##### STARTING Step5 : computing RT for each chain" << std::endl;
 	print_global_vars_desc();
 	period_map = get_period();
-	
+
+	// To measure cpu time used by this func:
+	struct timespec solve_start, solve_end;
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &solve_start);
+
 	// What we essentially need, is to break down the wi*RTi into a sum of monomials, and we need the powers of each frac_var in each monomial term.
 	// Then, we need to add a row to Ax+B thing for EACH monomial in the RT expr for EACH chain.
 	
@@ -959,7 +1005,6 @@ std::vector<int> DAG::compute_rt_solve()
 	multiply_monos_with_period(period_mono_set);
 	
 	// TODO:Later - Subtract sum cifi from the RT expression, to account for ordering.
-	
 
 	// Done: Add sum ci to critical chain, after multiplying with period.
 	Monomial m (0.0, std::vector<int> (0), total_vars, 0);
@@ -968,7 +1013,6 @@ std::vector<int> DAG::compute_rt_solve()
 	add_mono_to_map(all_rt_periods[0], m);	
 	std::cout << "Here's the final (added sum ci) set of monos for chain0 : ";
 	print_mono_map(all_rt_periods[0]);
-
 
 	std::cout << "DONE with computing rt for each chain. Starting to make variables now \n";	
 	// Initialize mosek solver:
@@ -1032,10 +1076,33 @@ std::vector<int> DAG::compute_rt_solve()
 	{
 		std::cout << "CONSTRAINT FORMULATION. Part-I : MINIMIZING RT0 \n";
 		// Done: minimize the RT for most critical chain + constraints for all chains.
+		// minimize CC RT + very_small_numer*(sum of RT of all other chains)
 		// Constraint A : R0 <= last_variable
 		std::vector< std::vector<double>> Az;
                 std::vector<double> Bz;
-                std::map<std::string, Monomial>& all_rt_monos_z = all_rt_periods[0];
+                
+		for (int i = 0; i < all_chains.size(); i++)
+		{
+			double wt = 1.0;
+			if (i > 1.0)
+				wt = 0.001;
+			std::map<std::string, Monomial>& all_rt_monos = all_rt_periods[i];
+			for (std::map<std::string, Monomial>::iterator cit = all_rt_monos.begin(); cit != all_rt_monos.end(); cit++)
+			{
+				Monomial& m = cit->second;
+				m.print();
+				Bz.push_back(log(wt*m.c));
+				std::vector<double> v (m.powers.begin(), m.powers.end());
+				v[total_vars-1] = -1;
+				Az.push_back(v);
+				std::cout << "Added mono with B: " << Bz[Bz.size()-1];
+				print_dvec(Az[Az.size()-1], " and here's the A :");
+			}
+		}
+		
+		/*
+		std::map<std::string, Monomial>& all_rt_monos_z = all_rt_periods[0];
+
 		for (std::map<std::string, Monomial>::iterator zit = all_rt_monos_z.begin(); zit != all_rt_monos_z.end(); zit++)
 		{
 			Monomial& m = zit->second;
@@ -1048,6 +1115,7 @@ std::vector<int> DAG::compute_rt_solve()
 			std::cout << "Added mono with B: " << Bz[Bz.size()-1];
 			print_dvec(Az[Az.size()-1], " and here's the A :");
 		}
+		*/
 		logsumexp(mosek_model,
                                 new_array_ptr<double> (Az), 
                                 all_l_vars,
@@ -1083,16 +1151,17 @@ std::vector<int> DAG::compute_rt_solve()
 	mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
 	mosek_model->solve();
 	auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
-	
+	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &solve_end);
+
 	// Done: round off to closest integer.
 	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);
 	for (int i = 0; i < total_vars; i++)
 		all_frac_vals[i] = (int) round( 1.0/((*opt_ans)[i]) );
 	std::cout << "OPTIMAL ANSWER : " << (*opt_ans)[0] << ", " << (*opt_ans)[1] << ", " << (*opt_ans)[2] << ", " << (*opt_ans)[3] << std::endl;
-	std::cout << (int) round(2.3) << ", " << (int) round(2.7) << ", " << (int) round(1.11) << ", " << std::endl;
+	// std::cout << (int) round(2.3) << ", " << (int) round(2.7) << ", " << (int) round(1.11) << ", " << std::endl;
 	print_vec(all_frac_vals, "Here are all the variables [1/fi] rounded to closest integer ");
 	double total_time_ci = (double)(clock() - ci_start_rt)/CLOCKS_PER_SEC;
 	double solve_time = (double)(clock() - solve_start_rt)/CLOCKS_PER_SEC;	
-	std::cout << "TOTAL time including stuff that uses ci : " << total_time_ci << ", solve time : " << solve_time << std::endl;
+	std::cout << "TOTAL time including stuff that uses ci : " << total_time_ci << ", solve time : " << solve_time << ", CPUTime to solve: " << ( (solve_end.tv_sec + solve_end.tv_nsec*1e-9) - (solve_start.tv_sec + 1e-9*solve_start.tv_nsec) ) << std::endl;
 	return all_frac_vals;
 } 

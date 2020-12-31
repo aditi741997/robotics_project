@@ -11,6 +11,7 @@
 #include <set> 
 #include <assert.h>
 #include <math.h> 
+#include <boost/circular_buffer.hpp>
 
 using namespace mosek::fusion;
 using namespace monty;
@@ -43,6 +44,10 @@ public:
 
 	// the set of chains this node is in?
 	std::vector<int> n_chains;
+
+	// constraints on period of this node.
+	// if fixed_period > 0, use that for finding RT.
+	double fixed_period, max_period; 
 };
 
 class Monomial
@@ -148,6 +153,9 @@ public:
 	std::vector< std::map<int, MinMonomial> > all_rt_minmono_periods;
 	std::vector<int> compute_rt_solve(); // need to find formula for RT along each chain, as a func of all fraction variables & then solve.
 
+	// Useful for re solving the OPT with varying ci:
+	void clear_old_data(int frac_var_count);
+	void update_cis(std::map<std::string, boost::circular_buffer<double> >& node_ci_arr);
 
 	// Helper functions:
 	void add_mono_to_map(std::map<std::string, Monomial>& monos, Monomial m);

@@ -64,6 +64,9 @@ class DAGController: public DAGControllerFE
 	bool nav_socket_connected; // for IPC with the Navigator node. 	
 	boost::thread socket_conn_thread; // thread to accept client cnn.
 
+	std::map<std::string, ros::Subscriber> exec_end_subs; // to get ci estimates from all nodes.
+	std::string last_node_cc_name;
+
 	long int total_period_count = 0; // increment each time we get a CC's end or at end of period.
 	bool sched_started = false; // becomes true when we get tid for all nodes.
 	ros::WallTimer exec_prio_timer;
@@ -72,50 +75,17 @@ class DAGController: public DAGControllerFE
 	DAGControllerBE* controller;
 
 public:
-        DAGController(int x, std::string dag_file, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp)
+        DAGController(int x, std::string dag_file, bool dyn_opt, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp)
         {
-		ROS_INFO("Initializing DAGController class, params: %i,%i,%i,%i,%i,%i,%i", f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
-		controller = new DAGControllerBE(dag_file, this, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
-
-		/*
-		// reads DAG from text file and sorts chains based on criticality. 
-		node_dag = DAG(dag_file);
-		
-		clock_t cb_start_rt = clock();
-		
-		node_dag.fill_trigger_nodes();
-		node_dag.assign_publishing_rates();
-		node_dag.assign_src_rates();
-		
-		// Oct: dont need to solve for offline experiments.
-		// all_frac_values = node_dag.compute_rt_solve();
-		// period_map = node_dag.period_map;	
-		
-		double total_time = (double)(clock() - cb_start_rt)/CLOCKS_PER_SEC;
-		std::cout << "TOTAL TIME TAKEN to do everything : " << total_time << std::endl;
-
-		// We will use dag.period_map [node id -> set of frac vars] and dag.get_exec_order() 
-		// Also compute_rt_solve returns the value of each frac. variable.
-		// This gives us the order in which to execute the subchains in the DAG:
-		// each elem in this array is a subchain (list of nodes).
-		exec_order = node_dag.get_exec_order();
-		
-                // Oct: for offline : 
-		// need to assign fraction to all NC nodes.
-		offline_fracs["s"] = 1.0;
-		offline_fracs["mapcb"] = 1.0/f_mc;
-		offline_fracs["mapupd"] = 1.0/f_mu;
-		offline_fracs["navc"] = 1.0/f_nc;
-		offline_fracs["navp"] = 1.0/f_np;
-		// With wcet exec times, period for 1,2,4,2,4 : 154.25
-		// [~collision once] period for 1,2,8,2,8 : 120.375
-		// [more collisions?] period for 1,2,2,2,2 : 222ms.
-
-		ROS_INFO("DAGController, 1/f for mc %i, mu %i, nc %i, np %i", f_mc, f_mu, f_nc, f_np);
-		*/
+		ROS_INFO("Initializing DAGController class");
+		controller = new DAGControllerBE(dag_file, this, dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
 
 		ROS_INFO("DAGController : Subscribe to 'exec_start' topics for ALL nodes, to get tid/pid.");
-                for(std::map<std::string,int>::iterator it = controller->node_dag.name_id_map.begin(); it != controller->node_dag.name_id_map.end(); ++it)
+		last_node_cc_name = controller->get_last_node_cc_name();
+		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/robot_0/exec_end_" + last_node_cc_name, 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
+                exec_end_subs[last_node_cc_name] = critical_exec_end_sub;
+		
+		for (std::map<std::string,int>::iterator it = controller->node_dag.name_id_map.begin(); it != controller->node_dag.name_id_map.end(); ++it)
                 {
                         std::string topic = "/robot_0/exec_start_" + it->first;
 			ROS_INFO("Subscribing to %s", topic.c_str());
@@ -127,25 +97,15 @@ public:
 			ros::Publisher tpub = nh.advertise <std_msgs::Header> (pubtopic, 1, false);
 			trigger_nc_exec[it->first] = (tpub);
 
-                }
-		
-		std::string last_node_cc_name = controller->get_last_node_cc_name();
-		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/robot_0/exec_end_" + last_node_cc_name, 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
-
-		/*
-		if (exec_order.size() > 1)
-		{
-			for (int i = 1; i < exec_order.size(); i++)
+			if ( exec_end_subs.find( it->first ) == exec_end_subs.end() )
 			{
-				int id = exec_order[i][0];
-				std::string name = node_dag.id_name_map[id];
-				ROS_INFO("Making publisher for trigger_exec_%s", name.c_str());
-				ros::Publisher tpub = nh.advertise <std_msgs::Header> ("/robot_0/trigger_exec_" + name, 1, false);
-				trigger_nc_exec[name] = (tpub);
-			}
+				std::string end_subtopic = "/robot_0/exec_end_" + it->first;
+				ROS_INFO("Subscribing to %s to get exec_end msgs from ALL nodes", end_subtopic.c_str());
+				ros::Subscriber esi = nh.subscribe<std_msgs::Header>( end_subtopic, 1, &DAGController::exec_end_cb, this, ros::TransportHints().tcpNoDelay() );
+				exec_end_subs[it->first] = esi;
+			}	
 		}
-		*/
-
+		
 		// Nov: for IPC with navigator node:
 		srv_fd = socket(AF_INET, SOCK_STREAM, 0);
 		if (srv_fd < 0) ROS_ERROR("Socket:: fd %i < 0", srv_fd);
@@ -193,14 +153,25 @@ public:
 		}
 	}
 
-	// TODO: Crit chain will be executed like RTC, i.e. scheduler pings Sensor when to start.
+	// This is called when any of the nodes finishes exec (except last node of CC)
+	// Used to update ci estimates of all nodes.
+	void exec_end_cb(const std_msgs::Header::ConstPtr& msg)
+	{
+		std::stringstream ss;
+		ss << msg->frame_id;
+		double ci;
+		std::string n_name;
+		ss >> ci >> n_name;
+		controller->update_ci(n_name, ci);
+	}
+
 
 	// Cb to handle end of critical chain exec. Need to start dynamic sched stuff:
 	void critical_exec_end_cb(const std_msgs::Header::ConstPtr& msg)
 	{
 		// ROS_WARN("GOT exec_end msg from cc!!! Calling the BE.");
 		controller->recv_critical_exec_end();
-
+		controller->update_ci(last_node_cc_name, stod(msg->frame_id) );
 		/*
 		// Oct: shouldnt we start with ind=1, since ind=0 is the CC.
 		int ind = 1;
@@ -343,7 +314,7 @@ public:
 		if (reset)
 		{
 			hdr.frame_id += " RESETCOUNT";
-                        ROS_WARN("RESETTING trigger_ct for NC %s", name.c_str());
+                        // ROS_WARN("RESETTING trigger_ct for NC %s", name.c_str());
 		}
 		hdr.frame_id += "\n";
                 if (name.find("nav") == std::string::npos)
@@ -385,26 +356,6 @@ public:
 
 		controller->recv_node_info(node_name, tid, pid);
 
-		/*
-                // add tid, pid if not already there :
-                node_pid[node_name] = pid;
-		node_tid[node_name] = tid;
-
-		// float timeout = node_ci[node_name]/(float)(node_fi[node_name]);
-		if (node_name.find("navc") != std::string::npos )
-		{
-			changePriority(0); // make prio CC = 2, all others = 1.
-			ROS_WARN("GOT ALL nodes' tid, pid.");
-			float dummy_work_timeout = 0.0;
-			//Oct: for offline, just use offline_fracs.
-			for (int i = 0; i < exec_order.size(); i++)
-			{
-				dummy_work_timeout += get_sum_ci_ith(i) * offline_fracs[node_dag.id_name_map[ exec_order[i][0] ] ]; 
-			}
-			// do_sieve(dummy_work_timeout*0.001 + 0.002);
-		}
-		*/
-		
         }
 
 	double get_curr_time()
@@ -463,15 +414,15 @@ int main (int argc, char **argv)
 	int f_mu = atoi(argv[5]);
 	int f_nc = atoi(argv[6]);
 	int f_np = atoi(argv[7]);
-	// more vars if fifo:
 	int p_s, p_lc, p_lp;
 	if (fifo.find("yes") != std::string::npos)
 	{
 		p_s = atoi(argv[8]);
 		p_lc = atoi(argv[9]);
-		p_lp = atoi(argv[10]);
+		p_lp = atoi(argv[10]);	
 	}
-	DAGController dagc(0, "/home/ubuntu/catkin_ws/" + dag_fname + "_dag.txt", use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
+	bool dyn_opt = (atoi(argv[11]) == 1) ;
+        DAGController dagc(0, "/home/ubuntu/catkin_ws/" + dag_fname + "_dag.txt", dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
         ros::spin();
 
         return 0;
