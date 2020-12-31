@@ -232,7 +232,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			for (int i = 0; i < exec_order.size(); i++)
 			{
 				printf("Monotime %f, realtime %f, TIME to run subchain #%i, Timeout: %f \n", get_monotime_now(), get_realtime_now(), i, get_timeout(i) );
-				
 				// prio(i) = 2, all others = 1.
 				offline_fracs_mtx.lock();
 				long i_to = 1000*get_timeout(i);
@@ -330,12 +329,12 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		for (int i = 0; i < exec_order.size(); i++)
                 {
                         int ret = 7;
-			if (i == curr_exec_index)
+			if (i == ind)
                                 ret = changePrioritySubChain(i, 2);
                         else
                                 ret = changePrioritySubChain(i, 1);
-			if (ret != 0)
-				std::cerr << "WEIRD, Ret value " << ret << " for setting prio of SC node " << node_dag.id_name_map[exec_order[i][0]] << " curr_exec_index: " << curr_exec_index << std::endl;
+			// if (ret != 0)
+				// std::cerr << "WEIRD, Ret value " << ret << " for setting prio of SC node " << node_dag.id_name_map[exec_order[i][0]] << " curr_exec_index: " << curr_exec_index << std::endl;
                                 // ROS_WARN("Weird: Ret value %i for setting priority of subchain node %s, ind to be exec : %i", ret, node_dag.id_name_map[exec_order[i][0]].c_str(), curr_exec_index);
 		}
 		checkTriggerExec(ind);
@@ -349,9 +348,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		// it executes first. [since it'll be ahead in the list of same prio.]
 		for (int j = exec_order[ind].size()-1 ; j >= 0; j-- )
 		{
+			printf("Monotime %f, realtime %f, ABOUT TO change prio for node %s to %i, tid %i \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[exec_order[ind][j]].c_str(), prio, node_tid[node_dag.id_name_map[exec_order[ind][j]] ] );
 			ret = ( ret && ( sched_setscheduler( node_tid[node_dag.id_name_map[exec_order[ind][j]] ] , SCHED_FIFO, &sp) ) );
-			// if (ret != 0)
-				// std::cerr << "WEIRD!!! Changing prio for node exec_order" << ind << "-" << j << " to " << prio << std::endl;
+			if (ret != 0)
+				std::cerr << "WEIRD!!! Changing prio for node exec_order" << ind << "-" << j << " to " << prio << std::endl;
 		}
 		return ret;
 	}

@@ -29,6 +29,9 @@
 #include <sys/syscall.h>
 #define gettid() syscall(SYS_gettid)
 
+#include <dynamic_reconfigure/server.h>
+#include <beginner_tutorials/cc_freqConfig.h>
+
 double get_time_now()
 {
 	/*
@@ -64,12 +67,20 @@ public:
 
     // Publisher, thread that'll publish.
     ros::Publisher sensor_pub;
-    ros::WallTimer sensor_data_publish_thread;
-    void publishLatestData(const ros::WallTimerEvent& event);
-    
-    ros::Publisher thread_exec_info_pub;
+    // ros::WallTimer sensor_data_publish_thread;
+    // void publishLatestData(const ros::WallTimerEvent& event);
+    void publishLatestData(const std_msgs::Header::ConstPtr& msg);
+
+    ros::Publisher thread_exec_info_pub, s_exec_end_pub;
+
+    ros::Subscriber trigger_cc_sub; // publish on getting trigger from scheduler.
 
     ros::NodeHandle nh;
+
+    double last_pub_ts;
+    std::vector<double> scan_pub_tput;
+    long int pub_count = 0;
+    long int neg_lat_count = 0;
 
     double ros_last_recv_ts;
     clock_t real_last_recv_ts;
@@ -85,11 +96,19 @@ public:
     // for locking the data fields used both by publisher & subscriber.
 protected: 
     boost::mutex data_lock; 
+
+    dynamic_reconfigure::Server<beginner_tutorials::cc_freqConfig> dyn_server;
+    dynamic_reconfigure::Server<beginner_tutorials::cc_freqConfig>::CallbackType dyn_f;
+
+    void callback(beginner_tutorials::cc_freqConfig &config, uint32_t level);
 };
 
 ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topic, std::string msg_type)
 {
     freq = f;
+
+    dyn_f = boost::bind(&ShimFreqNode::callback, this, _1, _2);
+    dyn_server.setCallback(dyn_f);
 
     if (msg_type.compare("scan") == 0)
     {
@@ -105,7 +124,17 @@ ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topi
 
     thread_exec_info_pub = nh.advertise<std_msgs::Header>("/robot_0/exec_start_s", 1, true);
     // start thread for publishing :
-    sensor_data_publish_thread = nh.createWallTimer(ros::WallDuration(1.0/freq), &ShimFreqNode::publishLatestData, this);
+    // Dont need this thread if Scheduler triggers CC:
+    // sensor_data_publish_thread = nh.createWallTimer(ros::WallDuration(1.0/freq), &ShimFreqNode::publishLatestData, this);
+    
+    // publishing based on DAGController's msgs:
+    trigger_cc_sub = nh.subscribe("/robot_0/trigger_exec_s" , 1, &ShimFreqNode::publishLatestData, this, ros::TransportHints().tcpNoDelay());
+}
+
+void ShimFreqNode::callback(beginner_tutorials::cc_freqConfig &config, uint32_t level) {
+	// config.cc_freq
+	ROS_WARN("RECEIVED NEW config!! NEW freq: %f", config.cc_freq);
+	// sensor_data_publish_thread = nh.createWallTimer(ros::WallDuration(1.0/config.cc_freq), &ShimFreqNode::publishLatestData, this);
 }
 
 void ShimFreqNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
@@ -165,7 +194,8 @@ void ShimFreqNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
             printVecStats(ros_recv_deltas, "ROS_Time_B/W_Recv_Scans");
             printVecStats(real_recv_deltas, "Real_Time_B/W_Recv_Scans");
             printVecStats(real_cg_recv_deltas, "Real_CG_Time_B/W_Recv_Scans");
-        }
+	    std::cout << "msg sz: ranges len: " << latest_scan.ranges.size() << ", intensities len: " << latest_scan.intensities.size() << std::endl;
+	}
 
         ros_last_recv_ts = ros::Time::now().toSec();
         real_last_recv_ts = clock();
@@ -179,17 +209,18 @@ void ShimFreqNode::printVecStats(std::vector<double> v, std::string st)
     if (v.size() > 0)
     {
         int s = v.size();
-        ROS_WARN("%s : Mean %f, Median %f, 95ile %f, 99ile %f", st.c_str(), std::accumulate(v.begin(), v.end(), 0.0)/s, v[s/2], v[(95*s)/100], v[(99*s)/100] );
+        ROS_WARN("%s : Mean %f, Median %f, 75ile %f, 95ile %f, 99ile %f", st.c_str(), std::accumulate(v.begin(), v.end(), 0.0)/s, v[s/2], v[(75*s)/100], v[(95*s)/100], v[(99*s)/100] );
     }
 }
 
-void ShimFreqNode::publishLatestData(const ros::WallTimerEvent& event)
+void ShimFreqNode::publishLatestData(const std_msgs::Header::ConstPtr& msg ) //ros::WallTimerEvent& event
 {
     {
+	// Start time
         boost::mutex::scoped_lock lock(data_lock);
 
 	//publish thread id info.
-	if (real_cg_recv_deltas.size() < 7)
+	if (pub_count < 5)
 	{
 		std_msgs::Header hdr;
 		std::stringstream ss_e;
@@ -200,11 +231,25 @@ void ShimFreqNode::publishLatestData(const ros::WallTimerEvent& event)
 
 	double time_now = get_time_now();
 	if ( (time_now - latest_scan.scan_time) < -0.004)
+	{
+		neg_lat_count += 1;
 		ROS_ERROR("-VE LAT: ShimFreqNode: Publishing scan!!!! with realTS %f, time_now: %f", latest_scan.scan_time, time_now);
+	}
 	else
 		ROS_WARN("ShimFreqNode: Publishing scan!!!! with realTS %f", latest_scan.scan_time);
         // publish latest_scan...
         sensor_pub.publish(latest_scan);
+
+	pub_count += 1;
+        if (pub_count > 1)
+                scan_pub_tput.push_back(time_now - last_pub_ts);
+        last_pub_ts = time_now;
+
+        if (scan_pub_tput.size()%500 == 111)
+	{
+		ROS_WARN("NEGATIVE LATENCY Ratio: %f", (float)neg_lat_count/pub_count);
+		printVecStats(scan_pub_tput, "SHQ:ScanPubTput");
+	}
     }
 }
 
