@@ -550,6 +550,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
                 	// This is because we always want the node to run exactly once whenever it wakes up, and hence only a bool is needed.	
 			// frontend->trigger_node(name, reset_count[ind-1]);
 			frontend->trigger_node(name, true);
+			if ( (name.find("imu") != std::string::npos) && (dag_name.find("ill") != std::string::npos) )
+				frontend->trigger_node("7", true);
+
 			reset_count[ind-1] = false;
 			
 			// For Illixr Dag, need to trigger TW along with Imu, cuz Imu is at fixed freq for now. TODO.
