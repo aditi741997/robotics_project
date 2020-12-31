@@ -288,6 +288,8 @@ DAG::DAG(std::string fname)
 			} 
 		}
 		order_chains_criticality(chains);	
+	} else {
+		throw std::runtime_error{fname + std::string{" is bad."}};
 	}
 	// test_solver_multicore();
 	
