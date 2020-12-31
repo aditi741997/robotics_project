@@ -77,7 +77,7 @@ class DAGController: public DAGControllerFE
 public:
         DAGController(int x, std::string dag_file, bool dyn_opt, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp)
         {
-		ROS_INFO("Initializing DAGController class");
+		ROS_INFO("Initializing DAGController class, params: dyn_opt: %i, use_td: %s, fifo: %s, fmc: %i, fmu %i, fnc %i, fnp %i, ps %i, plc %i, plp %i", dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
 		controller = new DAGControllerBE(dag_file, this, dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
 
 		ROS_INFO("DAGController : Subscribe to 'exec_start' topics for ALL nodes, to get tid/pid.");

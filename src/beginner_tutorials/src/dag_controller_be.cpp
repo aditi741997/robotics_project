@@ -120,6 +120,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		else
 			fifo_nc = -1;
 
+		printf("MonoTime: %f, RealTime: %f, fifo: %s, td: %s, f_mc: %i \n", get_monotime_now(), get_realtime_now(), fifo.c_str(), use_td.c_str(), f_mc);
+
 		for (int i = 1; i < exec_order.size(); i++)
 			reset_count.push_back(false);
 	
@@ -133,12 +135,41 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		{
 			node_ci_arr[x.second] = boost::circular_buffer<double> (50);
 		}
+
+		sched_started = false;
+		startup_thread = new boost::thread(&DAGControllerBE::startup_trigger_func, this);
+	}
+
+	void DAGControllerBE::startup_trigger_func()
+	{
+		double cc_period = 0.0; // in millisec.
+		for (int i = 0; i < exec_order.size(); i++)
+			cc_period += get_sum_ci_ith(i)*offline_fracs[ node_dag.id_name_map[ exec_order[i][0] ] ];
+		int oldstate;
+		int ret_pct = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldstate);
+		printf("MonoTime: %f, RealTime: %f, STARTED startup_trigger thread! CC period: %f, sched_started: %i \n", get_monotime_now(), get_realtime_now(), cc_period, sched_started );
+	
+		total_period_count = 0;
+
+		while (!sched_started)
+		{
+			long to = 1000*cc_period;
+			std::this_thread::sleep_for( std::chrono::microseconds(to) );
+			if (!sched_started)
+			{
+				total_period_count += 1;
+				printf("MonoTime: %f, RealTime: %f, Period ct: %i, checking Trigger for all", get_monotime_now(), get_realtime_now(), total_period_count);
+				for (int i = 0; i < exec_order.size(); i++)
+					checkTriggerExec(i);
+			}
+			
+		}
 	}
 
 	// FE will call this for each msg from the CC.
 	void DAGControllerBE::recv_critical_exec_end()
 	{
-                total_period_count += 1;
+                // total_period_count += 1;
 
 		// Nov25: No need to do anything if we're using TD in offline version.
 		if (!offline_use_td)
@@ -149,22 +180,37 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				{
 					std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " $$$$$ DAGControllerBE:: STARTING SCHEDULING!!! \n";
 					sched_started = true;
+					
+					// Lets kill the startup_thread!
+					pthread_cancel(startup_thread->native_handle());
+					pthread_join(startup_thread->native_handle(), NULL);
+					startup_thread->detach();
+					startup_thread = NULL;
+					
 					for (int i = 0; i < reset_count.size(); i++)
 						reset_count[i] = true;
-					total_period_count = 1;
+					
+					// Moved to handle_Sched_main: total_period_count = 1;
 
 					// Make the thread that handles scheduling.
-					handle_sched_thread = boost::thread(&DAGControllerBE::handle_noncritical_loop, this);
+					handle_sched_thread = boost::thread(&DAGControllerBE::handle_sched_main, this);
 					std::this_thread::sleep_for (std::chrono::milliseconds(2));
 				}
-			
-				// Notify the thread.	
-				boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
-				cc_end = true;
-				ready_sched = true;
-				// printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
-				cv_sched_thread.notify_all();
+				else
+				{
+					// Moved to handle_Sched_main: total_period_count += 1;
+					
+					// Notify the handle_sched_main : it waits for CC to end before moving on to NC nodes.	
+					boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
+					cc_end = true;
+					ready_sched = true;
+					printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
+					cv_sched_thread.notify_all();
+				}
+
+				
 			}
+			/* MOVED to startup thread.
 			else
 			{
 				std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " | GOT exec_end msg. NOT making a timer,Will trigger nodes" << std::endl;
@@ -172,14 +218,42 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					checkTriggerExec(i);
 					//frontend->trigger_node(node_dag.id_name_map[exec_order[i][0]], false);
 			}
+			*/
 		}
 			
 	}
 
-	// This will be called once for each NC node, in each period : 
-	// makes another timer, changes priorities, triggers nodes if needed.
-	void DAGControllerBE::handle_noncritical_exec()
+	void DAGControllerBE::handle_sched_main()
 	{
+		set_high_priority("MAIN sched Thread");
+		total_period_count = 1;
+		while (true)
+		{
+			for (int i = 0; i < exec_order.size(); i++)
+			{
+				printf("Monotime %f, realtime %f, TIME to run subchain #%i, Timeout: %f \n", get_monotime_now(), get_realtime_now(), i, get_timeout(i) );
+				
+				// prio(i) = 2, all others = 1.
+				offline_fracs_mtx.lock();
+				long i_to = 1000*get_timeout(i);
+				changePriority(i); // handles priority & trigger.
+				offline_fracs_mtx.unlock();
+
+				ready_sched = false;
+
+				// cv.wait (i=0), sleep for all others
+				if (i == 0)
+				{
+					boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
+					while (!ready_sched)
+						cv_sched_thread.wait(lock);
+				}
+				else
+					std::this_thread::sleep_for( std::chrono::microseconds( i_to ) );
+			}
+
+			total_period_count += 1;
+		}
 	}
 
 	std::string DAGControllerBE::get_last_node_cc_name()
@@ -247,6 +321,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			ready_sched = false;
 		}
 	}
+
 
 	// Changes subchain[ind] prio = 2, all others = 1.
 	void DAGControllerBE::changePriority(int ind)
@@ -373,7 +448,11 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::dynamic_reoptimize_func()
 	{
 		std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " STARTING Dynamic Reoptimize thread!" << std::endl;
-		// Maybe set policy to RR, prio4, so can be preempted when get CC msg?
+		// Maybe set policy to RR, prio4, so can be preempted when get CC msg or when to expires.
+		struct sched_param sp = { .sched_priority = 1,};
+		int ret = sched_setscheduler(0, SCHED_RR, &sp);
+		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i", get_monotime_now(), get_realtime_now(), ret);
+
 		while (true)
 		{
 			// 5s period
@@ -390,6 +469,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			// Update fractions.
 			// For each NC subchain, fraction = 1.0/[multiply all_frac_vals[i] for all i in period_map[subchain]]
 			double period = 0.0;
+
+			// take a lock to change offline_fracs: [i.e. the handle_Sched thread might have to wait a little bit sometimes before getting timeout value.] 
+			offline_fracs_mtx.lock();
 			for (auto const& x : period_map)
 			{
 				double frac = 1.0;
@@ -400,6 +482,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				period += node_dag.id_node_map[x.first].compute * frac;
 				offline_fracs [ node_dag.id_name_map[x.first] ] = frac;
 			}
+			offline_fracs_mtx.unlock();
+
 			printf("MonoTime: %f, RealTime: %f, In new soln, CC period is %f \n", get_monotime_now() , get_realtime_now(), period);
 			// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << "In new soln, CC period is " << period << std::endl;
 			std::string cmd = "rosrun dynamic_reconfigure dynparam set /shim_freq_node cc_freq " + std::to_string(1000.0/(period) ); // since period is in millisec.
@@ -458,7 +542,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		int id = exec_order[ind][0];
                 int ind_p = round(1.0/offline_fracs[node_dag.id_name_map[id] ]);
 		std::string name = node_dag.id_name_map[id];
-		if ( (ind > 0) && (ind_p == 1 || (total_period_count%ind_p == 1) ) && (node_tid.find(name) != node_tid.end() ) )
+		if ( (ind_p == 1 || (total_period_count%ind_p == 1) ) ) // && (node_tid.find(name) != node_tid.end() ) ) // (ind > 0) && : Removing cuz CC now triggered by scheduler. 
 		{
 			printf("MonoTime: %f, RealTime: %f, About to trigger node: %s, frac: %i, period_count: %i \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, total_period_count);
 		
@@ -467,5 +551,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			// frontend->trigger_node(name, reset_count[ind-1]);
 			frontend->trigger_node(name, true);
 			reset_count[ind-1] = false;
+			
+			// For Illixr Dag, need to trigger TW along with Imu, cuz Imu is at fixed freq for now. TODO.
+			
 		}
 	}

@@ -288,8 +288,6 @@ DAG::DAG(std::string fname)
 			} 
 		}
 		order_chains_criticality(chains);	
-	} else {
-		throw std::runtime_error{fname + std::string{" is bad."}};
 	}
 	// test_solver_multicore();
 	
@@ -983,7 +981,7 @@ std::vector<int> DAG::compute_rt_solve()
 
 	// To measure cpu time used by this func:
 	struct timespec solve_start, solve_end;
-	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &solve_start);
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_start);
 
 	// What we essentially need, is to break down the wi*RTi into a sum of monomials, and we need the powers of each frac_var in each monomial term.
 	// Then, we need to add a row to Ax+B thing for EACH monomial in the RT expr for EACH chain.
@@ -1017,9 +1015,14 @@ std::vector<int> DAG::compute_rt_solve()
 	print_mono_map(all_rt_periods[0]);
 
 	std::cout << "DONE with computing rt for each chain. Starting to make variables now \n";	
+
+	
 	// Initialize mosek solver:
 	mosek_model = new Model("single_core_scheduler_algo");
 	auto _mosek_model = finally([&]() { mosek_model->dispose(); });
+	mosek_model->setSolverParam("numThreads", 1);
+	mosek_model->setSolverParam("intpntMultiThread", "off");
+
 	Variable::t all_l_vars = mosek_model->variable(total_vars);
 	std::cout << "Initialized variable!!" << std::endl;
 
@@ -1153,7 +1156,7 @@ std::vector<int> DAG::compute_rt_solve()
 	mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
 	mosek_model->solve();
 	auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
-	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &solve_end);
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_end);
 
 	// Done: round off to closest integer.
 	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);

@@ -11,6 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <atomic>
+#include <mutex>
 
 #include <dag_controller_fe.h>
 #include <dag.h>
@@ -34,6 +35,8 @@ public:
 
         // Oct: just for offline expts:
         std::map<std::string, double> offline_fracs;
+	std::mutex offline_fracs_mtx;	
+
 	bool offline_use_td; // if we're using the offline TD version. i.e. all nodes are TD.
 	std::map<std::string, int> offline_node_core_map; // needed for assigning each node to the right core.
 	int fifo_nc; // for testing Davare et al : denotes #cores for fifo, -1 o.w.
@@ -81,6 +84,11 @@ private:
 	boost::mutex sched_thread_mutex;
 	bool cc_end, ready_sched;
 	boost::condition_variable cv_sched_thread;
+
+	boost::thread* startup_thread; // triggers nodes until main scheduling starts
+	void startup_trigger_func();
+
+	void handle_sched_main();
 
 	DAGControllerFE* frontend;
 	
