@@ -14,7 +14,7 @@
 #include <mutex>
 
 #include <dag_controller_fe.h>
-#include <dag.h>
+#include <dag_multi_core_approx.h>
 
 class DAGControllerBE
 {
@@ -47,6 +47,7 @@ public:
         std::vector<double> reset_count; // Nov: to reset counters of NC'.
 
         DAG node_dag;
+	MultiCoreApproxSolver multi_core_solver;
 	std::string dag_name;
 	
 	DAGControllerBE();

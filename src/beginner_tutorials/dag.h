@@ -46,8 +46,9 @@ public:
 	std::vector<int> n_chains;
 
 	// constraints on period of this node.
-	// if fixed_period > 0, use that for finding RT.
-	double fixed_period, max_period; 
+	// if fixed_period > 0, use that in RT formula.
+	double fixed_period = 0.0;
+	double max_period = 0.0; 
 };
 
 class Monomial
@@ -146,7 +147,9 @@ public:
 	
 	std::map<int, std::vector<int>> get_period();
 	void compute_rt_chain(int i, std::map<int, std::vector<int>>& period_map);
-	
+
+	void compute_rt_chain_wc(int i, std::map<int, std::vector<int>>& period_map);
+
 	std::map<int, std::vector<int>> period_map; // node -> set of frac vars, e.g. f1*f4.
 	std::vector< std::map<std::string, Monomial> > all_rt_periods;
 	std::vector< std::map<int, MaxMonomial> > all_rt_maxmono_periods;

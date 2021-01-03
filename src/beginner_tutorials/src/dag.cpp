@@ -232,14 +232,15 @@ DAG::DAG(std::string fname)
 				//its a node!!
 				DAGNode n;
 				std::string name;
-				float ci;
-				ss >> name >> ci;
+				float ci, fixed_per;
+				ss >> name >> ci >> fixed_per;
 
 				n.name = name;
 				n.id = node_count;
-				n.compute = ci;				
+				n.compute = ci;
+				n.fixed_period = fixed_per;
 
-				std::cout << "Adding node, name : " << name << ", id : " << n.id << ", ci :" << ci << std::endl;
+				std::cout << "Adding node, name : " << name << ", id : " << n.id << ", ci :" << ci << ", fixed_period: " << fixed_per << std::endl;
 
 				id_name_map[node_count] = name;
 				id_node_map[node_count] = n;
@@ -431,13 +432,17 @@ void DAG::assign_src_rates()
 		else
 		{
 			// each new src node gets a new var to denote its fractional rate wrt most_critical_src
-			curr_count += 1;
-			id_node_map[ chain[0] ].pub_rate = curr_count;
+			if (id_node_map[ chain[0] ].pub_rate == -1)
+			{
+				curr_count += 1;
+				id_node_map[ chain[0] ].pub_rate = curr_count;
 			
-			// Aug23 : USING global VAR count here.
-			id_node_map[ chain[0] ].pub_rate_frac_var_id = global_var_count;
-			global_var_count += 1;
-                        global_var_desc.push_back(std::make_tuple(id_node_map[ chain[0] ].name, id_node_map[ chain[0] ].id, "OUT", -1 ));
+				// Aug23 : USING global VAR count here.
+				id_node_map[ chain[0] ].pub_rate_frac_var_id = global_var_count;
+				global_var_count += 1;
+			        global_var_desc.push_back(std::make_tuple(id_node_map[ chain[0] ].name, id_node_map[ chain[0] ].id, "OUT", -1 ));
+
+			}
 			
 		}
 		std::cout << "For src node " << id_name_map[ chain[0] ] << ", rate (as gvc var_id) : " << id_node_map[ chain[0] ].pub_rate_frac_var_id << std::endl;
@@ -571,6 +576,77 @@ void DAG::update_chain_min_rate(std::vector<int>& a, std::vector<std::vector<int
 	std::cout << "New len of chain_min_rate :" << x.size() << std::endl;
 }
 
+void DAG::compute_rt_chain_wc(int i, std::map<int, std::vector<int>>& period_map)
+{
+	// computing RT of a chain
+	// using w.c. latency formula similar to davare et al.
+	// RT = approx tput + p0 + sum 2*pi.
+	// TODO: Handle fixed_period nodes/subchains.
+	std::cout << "STARTING TRAVERSING CHAIN id " << i << std::endl;
+
+	std::map<std::string, Monomial> rt_periods;
+	std::map<int, MaxMonomial> rt_maxmono_periods;
+	std::map<int, MinMonomial> rt_minmono_periods;
+
+	std::vector<int>& ith_chain = std::get<1>(all_chains[i]);
+
+	int mono_len = global_var_count;
+
+	Monomial m1 (1.0, period_map[ith_chain[0]], mono_len, -1);
+	add_mono_to_map(rt_periods, m1);
+
+	if (i == 0)
+		std::cout << "Most critical chain!! Only adding const 1 to the monomial set. \n";
+	else
+	{
+		MaxMonomial tput (global_var_count, true);
+		tput.insert_mono(m1);
+		
+		std::vector<std::vector<int> > min_rate_tput; // add a new set whenever there's asynchrony.
+		global_var_count += 1;
+		global_var_desc.push_back( std::make_tuple("chain_approx_tput", i, "", -1) );
+
+		for (int j = 0; j < (ith_chain.size()-1); j++)
+		{
+			std::cout << "Processing Edge from " << ith_chain[j] << std::endl;
+			Monomial mt (1.0, period_map[ith_chain[j+1]], mono_len, -1);
+			tput.insert_mono(mt);
+			update_chain_min_rate(period_map[ith_chain[j]], min_rate_tput);
+
+			DAGNode& nj = id_node_map[ith_chain[j]]; // node j
+			DAGNode& nj1 = id_node_map[ith_chain[j+1]]; // node j+1
+
+			if ( (nj1.trigger_node == nj.id) && (nj.out_edges[nj1.id] == -1) )
+			{
+				// Running at same rate, do nothing
+				std::cout << "Case C1 : Do nothing! Wohoo! \n";
+			}
+			else
+			{
+				// Add 2*(#periods in nj1) to rt_periods.
+				double mt_const = 2.0;
+				if ( nodes_in_most_critical_chain.find(nj1.id) != nodes_in_most_critical_chain.end() )
+					mt_const = 1.0; // i.e. no waiting time if CC.
+				Monomial mt2 (mt_const, period_map[ith_chain[j+1]], mono_len, -1);
+				add_mono_to_map(rt_periods, mt2);
+			}
+		}
+		rt_maxmono_periods[tput.gvc_id] = tput;
+	}
+
+	// For RT, we have latency as #Periods + Tput.
+	std::cout << "Printing rt_periods : " << std::endl;
+	print_mono_map(rt_periods);
+
+	std::cout << "Printing rt_maxmono_periods : " << std::endl;
+	for (std::map<int, MaxMonomial>::iterator it = rt_maxmono_periods.begin(); it != rt_maxmono_periods.end(); it++)
+		it->second.print();
+
+	all_rt_periods.push_back(rt_periods);
+	all_rt_maxmono_periods.push_back(rt_maxmono_periods);
+	all_rt_minmono_periods.push_back(rt_minmono_periods);
+}
+
 /* Inputs : index of chain in array, map of node id -> its fraction of execution. e.g. f1*f2 will be [1,2].
    This function computes the RT as the number of periods, in the form of a set of monomials.
    Which can be multiplied with the set of monomials representing the period to get the RT expression.
@@ -627,6 +703,7 @@ void DAG::compute_rt_chain(int i, std::map<int, std::vector<int>>& period_map)
 			else if ( nodes_in_most_critical_chain.find(nj1.id) != nodes_in_most_critical_chain.end() )
 			{
 				// Case C2:
+				// Note that this assumes that CC has f=1 and is on same core as node nj.
 				std::cout << "Case C2 \n";
 				Monomial m (1.0, std::vector<int> (0), mono_len, -1);
 				add_mono_to_map(rt_periods, m);
@@ -987,7 +1064,7 @@ std::vector<int> DAG::compute_rt_solve()
 	// Then, we need to add a row to Ax+B thing for EACH monomial in the RT expr for EACH chain.
 	
 	for (int j = 0; j < all_chains.size(); j++)
-		compute_rt_chain(j, period_map);
+		compute_rt_chain_wc(j, period_map); // Jan2: Trying WC RT formula.
 	
 	int total_vars = global_var_count+1;
 	std::cout << "Total variables : " << total_vars << std::endl;
@@ -1015,7 +1092,6 @@ std::vector<int> DAG::compute_rt_solve()
 	print_mono_map(all_rt_periods[0]);
 
 	std::cout << "DONE with computing rt for each chain. Starting to make variables now \n";	
-
 	
 	// Initialize mosek solver:
 	mosek_model = new Model("single_core_scheduler_algo");
@@ -1079,7 +1155,7 @@ std::vector<int> DAG::compute_rt_solve()
 	}
 	else
 	{
-		std::cout << "CONSTRAINT FORMULATION. Part-I : MINIMIZING RT0 \n";
+		std::cout << "CONSTRAINT FORMULATION. Part-I : MINIMIZING RT0 + 0.001*other RTs \n";
 		// Done: minimize the RT for most critical chain + constraints for all chains.
 		// minimize CC RT + very_small_numer*(sum of RT of all other chains)
 		// Constraint A : R0 <= last_variable
@@ -1161,7 +1237,10 @@ std::vector<int> DAG::compute_rt_solve()
 	// Done: round off to closest integer.
 	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);
 	for (int i = 0; i < total_vars; i++)
+	{
 		all_frac_vals[i] = (int) round( 1.0/((*opt_ans)[i]) );
+		printf("var %i : %f", i, (*opt_ans)[i]);
+	}
 	std::cout << "OPTIMAL ANSWER : " << (*opt_ans)[0] << ", " << (*opt_ans)[1] << ", " << (*opt_ans)[2] << ", " << (*opt_ans)[3] << std::endl;
 	// std::cout << (int) round(2.3) << ", " << (int) round(2.7) << ", " << (int) round(1.11) << ", " << std::endl;
 	print_vec(all_frac_vals, "Here are all the variables [1/fi] rounded to closest integer ");

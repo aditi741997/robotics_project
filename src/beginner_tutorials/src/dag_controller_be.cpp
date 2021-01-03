@@ -50,10 +50,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		node_dag.fill_trigger_nodes();
                 node_dag.assign_publishing_rates();
                 node_dag.assign_src_rates();
+		
+		multi_core_solver = MultiCoreApproxSolver(&node_dag, 3);
+		multi_core_solver.solve();
 
 		frac_var_count = node_dag.global_var_count;
 		// Nov: Solving for fi's commented for offline stage:
-		// all_frac_values = node_dag.compute_rt_solve();
+		all_frac_values = node_dag.compute_rt_solve();
 		// period_map = node_dag.period_map;
 
 		exec_order = node_dag.get_exec_order();
@@ -348,7 +351,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		// it executes first. [since it'll be ahead in the list of same prio.]
 		for (int j = exec_order[ind].size()-1 ; j >= 0; j-- )
 		{
-			printf("Monotime %f, realtime %f, ABOUT TO change prio for node %s to %i, tid %i \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[exec_order[ind][j]].c_str(), prio, node_tid[node_dag.id_name_map[exec_order[ind][j]] ] );
+			// printf("Monotime %f, realtime %f, ABOUT TO change prio for node %s to %i, tid %i \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[exec_order[ind][j]].c_str(), prio, node_tid[node_dag.id_name_map[exec_order[ind][j]] ] );
 			ret = ( ret && ( sched_setscheduler( node_tid[node_dag.id_name_map[exec_order[ind][j]] ] , SCHED_FIFO, &sp) ) );
 			if (ret != 0)
 				std::cerr << "WEIRD!!! Changing prio for node exec_order" << ind << "-" << j << " to " << prio << std::endl;
