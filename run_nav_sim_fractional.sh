@@ -5,15 +5,15 @@ source devel/setup.bash
 sleep 2s
 ct=7
 td="nono"
-for navpF in 1.928 #1.056 #5.0 #1.0 0.2
+for navpF in 1.259 #1.056 #5.0 #1.0 0.2
 do
-	for mcbF in 3.85 #1.107 #10.0 7.0 4.0 1.0 0.4 0.16 
+	for mcbF in 10.07 #1.107 #10.0 7.0 4.0 1.0 0.4 0.16 
 	do
-		for muF in 1.928 #1.056 #10.0 #5.0 1.0 0.4
+		for muF in 1.259 #1.928 #1.056 #10.0 #5.0 1.0 0.4
 		do
-			for navcF in 9.0 #5.8125 #20.0 #10.0 5.0 1.0
+			for navcF in 30.23 #9.0 #5.8125 #20.0 #10.0 5.0 1.0
 			do
-				for ccF in 54.0 #23.25 #20.0 #10.0 5.0 2.5 1.0 
+				for ccF in 30.23 #54.0 #23.25 #20.0 #10.0 5.0 2.5 1.0 
 				do
 					#check machine id, run this only if ct%mccount == mcid
 					#div=$((ct%mccount))
@@ -22,12 +22,12 @@ do
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in 10 # 3 4 5 ##4 #8 9 10 
+						for run in 4 # 3 4 5 ##4 #8 9 10 
 						do
 							rm ../robot_nav2d_obstacleDist_logs_.txt
 							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage.launch &
 							sleep 7s
-							ename="DFracV2_1c_run$run"
+							ename="DFracNewMap_1c_run$run"
 							
 							echo "DELETING OLD LOGFILES For this expt:"
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
@@ -46,7 +46,7 @@ do
 
 							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
 							sleep 2s
-							taskset -a -c 6 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d" $td "no" 14 28 6 28 1 1 1 0 &
+							taskset -a -c 6 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d" $td "no" 3 24 1 24 1 1 1 1 &
 							
 							# Start evt with prio=1, in any core.
 							sleep 2s
@@ -58,7 +58,7 @@ do
 							sleep 12s
 							rosservice call /robot_0/StartMapping
 							
-							taskset -a -c 6-7 python src/rbx/src/move_dynamic_obstacles_nav2d.py 200 0.15 0.9 > "nav2d_moveObst_logs_${ename}.txt" &
+							#taskset -a -c 6-7 python src/rbx/src/move_dynamic_obstacles_nav2d.py 200 0.15 0.9 > "nav2d_moveObst_logs_${ename}.txt" &
 							# Before startingExpl, Look for MAPPING Failed / Successful.
 							failct="0"
 							success="0"
@@ -109,7 +109,7 @@ do
 								t=$((t+1))
 								sleep 5s
 								echo "j&t: ", $j, $t
-								timelimit=240 # divide timelimit=800s by sleeptime=5s.
+								timelimit=120 # divide timelimit=800s by sleeptime=5s.
 								if [ $t = $timelimit ]; then
 									j=2
 									echo "!!!!!~~~%%% EXPLORATION DIDNT FINISH EVEN IN ", $timelimit, "For: ", $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
@@ -127,7 +127,7 @@ do
 							done
 							kill -9 $(ps -ef | grep "move_dynamic_obstacles_nav2d" | grep -v grep | awk '{print $2}')
 							sleep 10s
-							rosclean purge -y
+							#rosclean purge -y
 						done					
 					fi
 					# increment global counter in the end : Remains same for runs' loop.

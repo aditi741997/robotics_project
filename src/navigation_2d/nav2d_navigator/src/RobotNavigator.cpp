@@ -175,6 +175,9 @@ RobotNavigator::RobotNavigator()
 	navp_exec_info_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_start_navp", 1, true);
 	navc_exec_info_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_start_navc", 1, true);
 
+	navc_exec_end_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_end_navc", 1, true);
+	navp_exec_end_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_end_navp", 1, true);
+
 	// For measuring tput of subchains :
 	last_nav_cmd_out = 0.0;
 	last_nav_plan_out = 0.0;
@@ -361,7 +364,7 @@ bool RobotNavigator::preparePlan()
 	}
 	
 	// Where am I?
-	if(!setCurrentPosition(1)) return false;
+	if(!setCurrentPosition(1) || (get_pos_tf_error_ct>1)) return false;
 	
 	// Clear robot footprint in map
 	unsigned int x = 0, y = 0;
@@ -774,7 +777,7 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 		loopRate.sleep();
 	}
 	
-	if(!getMap() || !setCurrentPosition())
+	if(!getMap() || !setCurrentPosition() || (get_pos_tf_error_ct>0) )
 	{
 		mGetMapActionServer->setAborted();
 		stop();
@@ -1114,7 +1117,8 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
         nh.param<std::string>("/use_td", use_td, "");
 
         bool use_timer = ( use_td.find("yes") != std::string::npos );
-        ROS_ERROR("In navPlanLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
+        // use_timer = true;
+	ROS_ERROR("In navPlanLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
 
 	while(true)
 	{
@@ -1134,7 +1138,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		
 		// Where are we now : Uses the tf output from Mapper Node.
 		mHasNewMap = false;
-		if(!setCurrentPosition(1))
+		if(!setCurrentPosition(1) || (get_pos_tf_error_ct > 1) )
 		{
 			ROS_ERROR("Exploration failed. could not get current position.");
 			mExploreActionServer->setAborted();
@@ -1254,6 +1258,10 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 			explore_cb_plan_ts.push_back(exec_rt_end);
 			ROS_WARN("Exploration planning took %f cputime using CLOCK_THREAD_CPUTIME_ID", plan_t);
 
+			std_msgs::Header np_ee;
+			np_ee.frame_id = std::to_string(plan_t) + " navp";
+			navp_exec_end_pub.publish(np_ee);
+
 			// Making a separate thread for Navigator generateCommand
 			// It should start after a plan has been made.
 			if (nav_cmd_thread_ == NULL)
@@ -1261,6 +1269,11 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 				nav_cmd_thread_shutdown_ = false;
 				ROS_ERROR("IN RobotNavigator::receiveExploreGoal, STARTING navCmd thread!!");
 				nav_cmd_thread_ = new boost::thread(boost::bind(&RobotNavigator::navGenerateCmdLoop, this));
+			}
+
+			if (nav_cmd_thread_shutdown_)
+			{
+				// if the navC shuts down due to tf error, fail expl and exit.
 			}
 		// }
 	
@@ -1351,7 +1364,7 @@ void RobotNavigator::navGenerateCmdLoop()
 		}
 
 		// Need to get latest position.
-		if (!setCurrentPosition(0))
+		if (!setCurrentPosition(0) || (get_pos_tf_error_ct > 1))
 		{
 			ROS_WARN("Exploration failed, could not get current position. Stopping nav_cmd_thread_");
 			nav_cmd_thread_shutdown_ = true;
@@ -1386,7 +1399,11 @@ void RobotNavigator::navGenerateCmdLoop()
 
 			explore_cb_cmd_times.push_back(cmd_t);
 			explore_cb_cmd_ts.push_back(exec_rt_end);
-			
+		
+			std_msgs::Header nc_ee;
+			nc_ee.frame_id = std::to_string(cmd_t) + " navc";
+			navc_exec_end_pub.publish(nc_ee);
+
 			double time_now = exec_rt_end;		
 	
 			// Measuring NavC tput : check if used a new tf or a new plan?
@@ -1467,8 +1484,9 @@ bool RobotNavigator::setCurrentPosition(int x)
 		// ROS_WARN("IN ROBOTNavigator:: setCurrentPosition, TS of TF bw /map and /base_footp : %f, x: %i", current_mapper_tf_scan_ts, x);
 	}catch(TransformException ex)
 	{
-		ROS_ERROR("In setCurrentPosition() : Could not get robot position: %s", ex.what());
-		return false;
+		get_pos_tf_error_ct += 1;
+		ROS_ERROR("In setCurrentPosition() : Could not get robot position: %s, TF_ERROR CT: %i", ex.what(), get_pos_tf_error_ct);
+		return true; // Jan: Modifying so that we exit from exploration only after we've seen this error 2/3 times.
 	}
 	double world_x = transform.getOrigin().x();
 	double world_y = transform.getOrigin().y();
