@@ -16,6 +16,11 @@
 using namespace mosek::fusion;
 using namespace monty;
 
+void logsumexp(Model::t                             M,
+               std::shared_ptr<ndarray<double, 2>>  A,
+	        Variable::t                          x,
+		std::shared_ptr<ndarray<double, 1>>  b);
+
 class DAGNode
 {
 public:

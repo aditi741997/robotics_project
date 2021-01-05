@@ -51,12 +51,17 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
                 node_dag.assign_publishing_rates();
                 node_dag.assign_src_rates();
 		
-		multi_core_solver = MultiCoreApproxSolver(&node_dag, 3);
-		multi_core_solver.solve();
+		int num_cores = 3;
+		multi_core_solver = MultiCoreApproxSolver(&node_dag, num_cores);
+		std::vector< std::vector<int> > sc_core_assgt = multi_core_solver.solve();
+		DAGMultiCore node_dag_mc = DAGMultiCore(dag_file);
+		node_dag_mc.set_params(num_cores, sc_core_assgt);
+		node_dag_mc.assign_fixed_periods();
+		node_dag_mc.compute_rt_solve();
 
 		frac_var_count = node_dag.global_var_count;
 		// Nov: Solving for fi's commented for offline stage:
-		all_frac_values = node_dag.compute_rt_solve();
+		// all_frac_values = node_dag.compute_rt_solve();
 		// period_map = node_dag.period_map;
 
 		exec_order = node_dag.get_exec_order();
@@ -207,7 +212,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
 					cc_end = true;
 					ready_sched = true;
-					printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
+					//printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
 					cv_sched_thread.notify_all();
 				}
 
@@ -464,33 +469,41 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			node_dag.clear_old_data(frac_var_count);
 			// update compute times to be 75ile of recent data.
 			node_dag.update_cis(node_ci_arr);
-			// call compute_rt_solve
-			all_frac_values = node_dag.compute_rt_solve();
-			// get period map node_id -> set of f_ids.
-			period_map = node_dag.period_map; 
-			// update CC freq:
-			// Update fractions.
-			// For each NC subchain, fraction = 1.0/[multiply all_frac_vals[i] for all i in period_map[subchain]]
-			double period = 0.0;
-
-			// take a lock to change offline_fracs: [i.e. the handle_Sched thread might have to wait a little bit sometimes before getting timeout value.] 
-			offline_fracs_mtx.lock();
-			for (auto const& x : period_map)
+			try
 			{
-				double frac = 1.0;
-				for (int i = 0; i < x.second.size(); i++)
-					frac *= 1.0/all_frac_values[x.second[i]];
-				printf("MonoTime: %f, RealTime: %f, In new soln, Fraction for node %s is %f \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[x.first].c_str(), frac);
-				// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << "In new soln, Fraction for node " << node_dag.id_name_map[x.first] << " is : " << frac << std::endl;
-				period += node_dag.id_node_map[x.first].compute * frac;
-				offline_fracs [ node_dag.id_name_map[x.first] ] = frac;
-			}
-			offline_fracs_mtx.unlock();
+				// call compute_rt_solve
+				all_frac_values = node_dag.compute_rt_solve();
+				// get period map node_id -> set of f_ids.
+				period_map = node_dag.period_map; 
+				// update CC freq:
+				// Update fractions.
+				// For each NC subchain, fraction = 1.0/[multiply all_frac_vals[i] for all i in period_map[subchain]]
+				double period = 0.0;
 
-			printf("MonoTime: %f, RealTime: %f, In new soln, CC period is %f \n", get_monotime_now() , get_realtime_now(), period);
-			// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << "In new soln, CC period is " << period << std::endl;
-			std::string cmd = "rosrun dynamic_reconfigure dynparam set /shim_freq_node cc_freq " + std::to_string(1000.0/(period) ); // since period is in millisec.
-			system(cmd.c_str());
+				// take a lock to change offline_fracs: [i.e. the handle_Sched thread might have to wait a little bit sometimes before getting timeout value.] 
+				offline_fracs_mtx.lock();
+				for (auto const& x : period_map)
+				{
+					double frac = 1.0;
+					for (int i = 0; i < x.second.size(); i++)
+						frac *= 1.0/all_frac_values[x.second[i]];
+					printf("MonoTime: %f, RealTime: %f, In new soln, Fraction for node %s is %f \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[x.first].c_str(), frac);
+					// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << "In new soln, Fraction for node " << node_dag.id_name_map[x.first] << " is : " << frac << std::endl;
+					period += node_dag.id_node_map[x.first].compute * frac;
+					offline_fracs [ node_dag.id_name_map[x.first] ] = frac;
+				}
+				offline_fracs_mtx.unlock();
+
+				printf("MonoTime: %f, RealTime: %f, In new soln, CC period is %f \n", get_monotime_now() , get_realtime_now(), period);
+				// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << "In new soln, CC period is " << period << std::endl;
+				std::string cmd = "rosrun dynamic_reconfigure dynparam set /shim_freq_node cc_freq " + std::to_string(1000.0/(period) ); // since period is in millisec.
+				system(cmd.c_str());
+
+			}
+			catch (int e)
+			{
+				printf("MonoTime: %f, RealTime: %f, EXCEPTION in trying to solve GP %i", get_monotime_now() , get_realtime_now(), e);
+			}
 		}
 	
 	}

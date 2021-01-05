@@ -215,6 +215,7 @@ DAG::DAG(std::string fname)
 {
 	global_var_count = 0;
 	// Read out DAG structure from file.
+	std::cout << "IN DAG Constructor!! \n";
 	std::ifstream df(fname);
 	std::vector<std::tuple<float, std::vector<int>, float, int > > chains;
 	if (df.is_open())
@@ -451,6 +452,7 @@ void DAG::assign_src_rates()
 
 std::vector<std::vector<int> > DAG::get_exec_order()
 {
+	printf("IN DAG::get_exec_order!!! \n");
 	std::vector<std::vector<int> > exec_order;
 	std::set<int> covered_nodes;
 	for (int i = 0; i < all_chains.size(); i++)

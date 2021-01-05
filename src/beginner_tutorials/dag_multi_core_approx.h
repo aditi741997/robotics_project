@@ -23,7 +23,7 @@ class MultiCoreApproxSolver
 		MultiCoreApproxSolver();
 		MultiCoreApproxSolver(DAG* ndag, int k);
 
-		std::vector<int> solve();
+		std::vector<std::vector<int> > solve();
 
 	private:
 		DAG* node_dag;

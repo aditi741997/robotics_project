@@ -14,7 +14,7 @@
 #include <mutex>
 
 #include <dag_controller_fe.h>
-#include <dag_multi_core_approx.h>
+#include <dag_mc.h>
 
 class DAGControllerBE
 {

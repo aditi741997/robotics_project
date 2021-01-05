@@ -27,8 +27,8 @@ MultiCoreApproxSolver::MultiCoreApproxSolver(DAG* ndag, int k)
 	node_dag = ndag;
 }
 
-// exec_order_id -> core_id
-std::vector<int> MultiCoreApproxSolver::solve()
+// exec_order_id -> cores
+std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 {
 	struct timespec full_start, solve_start, full_end;
 	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &full_start);
@@ -356,10 +356,10 @@ std::vector<int> MultiCoreApproxSolver::solve()
 
 	std::cout << "Time Full: " << ( (full_end.tv_sec + full_end.tv_nsec*1e-9) - (full_start.tv_sec + 1e-9*full_start.tv_nsec) ) << std::endl;
 	
-	std::vector<int> core_assgt (num_subchains, -1);
+	std::vector<std::vector<int>> core_assgt (num_subchains, std::vector<int>() );
 	for (int i = 0; i < num_subchains; i++)
 		for (int j = 0; j < num_cores; j++)
 			if ( (*opt_aij)[i*num_cores+j] > 0.9 )
-				core_assgt[i] = j;
+				core_assgt[i].push_back(j); // = j;
 	return core_assgt;
 }
