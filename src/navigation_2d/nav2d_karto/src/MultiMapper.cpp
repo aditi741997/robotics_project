@@ -247,6 +247,9 @@ MultiMapper::MultiMapper()
 
 	map_upd_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapupd", 1, true);
         map_update_thread_ = new boost::thread(boost::bind(&MultiMapper::mapUpdateLoop, this, mMapUpdateRate));
+
+	map_cb_exec_end_pub = robotNode.advertise<std_msgs::Header>("exec_end_mapcb", 1, true);
+	map_upd_exec_end_pub = robotNode.advertise<std_msgs::Header>("exec_end_mapupd", 1, true);
 }
 
 MultiMapper::~MultiMapper()
@@ -318,7 +321,8 @@ void MultiMapper::mapUpdateLoop(double map_update_rate)
         nh.param<std::string>("/use_td", use_td, "");
 
         bool use_timer = ( use_td.find("yes") != std::string::npos );
-        ROS_ERROR("In mapUpdateLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
+	// use_timer = true;
+	ROS_ERROR("In mapUpdateLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
 
 	while (nh.ok() && !map_update_thread_shutdown_)
 	{
@@ -832,6 +836,12 @@ void MultiMapper::processLatestScan()
 					scan_cb_times.push_back(t);
 					scan_cb_ts.push_back(exec_rt_end);
 
+					std_msgs::Header mcb_ee;
+					std::stringstream ss;
+					ss << t;
+					mcb_ee.frame_id = ss.str() + " mapcb";
+					map_cb_exec_end_pub.publish(mcb_ee);
+
 				boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
 				// boost::chrono::system_clock::duration tse = now.time_since_epoch();
 				if (total_mapcb_count > 1)
@@ -927,6 +937,7 @@ void MultiMapper::mapScanCBLoop(double per)
     	nh.param<std::string>("/use_td", use_td, "");
 
 	bool use_timer = ( use_td.find("yes") != std::string::npos );
+	// use_timer = true;
 	ROS_ERROR("In mapScanCBLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
 
         while (nh.ok() && !map_scan_cb_thread_shutdown_)
@@ -1151,6 +1162,12 @@ bool MultiMapper::updateMap()
 	map_update_times.push_back(t);
 	map_update_ts.push_back(exec_rt_end);
 	map_update_scan_count.push_back(scan_count);
+
+	std_msgs::Header mu_ee_pub;
+	std::stringstream ss;
+	ss << t;
+	mu_ee_pub.frame_id = ss.str() + " mapupd";
+	map_upd_exec_end_pub.publish(mu_ee_pub);
 
 	// Measure tput of map Update:
 	boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();

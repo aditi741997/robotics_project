@@ -88,7 +88,7 @@ public:
 
 	boost::mutex scan_lock; // to lock usage of latest_scan_recv.
 
-	ros::Publisher map_cb_exec_info_pub, map_upd_exec_info_pub;
+	ros::Publisher map_cb_exec_info_pub, map_upd_exec_info_pub, map_cb_exec_end_pub, map_upd_exec_end_pub;
 
 	// For fractional scheduling:
 	int mDropFraction;

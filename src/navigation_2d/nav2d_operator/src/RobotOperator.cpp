@@ -90,7 +90,8 @@ RobotOperator::RobotOperator(std::condition_variable* cv_robot_op)
 	mCommandSubscriber = robotNode.subscribe(COMMAND_TOPIC, 1, &RobotOperator::receiveCommand, this, ros::TransportHints().tcpNoDelay() );
 	mControlPublisher = robotNode.advertise<geometry_msgs::Twist>(CONTROL_TOPIC, 1);
 	mCostPublisher = robotNode.advertise<geometry_msgs::Vector3>("costs", 1);
-	
+
+	odom_ts_sub = robotNode.subscribe("odom_ts", 1, &RobotOperator::receiveOdomTFTS, this, ros::TransportHints().tcpNoDelay() );
 	ROS_ERROR("Subscribing to COmmand_Topic : %s, Publishing COntrol %s, Publishing Cost at costs topic", COMMAND_TOPIC, CONTROL_TOPIC);
 
 	// Get parameters from the parameter server
@@ -135,11 +136,13 @@ RobotOperator::RobotOperator(std::condition_variable* cv_robot_op)
         last_scan_mapCB_navCmd_ts = -1.0;
         last_scan_mapCB_navPlan_navCmd_ts = -1.0;
         last_scan_mapCB_mapUpd_navPlan_navCmd_ts = -1.0;
+	last_odom_tf_ts = -1.0;
 
 	last_scan_lcmp_out = 0.0;
         last_scan_mapCB_navCmd_out = 0.0;
         last_scan_mapCB_navPlan_navCmd_out = 0.0;
         last_scan_mapCB_mapUpd_navPlan_navCmd_out = 0.0;
+	last_odom_tf_out = 0.0;
 
         last_scan_mapCB_mapUpd_navPlan_navCmd_recv = -1.0;
 
@@ -150,6 +153,7 @@ RobotOperator::RobotOperator(std::condition_variable* cv_robot_op)
 	count_scan_mapCB_navCmd = 0;
 	count_scan_mapCB_navPlan_navCmd = 0;
 	count_scan_mapCB_mapUpd_navPlan_navCmd = 0;
+	count_odom_lp = 0;
 }
 
 RobotOperator::~RobotOperator()
@@ -277,6 +281,14 @@ void RobotOperator::initTrajTable()
 	}	
 }
 
+void RobotOperator::receiveOdomTFTS(const std_msgs::Header::ConstPtr& msg)
+{
+	//Note that whenever LP runs, it uses the latest odom TF.
+	//Latest since mTrajtable has ts=0 for all entries.
+	// ROS_ERROR("GOT Odom TF TS!!");
+	latest_odom_tf_ts = msg->stamp.toSec();
+}
+
 void RobotOperator::receiveCommand(const nav2d_operator::cmd::ConstPtr& msg)
 {
 	if(msg->Turn < -1 || msg->Turn > 1)
@@ -345,6 +357,7 @@ void RobotOperator::executeCommand()
 	sensor_msgs::PointCloud* originalCloud = getPointCloud(mCurrentDirection, mDesiredVelocity);
 	sensor_msgs::PointCloud transformedCloud;
 
+	double using_odom_tf_ts = latest_odom_tf_ts;
 	try
 	{
 		mTfListener.transformPointCloud(mOdometryFrame,*originalCloud,transformedCloud);
@@ -477,8 +490,8 @@ void RobotOperator::executeCommand()
 
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &exec_end);
 	double exec_rt_end = get_time_now();
-        double t = get_time_diff(exec_start, exec_end);
-        operator_loop_times.push_back(t);
+        double t_ci_lp = get_time_diff(exec_start, exec_end);
+        operator_loop_times.push_back(t_ci_lp);
         operator_loop_ts.push_back(exec_rt_end);
 
         // For measuring RT:
@@ -504,9 +517,26 @@ void RobotOperator::executeCommand()
 	double lat_scan_mapCB_navPlan_navCmd = time_now - using_s_mapCB_navP_navC_ts;
 	double lat_scan_mapCB_mapUpd_navPlan_navCmd = time_now - using_scan_mapCB_mapUpd_navPlan_navCmd_ts;
 
+	double lat_odom_lp = time_now - using_odom_tf_ts;
+
 	if (lat_scan_lcmp > 2.0)
                 ROS_ERROR("Latency weird wrt Scan-LC-LP : using_scan_lcmp_ts : %f", using_scan_lcmp_ts);
 
+	if ( (using_odom_tf_ts > last_odom_tf_ts) && (lat_odom_lp < 10.0) )
+	{
+		lat_odom_lp_arr.push_back(lat_odom_lp);
+		ts_odom_lp_arr.push_back(time_now);
+		count_odom_lp += 1;
+
+		if (last_odom_tf_out > 0.0)
+			tput_odom_lp_arr.push_back(time_now - last_odom_tf_out);
+
+		if (count_odom_lp > 1)
+			rt_odom_lp_arr.push_back(time_now - last_odom_tf_ts);
+
+		last_odom_tf_ts = using_odom_tf_ts;
+		last_odom_tf_out = time_now;
+	}
 
 	// For measuring RT:
         // See if this Operator output was new wrt any chain:
@@ -627,6 +657,14 @@ void RobotOperator::executeCommand()
         	write_arrs_to_file(operator_loop_times, operator_loop_ts, ss);
 	}
 
+	if (operator_loop_times.size() % 200 == 135)
+	{
+		write_arr_to_file(lat_odom_lp_arr, "Latency_Odom_LP");
+		write_arr_to_file(tput_odom_lp_arr, "Tput_Odom_LP");
+		write_arr_to_file(rt_odom_lp_arr, "RT_Odom_LP");
+		write_arr_to_file(ts_odom_lp_arr, "TS_Odom_LP");
+	}
+
 	if (operator_loop_times.size() % 200 == 30)
         {
                 print_arr(lat_scan_lcmp_arr, "Latency wrt Scan-LC-LP chain");
@@ -679,6 +717,8 @@ void RobotOperator::executeCommand()
 		write_arr_to_file(ts_scan_mapCB_navPlan_navCmd_arr, "TS_Scan_MapCB_NavPlan_NavCmd_LP");
         }
 	std_msgs::Header hdr;
+	// Send t_ci_lp as well.
+	hdr.frame_id = std::to_string(t_ci_lp);
 	exec_end_cc_pub.publish(hdr);
 }
 

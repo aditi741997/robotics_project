@@ -85,6 +85,10 @@ public:
         // Need to store TS of [last new output] wrt each chain
         double last_scan_lcmp_out, last_scan_mapCB_navPlan_navCmd_out, last_scan_mapCB_navCmd_out, last_scan_mapCB_mapUpd_navPlan_navCmd_out;
 
+	double last_odom_tf_out, last_odom_tf_ts;
+	long count_odom_lp;
+	std::vector<double> lat_odom_lp_arr, tput_odom_lp_arr, rt_odom_lp_arr, ts_odom_lp_arr;
+
         // Vector of latency for [every new output] wrt each chain
         std::vector<double> lat_scan_lcmp_arr, lat_scan_mapCB_navCmd_arr, lat_scan_mapCB_navPlan_navCmd_arr, lat_scan_mapCB_mapUpd_navPlan_navCmd_arr;
 
@@ -102,6 +106,11 @@ public:
 
 	// For publishing end of exec of CC to controller:
 	ros::Publisher exec_end_cc_pub;
+
+	// For getting TS of odom TF being used:
+	ros::Subscriber odom_ts_sub;
+	void receiveOdomTFTS(const std_msgs::Header::ConstPtr& msg);
+	double latest_odom_tf_ts;
 
 private:
 	// Internal Methods
@@ -154,6 +163,7 @@ private:
 	
 	tf::TransformListener mTfListener;
 	
+
 	ros::Subscriber mCommandSubscriber;
 	ros::Publisher mControlPublisher;
 	ros::Publisher mTrajectoryPublisher;
