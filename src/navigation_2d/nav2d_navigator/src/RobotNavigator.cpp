@@ -120,9 +120,10 @@ RobotNavigator::RobotNavigator()
 	robotNode.param("getmap_action_topic", mGetMapActionTopic, std::string(NAV_GETMAP_ACTION));
 	robotNode.param("localize_action_topic", mLocalizeActionTopic, std::string(NAV_LOCALIZE_ACTION));
 
+	mTfListener = new TransformListener(ros::Duration(20.0) );
 	// Apply tf_prefix to all used frame-id's
-	mRobotFrame = mTfListener.resolve(mRobotFrame);
-	mMapFrame = mTfListener.resolve(mMapFrame);
+	mRobotFrame = mTfListener->resolve(mRobotFrame);
+	mMapFrame = mTfListener->resolve(mMapFrame);
 
 	ROS_ERROR("INitializing nav2d_navigator NODE. mRobotFrame : %s, mMapFrame : %s", mRobotFrame.c_str(), mMapFrame.c_str());
 	ROS_ERROR("IN RobotNavigator NavCmd Freq : %f, NavP: min_replanning_period: %f, max_replanning_period: %f, NavPlanThread period: %f", mFrequency, mMinReplanningPeriod, mMaxReplanningPeriod, mReplanningPeriod);
@@ -226,21 +227,21 @@ void RobotNavigator::socket_recv()
 	{
 		// Got a message:
 		std::string s_msg = msg;
-		ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s", s_msg.c_str());
+		// ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s", s_msg.c_str());
 		memset(msg, 0, 2048); // clear the arr
 		std::stringstream ss(s_msg);
 		std::string to;
 		while(std::getline(ss,to,'\n'))
 		{
-			ROS_ERROR("Processing line : %s", to.c_str());
+			// ROS_ERROR("Processing line : %s", to.c_str());
 			if (to.find("navc") != std::string::npos)
 			{
 				boost::unique_lock<boost::mutex> lock(navc_trigger_mutex);
-				ROS_ERROR("Got a trigger for navc, curr count %i", navc_trigger_count);
+				ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s,  Got a trigger for navc, curr count %i", s_msg.c_str(), navc_trigger_count);
 				if (to.find("RESETCOUNT") != std::string::npos)
 				{
 					navc_trigger_count = 1;
-					ROS_ERROR("Resetting the navc count to 1!!!!");
+					// ROS_ERROR("Resetting the navc count to 1!!!!");
 				}
 				else
 					navc_trigger_count += 1;
@@ -249,11 +250,11 @@ void RobotNavigator::socket_recv()
 			else
 			{
 				boost::unique_lock<boost::mutex> lock(navp_trigger_mutex);
-				ROS_ERROR("Got a trigger for navp, curr_count %i", navp_trigger_count);
+				ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s, Got a trigger for navp, curr_count %i", s_msg.c_str(), navp_trigger_count);
 				if (to.find("RESETCOUNT") != std::string::npos)
                                 {
 					navp_trigger_count = 1;
-					ROS_ERROR("Resetting the navp count to 1!!!!");
+					// ROS_ERROR("Resetting the navp count to 1!!!!");
 				}
 				else
 					navp_trigger_count += 1;
@@ -276,6 +277,7 @@ RobotNavigator::~RobotNavigator()
 	mExplorationPlanner.reset();
 	delete mPlanLoader;
 	close(client_sock_fd);
+	delete mTfListener;
 }
 
 void RobotNavigator::updateMapperScanTSUsedTF(const std_msgs::Header& hdr)
@@ -364,7 +366,7 @@ bool RobotNavigator::preparePlan()
 	}
 	
 	// Where am I?
-	if(!setCurrentPosition(1) || (get_pos_tf_error_ct>1)) return false;
+	if(!setCurrentPosition(1) || (get_pos_tf_error_ct>3)) return false;
 	
 	// Clear robot footprint in map
 	unsigned int x = 0, y = 0;
@@ -727,6 +729,9 @@ bool RobotNavigator::generateCommand()
 		msg.Velocity = 0.5 + (currentPlan_copy[mStartPoint] / 2.0);
 		// msg.Velocity = 0.5 + (mCurrentPlan[mStartPoint] / 2.0);
 	}
+
+	// delete currentPlan_copy:
+	delete[] currentPlan_copy;
 
 	// For measuring RT:
 	msg.LastScanTSScanMapCBMapUpdNavPlanNavCmd = using_curr_plan_mapUpd_scan_ts;
@@ -1138,7 +1143,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		
 		// Where are we now : Uses the tf output from Mapper Node.
 		mHasNewMap = false;
-		if(!setCurrentPosition(1) || (get_pos_tf_error_ct > 1) )
+		if(!setCurrentPosition(1) || (get_pos_tf_error_ct > 3) )
 		{
 			ROS_ERROR("Exploration failed. could not get current position.");
 			mExploreActionServer->setAborted();
@@ -1364,7 +1369,7 @@ void RobotNavigator::navGenerateCmdLoop()
 		}
 
 		// Need to get latest position.
-		if (!setCurrentPosition(0) || (get_pos_tf_error_ct > 1))
+		if (!setCurrentPosition(0) || (get_pos_tf_error_ct > 3))
 		{
 			ROS_WARN("Exploration failed, could not get current position. Stopping nav_cmd_thread_");
 			nav_cmd_thread_shutdown_ = true;
@@ -1465,7 +1470,7 @@ void RobotNavigator::navGenerateCmdLoop()
 
 bool RobotNavigator::isLocalized()
 {
-	return mTfListener.waitForTransform(mMapFrame, mRobotFrame, Time::now(), Duration(0.1));
+	return mTfListener->waitForTransform(mMapFrame, mRobotFrame, Time::now(), Duration(0.1));
 }
 
 bool RobotNavigator::setCurrentPosition(int x)
@@ -1475,7 +1480,7 @@ bool RobotNavigator::setCurrentPosition(int x)
 	{
 		// Spinning here to get the latest tf's TS.
 		spinOnce();
-		mTfListener.lookupTransform(mMapFrame, mRobotFrame, Time(0), transform);
+		mTfListener->lookupTransform(mMapFrame, mRobotFrame, Time(0), transform);
 		if (x == 0)
 			current_mapCB_tf_navCmd_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavCmd.
 		else if (x == 1)
