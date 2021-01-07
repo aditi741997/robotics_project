@@ -1231,23 +1231,61 @@ std::vector<int> DAG::compute_rt_solve()
 		}
 	}
 
-	mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
-	mosek_model->solve();
-	auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
-	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_end);
-
-	// Done: round off to closest integer.
-	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);
-	for (int i = 0; i < total_vars; i++)
+	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 0.0);
+	
+	try
 	{
-		all_frac_vals[i] = (int) round( 1.0/((*opt_ans)[i]) );
-		printf("var %i : %f", i, (*opt_ans)[i]);
+		mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
+		mosek_model->solve();
+		mosek_model->acceptedSolutionStatus(AccSolutionStatus::Optimal);
+		auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_end);
+
+		// Done: round off to closest integer.
+		for (int i = 0; i < total_vars; i++)
+		{
+			all_frac_vals[i] = (int) round( 1.0/((*opt_ans)[i]) );
+			printf("var %i : %f", i, (*opt_ans)[i]);
+		}
+		std::cout << "OPTIMAL ANSWER : " << (*opt_ans)[0] << ", " << (*opt_ans)[1] << ", " << (*opt_ans)[2] << ", " << (*opt_ans)[3] << std::endl;
+
 	}
-	std::cout << "OPTIMAL ANSWER : " << (*opt_ans)[0] << ", " << (*opt_ans)[1] << ", " << (*opt_ans)[2] << ", " << (*opt_ans)[3] << std::endl;
-	// std::cout << (int) round(2.3) << ", " << (int) round(2.7) << ", " << (int) round(1.11) << ", " << std::endl;
+	catch (const OptimizeError& e)
+	{
+		std::cout << "DAG::compute_rt_solve: Optimization failed. Error: " << e.what() << "\n";
+	}
+	catch (const SolutionError& e)
+	{
+		std::cout << "DAG::compute_rt_solve: Requested solution was not available.\n";
+		auto prosta = mosek_model->getProblemStatus();
+		switch(prosta)
+		{
+			case ProblemStatus::DualInfeasible:
+				std::cout << "Dual infeasibility certificate found.\n";
+				break;
+			case ProblemStatus::PrimalInfeasible:
+				std::cout << "Primal infeasibility certificate found.\n";
+				break;
+			case ProblemStatus::Unknown:
+				std::cout << "The solution status is unknown.\n";
+				char symname[MSK_MAX_STR_LEN];
+				char desc[MSK_MAX_STR_LEN];
+				MSK_getcodedesc((MSKrescodee)(mosek_model->getSolverIntInfo("optimizeResponse")), symname, desc);
+				std::cout << "  Termination code: " << symname << " " << desc << "\n";
+				break;
+			default:
+				std::cout << "Another unexpected problem status: " << prosta << "\n";
+		}
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << "DAG::compute_rt_solve: Unexpected error: " << e.what() << "\n";
+	}
+		// std::cout << (int) round(2.3) << ", " << (int) round(2.7) << ", " << (int) round(1.11) << ", " << std::endl;
 	print_vec(all_frac_vals, "Here are all the variables [1/fi] rounded to closest integer ");
 	double total_time_ci = (double)(clock() - ci_start_rt)/CLOCKS_PER_SEC;
 	double solve_time = (double)(clock() - solve_start_rt)/CLOCKS_PER_SEC;	
 	std::cout << "TOTAL time including stuff that uses ci : " << total_time_ci << ", solve time : " << solve_time << ", CPUTime to solve: " << ( (solve_end.tv_sec + solve_end.tv_nsec*1e-9) - (solve_start.tv_sec + 1e-9*solve_start.tv_nsec) ) << std::endl;
+	mosek_model->dispose();
 	return all_frac_vals;
 } 

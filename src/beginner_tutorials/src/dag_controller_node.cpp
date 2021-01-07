@@ -326,6 +326,7 @@ public:
 				char msg[1+hdr.frame_id.length()];
                                 strcpy(msg, hdr.frame_id.c_str());
                                 send(nav_client_fd, msg, strlen(msg), 0);
+				std::cout << "Finished sending trigger to node " << name << std::endl;
 			}
 			else
 				ROS_ERROR("nav_socket_connected IS false!!! Nav-DAGController SOCKET NOT connected!!");
