@@ -38,6 +38,13 @@ private:
 	int node_pid;
 };
 
+double get_time_now()
+{
+	        struct timespec ts;
+		        clock_gettime(CLOCK_MONOTONIC, &ts);
+			        return (ts.tv_sec + 1e-9*ts.tv_nsec);
+}
+
 class DAGController: public DAGControllerFE
 {
         ros::NodeHandle nh;
@@ -316,6 +323,8 @@ public:
 			hdr.frame_id += " RESETCOUNT";
                         // ROS_WARN("RESETTING trigger_ct for NC %s", name.c_str());
 		}
+		hdr.frame_id += " " + std::to_string(get_time_now());
+		hdr.stamp.fromSec(get_time_now());
 		hdr.frame_id += "\n";
                 if (name.find("nav") == std::string::npos)
                 	trigger_nc_exec[name].publish(hdr);
@@ -326,7 +335,6 @@ public:
 				char msg[1+hdr.frame_id.length()];
                                 strcpy(msg, hdr.frame_id.c_str());
                                 send(nav_client_fd, msg, strlen(msg), 0);
-				std::cout << "Finished sending trigger to node " << name << std::endl;
 			}
 			else
 				ROS_ERROR("nav_socket_connected IS false!!! Nav-DAGController SOCKET NOT connected!!");

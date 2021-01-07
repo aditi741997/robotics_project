@@ -62,9 +62,11 @@ public:
 
 	void handle_noncritical_loop();
 
-	void changePriority(int ind);
+	// void changePriority(int ind); change ind of iexec_order to p2, others to p1
+	void changePriority(std::vector<std::vector<int>>& iexec_order, int ind);
 
-	int changePrioritySubChain(int ind, int prio);
+	// int changePrioritySubChain(int ind, int prio);
+	int changePrioritySubChain(std::vector<int>& sc, int prio);
 
 	void recv_node_info(std::string node_name, int tid, int pid=0);
 
@@ -72,10 +74,14 @@ public:
 	void update_ci(std::string node_name, double ci);
 private:
 	void set_high_priority(std::string thread_name);
-	double get_timeout(int ind);  
-	double get_sum_ci_ith(int ind);
+
+	// double get_timeout(int ind); New version for multi-core:  
+	double get_timeout(std::vector<int>& sci);
+	double get_sum_ci_ith(std::vector<int>& sci);
 	bool got_all_info();
-	void checkTriggerExec(int ind);
+	
+	// void checkTriggerExec(int ind);
+	void checkTriggerExec(std::vector<int>& sci);
 
 	boost::thread* timer_thread;
 	void timer_thread_func(double timeout);
@@ -83,8 +89,12 @@ private:
 
 	boost::thread handle_sched_thread;
 	boost::mutex sched_thread_mutex;
-	bool cc_end, ready_sched;
+	std::atomic<bool> cc_end, ready_sched;
 	boost::condition_variable cv_sched_thread;
+
+	// For multi-core scheduling:
+	std::map<int, boost::thread> per_core_sched_threads;
+	std::map<int, long int> per_core_period_count;
 
 	boost::thread* startup_thread; // triggers nodes until main scheduling starts
 	void startup_trigger_func();
