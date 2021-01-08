@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <sstream>
 #include <fstream>
 #include <algorithm>
@@ -14,8 +15,14 @@
 #include <signal.h>
 #include <sched.h>
 #include <pthread.h>
+#include <linux/sched.h>
 
 #include <dag_controller_be.h>
+
+int sched_setattr(pid_t pid, const struct sched_attr *attr, unsigned int flags)
+{
+	        return syscall(__NR_sched_setattr, pid, attr, flags);
+}
 
 double get_monotime_now()
 {
@@ -30,6 +37,25 @@ double get_realtime_now()
         clock_gettime(CLOCK_REALTIME, &ts);
 	return (ts.tv_sec + 1e-9*ts.tv_nsec - 1605000000.0);
 }
+
+	void set_other_policy_pthr(pthread_t& pt)
+	{
+		struct sched_param params;
+		params.sched_priority = 0;
+		int ret = pthread_setschedparam(pt, SCHED_OTHER, &params);
+		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i |", get_monotime_now(), get_realtime_now(), ret);
+	}
+
+	void set_other_policy(int tid, int nice_val)
+	{
+		struct sched_attr attr;
+		attr.size = sizeof (attr);
+		attr.sched_policy = SCHED_OTHER;
+		attr.sched_nice = nice_val;
+		
+		int ret = sched_setattr(tid, &attr, 0);
+		printf("Monotime %f, realtime %f, retval for changing dynamic_reoptimize_func THREAD to OTHER, nice: %i: %i | tid: %i", get_monotime_now(), get_realtime_now(), nice_val, ret, tid);
+	}
 
 DAGControllerBE::DAGControllerBE()
 	{
@@ -110,6 +136,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			{
 				offline_node_core_map["navc"] = 0;
 				offline_node_core_map["navp"] = 0;
+				offline_node_core_map["mapupd"] = 0;
+				offline_node_core_map["mapcb"] = 0;
+				offline_node_core_map["s"] = 0;
 			}
 		}
 
@@ -164,6 +193,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		int ret_pct = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldstate);
 		printf("MonoTime: %f, RealTime: %f, STARTED startup_trigger thread! CC period: %f, sched_started: %i \n", get_monotime_now(), get_realtime_now(), cc_period, sched_started );
 	
+		curr_cc_period = cc_period;
+
 		total_period_count = 0;
 
 		while (!sched_started)
@@ -173,7 +204,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			if (!sched_started)
 			{
 				total_period_count += 1;
-				printf("MonoTime: %f, RealTime: %f, Period ct: %i, checking Trigger for all", get_monotime_now(), get_realtime_now(), total_period_count);
+				printf("MonoTime: %f, RealTime: %f, Period ct: %i, checking Trigger for all, exec_order sz: %i, curr_cc_period: %f", get_monotime_now(), get_realtime_now(), total_period_count, exec_order.size(), curr_cc_period);
 				for (int i = 0; i < exec_order.size(); i++)
 					checkTriggerExec(exec_order[i]);
 			}
@@ -219,7 +250,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
 					cc_end = true;
 					ready_sched = true;
-					//printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
+					printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
 					cv_sched_thread.notify_all();
 				}
 
@@ -240,7 +271,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::handle_sched_main()
 	{
-		set_high_priority("MAIN sched Thread");
+		set_high_priority("MAIN sched Thread", 4, 0);
+		printf("Len of exec_order: %i, curr_cc_period: %f, ceil 0.5: %f \n", exec_order.size(), curr_cc_period, ceil(0.5) );
 		total_period_count = 1;
 		while (true)
 		{
@@ -274,7 +306,19 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			}
 
 			total_period_count += 1;
-			// inc prio of our dynamic_resolve thread for sometime.
+			// inc prio of our dynamic_resolve thread for sometime. to fifo,p2, the whole exec_order to p1 or just the last guy to p1.
+			// assuming 20ms -> 40ms for LowCF needed by reopt thread in 1s : 
+			int one_in_k_per = ceil(1000/(float)(40*curr_cc_period));
+			if (total_period_count%( one_in_k_per ) == 0 && (dynamic_reoptimize))
+			{
+				printf("WANNA run dyn_reopt for 1ms now!!");
+				changePriority(exec_order, -1);
+				set_high_priority("Dyn Reopt thread!", 2, reoptimize_thread_id);
+				std::this_thread::sleep_for( std::chrono::milliseconds(1) );
+				// change policy back to rr, p1. RR wont work!!
+				set_other_policy_pthr(reoptimize_thread_p);
+				// set_high_priority("Dyn Reopt thread!", 1, reoptimize_thread_id);
+			}
 			// max(1ms, 0.05*curr_per) slack time.
 		}
 	}
@@ -285,17 +329,18 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		return node_dag.id_name_map[id];
 	}
 
-	void DAGControllerBE::set_high_priority(std::string thread_name)
+	void DAGControllerBE::set_high_priority(std::string thread_name, int prio, int tid)
 	{
 		// set prio to 4, with FIFO.
-		struct sched_param sp = { .sched_priority = 4,};
-		int ret = sched_setscheduler(0, SCHED_FIFO, &sp);
-		std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " SETTING priority to 4 retval: " << ret << thread_name << std::endl;
-	}
+		struct sched_param sp = { .sched_priority = prio,};
+		int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
+		 printf("MonoTime: %f, RealTime: %f, SETTING priority to %i, for thread: %s, retval: %i \n", get_monotime_now(), get_realtime_now(), prio, thread_name, ret);
+		// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " SETTING priority to " << prio << " retval: " << ret << thread_name << std::endl;
+	 }
 
 	void DAGControllerBE::handle_noncritical_loop()
 	{
-		set_high_priority("NonCritical Loop");
+		set_high_priority("NonCritical Loop", 4, 0);
 		while (true)
 		{
 			boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
@@ -361,7 +406,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				// std::cerr << "WEIRD, Ret value " << ret << " for setting prio of SC node " << node_dag.id_name_map[exec_order[i][0]] << " curr_exec_index: " << curr_exec_index << std::endl;
                                 // ROS_WARN("Weird: Ret value %i for setting priority of subchain node %s, ind to be exec : %i", ret, node_dag.id_name_map[exec_order[i][0]].c_str(), curr_exec_index);
 		}
-		checkTriggerExec(iexec_order[ind]);
+		if (ind>=0)
+			checkTriggerExec(iexec_order[ind]);
 	}
 
 	int DAGControllerBE::changePrioritySubChain(std::vector<int>& sci, int prio)
@@ -469,13 +515,24 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		}
 	}
 
+	
 	void DAGControllerBE::dynamic_reoptimize_func()
 	{
 		std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " STARTING Dynamic Reoptimize thread!" << std::endl;
-		// Maybe set policy to RR, prio4, so can be preempted when get CC msg or when to expires.
+		reoptimize_thread_id = ::gettid();
+		// set_other_policy(reoptimize_thread_id, 1);
+		// set_high_priority("Dynamic Reoptimize thread!", 1, 0);
+		pthread_t this_thread = pthread_self();
+		reoptimize_thread_p = this_thread;
+		struct sched_param params;
+		params.sched_priority = 0;
+		int ret = pthread_setschedparam(this_thread, SCHED_OTHER, &params);
+		// RR doesnt work cuz timeslice=100ms. Setting nice prio highest, will inc its priority for 1ms per period.
+		/*
 		struct sched_param sp = { .sched_priority = 1,};
-		int ret = sched_setscheduler(0, SCHED_RR, &sp);
-		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i", get_monotime_now(), get_realtime_now(), ret);
+		int ret = sched_setscheduler(0, SCHED_OTHER, &sp);
+		*/
+		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i | tid: %i", get_monotime_now(), get_realtime_now(), ret, reoptimize_thread_id);
 
 		while (true)
 		{
@@ -488,8 +545,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			try
 			{
 				// call compute_rt_solve
+				double solve_start = get_monotime_now();
 				all_frac_values = node_dag.compute_rt_solve();
-				
+				printf("Monotime %f, realtime %f, Mono-time taken to solve GP: %f \n", get_monotime_now(), get_realtime_now(), (get_monotime_now()-solve_start) );
+
 				if (all_frac_values[0] > 0)
 				{
 					// get period map node_id -> set of f_ids.
@@ -511,6 +570,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 						period += node_dag.id_node_map[x.first].compute * frac;
 						offline_fracs [ node_dag.id_name_map[x.first] ] = frac;
 					}
+					curr_cc_period = period;
 					offline_fracs_mtx.unlock();
 
 					printf("MonoTime: %f, RealTime: %f, In new soln, CC period is %f \n", get_monotime_now() , get_realtime_now(), period);
@@ -555,7 +615,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	// Func to just sleep for timeout millisec and then notify cv.
 	void DAGControllerBE::timer_thread_func(double timeout)
 	{
-		set_high_priority("Timer thread");
+		set_high_priority("Timer thread", 4, 0);
 		// set canceltype to asynchronous.
 		int oldstate;
 		int ret_pct = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldstate);

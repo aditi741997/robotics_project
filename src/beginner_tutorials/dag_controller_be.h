@@ -1,3 +1,4 @@
+#define _GNU_SOURCE
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -16,6 +17,46 @@
 #include <dag_controller_fe.h>
 #include <dag_mc.h>
 
+#include <sched.h>
+#include <linux/unistd.h>
+#include <linux/kernel.h>
+#include <linux/types.h>
+#include <sys/syscall.h>
+#include <pthread.h>
+
+#define gettid() syscall(__NR_gettid)
+#define SCHED_OTHER 0
+
+/* XXX use the proper syscall numbers */
+#ifdef __x86_64__
+#define __NR_sched_setattr 314
+#define __NR_sched_getattr 315
+#endif
+#ifdef __i386__
+#define __NR_sched_setattr 351
+#define __NR_sched_getattr 352
+#endif
+#ifdef __arm__
+#define __NR_sched_setattr 380
+#define __NR_sched_getattr 381
+#endif
+
+struct sched_attr {
+	__u32 size;
+	__u32 sched_policy;
+	__u64 sched_flags;
+	/* SCHED_NORMAL, SCHED_BATCH */
+	__s32 sched_nice;
+	/* SCHED_FIFO, SCHED_RR */
+	__u32 sched_priority;
+	/* SCHED_DEADLINE (nsec) */
+	__u64 sched_runtime;
+	__u64 sched_deadline;
+	__u64 sched_period;
+};
+
+int sched_setattr(pid_t pid, const struct sched_attr *attr, unsigned int flags);
+
 class DAGControllerBE
 {
 public:
@@ -29,6 +70,7 @@ public:
 	std::map<std::string, boost::circular_buffer<double> > node_ci_arr;
 
         std::vector<std::vector<int> > exec_order; // Output from sched algo: vector of subchains.
+	double curr_cc_period = 0.0;
         std::map<int, std::vector<int>> period_map;
         std::vector<int> all_frac_values;
         int curr_exec_index;
@@ -73,7 +115,7 @@ public:
 	std::string get_last_node_cc_name();
 	void update_ci(std::string node_name, double ci);
 private:
-	void set_high_priority(std::string thread_name);
+	void set_high_priority(std::string thread_name, int prio, int tid);
 
 	// double get_timeout(int ind); New version for multi-core:  
 	double get_timeout(std::vector<int>& sci);
@@ -107,5 +149,7 @@ private:
 	bool dynamic_reoptimize;
 	void dynamic_reoptimize_func(); // update the fraction of all nodes.
 	int frac_var_count; // #vars make during fill_trigger, assign_publishing, assign_src.
+	int reoptimize_thread_id;
+	pthread_t reoptimize_thread_p;	
 };
 
