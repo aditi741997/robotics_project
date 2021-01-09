@@ -97,6 +97,8 @@ public:
 
 	DAGControllerBE(const DAGControllerBE&) = delete;
 
+	void start();
+
 	// FE will call this for each msg from the CC.
         void recv_critical_exec_end();
 

@@ -181,6 +181,11 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		}
 
 		sched_started = false;
+		// startup_thread = new boost::thread(&DAGControllerBE::startup_trigger_func, this);
+	}
+
+	void DAGControllerBE::start()
+	{
 		startup_thread = new boost::thread(&DAGControllerBE::startup_trigger_func, this);
 	}
 
@@ -429,7 +434,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					std::cerr << "WEIRD!!! Changing prio for SC with 0th node:" << sci[0] << "-" << j << " to " << prio << std::endl;
 			}
 			else
-				std::cerr < "NO THREAD ID FOR " << node_dag.id_name_map[sci[j]] << std::endl;
+				std::cerr << "NO THREAD ID FOR " << node_dag.id_name_map[sci[j]] << std::endl;
 		}
 		return ret;
 	}
