@@ -272,7 +272,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::handle_sched_main()
 	{
 		set_high_priority("MAIN sched Thread", 4, 0);
-		printf("Len of exec_order: %i, curr_cc_period: %f, ceil 0.5: %f \n", exec_order.size(), curr_cc_period, ceil(0.5) );
+		printf("Len of exec_order: %zu, curr_cc_period: %f, ceil 0.5: %f \n", exec_order.size(), curr_cc_period, ceil(0.5) );
 		total_period_count = 1;
 		while (true)
 		{
@@ -645,7 +645,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		std::string name = node_dag.id_name_map[id];
 		if ( (ind_p == 1 || (total_period_count%ind_p == 1) ) ) // && (node_tid.find(name) != node_tid.end() ) ) // (ind > 0) && : Removing cuz CC now triggered by scheduler. 
 		{
-			printf("MonoTime: %f, RealTime: %f, About to trigger node: %s, frac: %i, period_count: %i \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, total_period_count);
+			printf("MonoTime: %f, RealTime: %f, About to trigger node: %s, frac: %i, period_count: %li \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, total_period_count);
 		
 			//Nov: We just want there to be a bool at the nodes: Never a trigger_count.
                 	// This is because we always want the node to run exactly once whenever it wakes up, and hence only a bool is needed.	
