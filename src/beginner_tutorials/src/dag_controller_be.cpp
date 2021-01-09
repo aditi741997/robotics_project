@@ -78,7 +78,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
                 node_dag.assign_src_rates();
 
 		/*
-		int num_cores = 3;
+		int num_cores = 1;
 		multi_core_solver = MultiCoreApproxSolver(&node_dag, num_cores);
 		std::vector< std::vector<int> > sc_core_assgt = multi_core_solver.solve();
 		DAGMultiCore node_dag_mc = DAGMultiCore(dag_file);
@@ -294,7 +294,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
 					int ct = 0;
 
-					while ( (!ready_sched) && (ct<10) )
+					while ( (!ready_sched) && (ct<12) )
 					{
 						cv_sched_thread.wait_for(lock, boost::chrono::microseconds(i_to*5) );
 						ct += 1;
@@ -419,6 +419,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		for (int j = sci.size()-1 ; j >= 0; j-- )
 		{
 			// printf("Monotime %f, realtime %f, ABOUT TO change prio for node %s to %i, tid %i \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[exec_order[ind][j]].c_str(), prio, node_tid[node_dag.id_name_map[exec_order[ind][j]] ] );
+			int n_tid = node_tid[node_dag.id_name_map[sci[j]] ];
+			if (n_tid == 0)
+				std::cerr << "WUTT!!!!" << sci[0] << ", " << node_dag.id_name_map[sci[j]] << ", " << (node_tid.find( node_dag.id_name_map[sci[j]] ) == node_tid.end()) << std::endl;
 			ret = ( ret && ( sched_setscheduler( node_tid[node_dag.id_name_map[sci[j]] ] , SCHED_FIFO, &sp) ) );
 			if (ret != 0)
 				std::cerr << "WEIRD!!! Changing prio for SC with 0th node:" << sci[0] << "-" << j << " to " << prio << std::endl;

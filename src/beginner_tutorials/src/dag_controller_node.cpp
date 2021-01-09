@@ -41,8 +41,8 @@ private:
 double get_time_now()
 {
 	        struct timespec ts;
-		        clock_gettime(CLOCK_MONOTONIC, &ts);
-			        return (ts.tv_sec + 1e-9*ts.tv_nsec);
+	        clock_gettime(CLOCK_MONOTONIC, &ts);
+	        return (ts.tv_sec + 1e-9*ts.tv_nsec);
 }
 
 class DAGController: public DAGControllerFE
@@ -67,6 +67,7 @@ class DAGController: public DAGControllerFE
 	std::vector<double> reset_count;
 	ros::Subscriber critical_exec_end_sub;
 	std::map<std::string, ros::Publisher> trigger_nc_exec; // may want to trigger CC's first node too, in the future, for a pure RTC thing.
+	// we may need a map of the following params now: [scan,map,nav nodes]
 	int nav_client_fd, srv_fd, port_no; 
 	bool nav_socket_connected; // for IPC with the Navigator node. 	
 	boost::thread socket_conn_thread; // thread to accept client cnn.
