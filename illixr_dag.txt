@@ -1,17 +1,17 @@
-N imu 0.1
-N 9 0.25
-N 7 4.2
-N 6 2
-N 2 9.7 
-N 3 13.5
-E imu 3 9 X
+N imu 0.2
+N 4 0.4
+N 7 6.0
+N 6 3.5
+N 2 12 
+N 3 20
+E imu 3 4 X
 E 2 3 X
 E 6 7 X
-E 9 6 7 X
-E 3 9 X
-C 30 imu 9 7 X
-C 200 imu 9 6 7 X
-C 300 2 3 9 7 X
-C 400 2 3 9 6 7 X
-C 600 imu 3 9 6 7 X
-C 600 imu 3 9 7 X
+E 4 6 7 X
+E 3 4 X
+C 60 imu 4 7 X
+C 400 imu 4 6 7 X
+C 400 2 3 4 7 X
+C 900 2 3 4 6 7 X
+C 900 imu 3 4 6 7 X
+C 900 imu 3 4 7 X
