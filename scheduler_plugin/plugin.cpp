@@ -10,11 +10,12 @@ class scheduler_plugin : public plugin, public DAGControllerFE {
 public:
     scheduler_plugin(std::string name_, phonebook* pb_)
         : plugin{name_, pb_}
-		, controller{std::make_unique<DAGControllerBE>("../robotics_project/illixr_dag.txt", this, "no", "no", 1, 3, 2, 2, 2, 2, 2)}
+		, controller{std::make_unique<DAGControllerBE>("../robotics_project/illixr_dag.txt", this, false, "no", "no", 1, 2, 3, 4, 5, 6, 7)}
 		, sb{pb->lookup_impl<switchboard>()}
 	{
 		for (const auto& pair : controller->node_dag.name_id_map) {
 			std::string name = pair.first;
+			std::cerr << "Creating entry for " << pair.first << ": " << pair.second << "\n";
 			sb->schedule<thread_info>(
 				id,
 				name + "_thread_id",
@@ -36,9 +37,13 @@ public:
 				controller->recv_critical_exec_end();
 			}
 		);
+
+		controller->start();
 	}
 
 	virtual void trigger_node(std::string name, bool reset) {
+		std::cerr << "trigger_node(" << name << ")\n";
+		assert(triggers.count(name) == 1);
 		triggers.at(name).put(new (triggers.at(name).allocate()) switchboard::event_wrapper<bool> {true});
 	}
 
