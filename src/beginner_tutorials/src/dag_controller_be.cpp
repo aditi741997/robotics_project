@@ -77,7 +77,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
                 node_dag.assign_publishing_rates();
                 node_dag.assign_src_rates();
 
-		// /*
+		/*
 		int num_cores = 1;
 		multi_core_solver = MultiCoreApproxSolver(&node_dag, num_cores);
 		std::vector< std::vector<int> > sc_core_assgt = multi_core_solver.solve();
@@ -85,7 +85,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		node_dag_mc.set_params(num_cores, sc_core_assgt);
 		node_dag_mc.assign_fixed_periods();
 		node_dag_mc.compute_rt_solve();
-		// */
+		*/
 
 		frac_var_count = node_dag.global_var_count;
 		// Nov: Solving for fi's commented for offline stage:
