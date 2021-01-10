@@ -51,5 +51,5 @@ int main(int argc, char **argv)
 
 	std::sort(cpu_times.begin(), cpu_times.end());
 	int l = cpu_times.size();
-	printf("FINISHED %i runs for sieve(%i), Mean %f, Median %f, 75ile %f, 90ile %f, 95ile %f", ct,num, cpu_times_sum/l, cpu_times[l/2], cpu_times[(75*l)/100], cpu_times[(90*l)/100], cpu_times[(95*l)/100] );
+	printf("FINISHED %i runs for sieve(%i), Mean %f, Median %f, 75ile %f, 90ile %f, 95ile %f, 99ile %f", ct,num, cpu_times_sum/l, cpu_times[l/2], cpu_times[(75*l)/100], cpu_times[(90*l)/100], cpu_times[(95*l)/100], cpu_times[(99*l)/100] );
 }
