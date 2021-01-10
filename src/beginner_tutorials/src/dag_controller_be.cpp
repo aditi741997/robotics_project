@@ -77,7 +77,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
                 node_dag.assign_publishing_rates();
                 node_dag.assign_src_rates();
 
-		// /*
+		/*
 		int num_cores = 1;
 		multi_core_solver = MultiCoreApproxSolver(&node_dag, num_cores);
 		std::vector< std::vector<int> > sc_core_assgt = multi_core_solver.solve();
@@ -85,7 +85,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		node_dag_mc.set_params(num_cores, sc_core_assgt);
 		node_dag_mc.assign_fixed_periods();
 		node_dag_mc.compute_rt_solve();
-		// */
+		*/
 
 		frac_var_count = node_dag.global_var_count;
 		// Nov: Solving for fi's commented for offline stage:
@@ -283,7 +283,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		{
 			for (int i = 0; i < exec_order.size(); i++)
 			{
-				printf("Monotime %f, realtime %f, TIME to run subchain #%i, Timeout: %f \n", get_monotime_now(), get_realtime_now(), i, get_timeout(exec_order[i]) );
+				// printf("Monotime %f, realtime %f, TIME to run subchain #%i, Timeout: %f \n", get_monotime_now(), get_realtime_now(), i, get_timeout(exec_order[i]) );
 				// prio(i) = 2, all others = 1.
 				offline_fracs_mtx.lock();
 				long i_to = 1000*get_timeout(exec_order[i]);
@@ -304,7 +304,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 						cv_sched_thread.wait_for(lock, boost::chrono::microseconds(i_to*5) );
 						ct += 1;
 					}
-					printf("Monotime %f, realtime %f, Waited for CC's completion! ct %i ready_sched %i [if 0, CC hasnt ended!] \n", get_monotime_now(), get_realtime_now(), ct, (bool)(ready_sched.load()) );
+					if (ct > 4)
+						printf("Monotime %f, realtime %f, Waited for CC's completion! ct %i ready_sched %i [if 0, CC hasnt ended!] \n", get_monotime_now(), get_realtime_now(), ct, (bool)(ready_sched.load()) );
 				}
 				else
 					std::this_thread::sleep_for( std::chrono::microseconds( i_to ) );
