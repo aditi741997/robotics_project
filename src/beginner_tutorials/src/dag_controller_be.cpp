@@ -195,6 +195,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		shutdown_scheduler = true;
 		if (sched_started)
 			handle_sched_thread.join();
+		else
+			startup_thread->join();
 		if (dynamic_reoptimize)
 			reoptimize_thread.join();
 	}
