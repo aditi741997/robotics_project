@@ -63,6 +63,10 @@ public:
 	// Store tid, pid for each node:
         std::map<std::string, int> node_pid;
         std::map<std::string, int> node_tid; // id of the thread which executes the main cb for a node. 
+	
+	// includes under_the_hood threads such as PMT,CBT associated with each node.
+	std::map<std::string, std::set<int> > node_extra_tids; 
+	std::map<std::string, int> node_curr_prio;
 
         // DAG data structure : to be used by the scheduling algorithm
         std::map<std::string, int> node_ci, node_fi;
@@ -85,7 +89,7 @@ public:
 	std::map<std::string, int> fifo_prio; // for testing Davare et al
 
         long int total_period_count = 0; // increment each time we get a CC's end or at end of period.
-        bool sched_started = false; // becomes true when we get tid for all nodes.
+	std::atomic<bool> sched_started = ATOMIC_VAR_INIT(false); // becomes true when we get tid for all nodes.
         std::vector<double> reset_count; // Nov: to reset counters of NC'.
 
         DAG node_dag;
@@ -96,6 +100,8 @@ public:
         DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool dyn_resolve, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp);
 
 	DAGControllerBE(const DAGControllerBE&) = delete;
+	~DAGControllerBE();
+
 
 	void start();
 
@@ -144,6 +150,7 @@ private:
 	void startup_trigger_func();
 
 	void handle_sched_main();
+	std::atomic<bool> shutdown_scheduler;
 
 	DAGControllerFE* frontend;
 	
