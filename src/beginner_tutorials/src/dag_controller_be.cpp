@@ -293,7 +293,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		total_period_count = 1;
 		while (!shutdown_scheduler)
 		{
-			for (int i = 0; i < exec_order.size(); i++)
+			for (int i = 0; ( (i < exec_order.size()) && (!shutdown_scheduler) ); i++)
 			{
 				// printf("Monotime %f, realtime %f, TIME to run subchain #%i, Timeout: %f \n", get_monotime_now(), get_realtime_now(), i, get_timeout(exec_order[i]) );
 				// prio(i) = 2, all others = 1.
@@ -459,8 +459,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 							std::cerr << "WEIRD-Extra!!! Changing prio for SC with 0th node:" << sci[0] << "-" << j << "'s extra tid " << *ne << " to " << prio << std::endl;
 					}
 				}
-				else
-					std::cout << "Not changing prio for " << node_dag.id_name_map[sci[j]] << ", it was already equal to prio: " << prio << ", mapval: " << node_curr_prio[ node_dag.id_name_map[sci[j]] ] << std::endl;
+				// else
+					// std::cout << "Not changing prio for " << node_dag.id_name_map[sci[j]] << ", it was already equal to prio: " << prio << ", mapval: " << node_curr_prio[ node_dag.id_name_map[sci[j]] ] << std::endl;
 			}
 			else
 				std::cerr << "NO THREAD ID FOR " << node_dag.id_name_map[sci[j]] << std::endl;
