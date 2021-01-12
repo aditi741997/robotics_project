@@ -135,7 +135,8 @@ public:
 
   void incrementSequence(const std::string &_topic);
   bool isLatched(const std::string& topic);
-  void changeBinSize(int binsz);
+
+  void changeDropFraction(int dropf);
 
 private:
   /** if it finds a pre-existing subscription to the same topic and of the
@@ -238,8 +239,10 @@ private:
   ConnectionManagerPtr connection_manager_;
   XMLRPCManagerPtr xmlrpc_manager_;
 
+  // Oct: node_sub_ptr used for changingDropFraction, ??
   // used for ros::nodes to pass info from main node to subscription que (which publishes the cb time stats)
-  SubscriptionQueuePtr node_sub_que_ptr; 
+  SubscriptionQueuePtr node_sub_que_ptr;
+  SubscriptionPtr node_sub_ptr;
 };
 
 } // namespace ros

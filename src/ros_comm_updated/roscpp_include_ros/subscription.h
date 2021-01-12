@@ -119,7 +119,7 @@ public:
   uint32_t getNumCallbacks() const { return callbacks_.size(); }
   uint32_t getNumPublishers();
 
-  // For scheduling
+  // For fractional scheduling:
   void changeFraction(int newf);
   int full_total; // will be used to drop msgs in nc nodes.  
   int fraction_drop = 1; // 1 denotes dont drop any. This should be set to the desired fraction.
@@ -187,10 +187,6 @@ public:
   void getPublishTypes(bool& ser, bool& nocopy, const std::type_info& ti);
 
   void headerReceived(const PublisherLinkPtr& link, const Header& h);
-
-  // Adding overloaded function for TopicMgr to get a SubQuePtr.
-  bool addCallback(const SubscriptionCallbackHelperPtr& helper, const std::string& md5sum, CallbackQueueInterface* queue, int32_t queue_size, const VoidConstPtr& tracked_object, bool allow_concurrent_callbacks, SubscriptionQueuePtr& sub_q_ptr, ros::Publisher cb_T_p = ros::Publisher());
-
 
 private:
   Subscription(const Subscription &); // not copyable
