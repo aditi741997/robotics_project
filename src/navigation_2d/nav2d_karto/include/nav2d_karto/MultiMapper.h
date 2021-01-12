@@ -28,11 +28,29 @@
 #include <boost/chrono/ceil.hpp>
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
 
+// FOR sockets
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <netdb.h>
+
+void publish_tid(std::string name, int tid, ros::Publisher* pub)
+{
+        std_msgs::Header hdr;
+        std::stringstream ss;
+        ss << ::getpid() << " " << name << " " << tid;
+        hdr.frame_id = ss.str();
+        pub->publish(hdr);
+}
+
 class MultiMapper
 {
 public:
 	// Constructor & Destructor
 	MultiMapper();
+	MultiMapper(ros::Publisher& mcb_pub);
 	~MultiMapper();
 
 	// Public methods
@@ -99,6 +117,13 @@ public:
 	int mapcb_trigger_count, mapupd_trigger_count;
 	boost::condition_variable cv_mapcb, cv_mapupd; // threads will wait on these CVs.
 	ros::Subscriber mapcb_trigger_sub, mapupd_trigger_sub;
+
+	void processTrigger(std::string msg);
+
+	// now using sockets for receiving scheduler's trigger msgs:
+	int client_sock_fd;
+	boost::thread sock_recv_thread; // to indefinitely listen on the socket fd.
+	void socket_recv(); // does what recv_trigger_exec does when getting a trigger msg.
 
 private:
 	// Private methods

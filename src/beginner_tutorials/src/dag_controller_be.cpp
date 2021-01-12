@@ -490,8 +490,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		{
 			// add it to list of extra tids for node.
 			std::string nname = node_name.substr( 0, node_name.find("_") );
-			printf("Monotime %f, realtime %f, RECEIVED EXTRA TID for %s, nodename: %s, tid: %i", get_monotime_now(), get_realtime_now(), node_name.c_str(), nname.c_str(), tid);
 			node_extra_tids[nname].insert(tid);
+			printf("Monotime %f, realtime %f, RECEIVED EXTRA TID for %s, nodename: %s, tid: %i, NEW setsize: %i", get_monotime_now(), get_realtime_now(), node_name.c_str(), nname.c_str(), tid, node_extra_tids[nname].size());
 			return;
 		}
 		node_tid[node_name] = tid;

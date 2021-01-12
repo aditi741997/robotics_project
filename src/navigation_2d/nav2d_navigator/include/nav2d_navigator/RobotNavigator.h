@@ -23,10 +23,20 @@ typedef actionlib::SimpleActionServer<nav2d_navigator::GetFirstMapAction> GetMap
 typedef actionlib::SimpleActionServer<nav2d_navigator::LocalizeAction> LocalizeActionServer;
 typedef pluginlib::ClassLoader<ExplorationPlanner> PlanLoader;
 
+inline void publish_tid(std::string name, int tid, ros::Publisher* pub)
+{
+        std_msgs::Header hdr;
+        std::stringstream ss;
+        ss << ::getpid() << " " << name << " " << tid; 
+        hdr.frame_id = ss.str();
+        pub->publish(hdr);
+}
+
 class RobotNavigator
 {
 public:
-	RobotNavigator();
+	RobotNavigator() {};
+	RobotNavigator(ros::Publisher& nc_pub);
 	~RobotNavigator();
 
 	bool receiveStop(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res);

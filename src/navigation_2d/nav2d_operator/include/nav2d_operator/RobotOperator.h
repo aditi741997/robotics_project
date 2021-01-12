@@ -44,7 +44,7 @@ class RobotOperator
 {
 public:
 	// Default Constructor & Destructor
-	RobotOperator(std::condition_variable* cv_robot_op);
+	RobotOperator(ros::Publisher* lcpub, std::condition_variable* cv_robot_op);
 	~RobotOperator();
 	
 	// Public Methods
