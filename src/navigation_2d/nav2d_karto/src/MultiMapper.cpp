@@ -8,6 +8,8 @@
 #include <sys/syscall.h>
 #define gettid() syscall(SYS_gettid)
 
+#include <cerrno>
+
 #include <boost/make_shared.hpp>
 #include <boost/shared_ptr.hpp>
 
@@ -268,18 +270,20 @@ void MultiMapper::socket_recv()
 {
 	// initialize sockets for recv triggers [New:Jan]
 	client_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (client_sock_fd < 0) ROS_ERROR("MultiMapper:: SOCKET: client_sock_fd is NEGATIVE!!");
+	ROS_ERROR("MultiMapper:: SOCKET: client_sock_fd is %i", client_sock_fd);
+	// if (client_sock_fd < 0) ROS_ERROR("MultiMapper:: SOCKET: client_sock_fd is NEGATIVE!!");
 
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_port = htons(7727);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
-	if ( pton_ret <= 0 )
-		ROS_ERROR("MultiMapper:: SOCKET: Error in inet_pton %i", pton_ret);
+	// if ( pton_ret <= 0 )
+		ROS_ERROR("MultiMapper:: SOCKET:  inet_pton RET val: %i", pton_ret);
 
-	if ( connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0 )
-		ROS_ERROR("MultiMapper:: SOCKET: ERROR in connecting!!!");
+	int con_ret = connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	// if ( con_ret < 0 )
+		ROS_ERROR("MultiMapper:: SOCKET: In connect call!!! ret val: %i, errno: %i, str: %s", con_ret, errno, std::strerror(errno));
 
 	std::string s = "mapcb\nmapupd\n";
         char smsg[1+s.length()];
@@ -413,7 +417,7 @@ void MultiMapper::mapUpdateLoop(double map_update_rate)
 			if (map_upd_ct%2 == 0)
 				publish_tid("mapupd_extra", mTransformListener.getTFCBTid(), &map_upd_exec_info_pub);	
 			else
-				publish_tid("mapupd_extra", ::gettid(), &map_upd_exec_info_pub);
+				publish_tid("mapupd", ::gettid(), &map_upd_exec_info_pub);
 		}
 	}
 }

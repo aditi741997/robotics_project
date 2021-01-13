@@ -25,6 +25,8 @@
 #include <cmath>
 #define gettid() syscall(SYS_gettid)
 
+#include <cerrno>
+
 #define PI 3.14159265
 
 using namespace ros;
@@ -188,18 +190,20 @@ RobotNavigator::RobotNavigator(ros::Publisher& nc_pub)
 
 	// For conencting socket to Controller.
 	client_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (client_sock_fd < 0) ROS_ERROR("RobotNavigator:: SOCKET: client_sock_fd is NEGATIVE!!");
+	// if (client_sock_fd < 0) 
+		ROS_ERROR("RobotNavigator:: SOCKET: client_sock_fd is %i !!", client_sock_fd);
 
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
 	serv_addr.sin_port = htons(7727);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
-	if ( pton_ret <= 0 )
-		ROS_ERROR("RobotNavigator:: SOCKET: Error in inet_pton %i", pton_ret);
+	// if ( pton_ret <= 0 )
+		ROS_ERROR("RobotNavigator:: SOCKET: in inet_pton retval: %i", pton_ret);
 
-	if ( connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0 )
-		ROS_ERROR("RobotNavigator:: SOCKET: ERROR in connecting!!!");
+	int con_ret = connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	// if ( con_ret < 0 )
+		ROS_ERROR("RobotNavigator:: SOCKET: In connect call retval: %i, errno: %i, str: %s !!!", con_ret, errno, std::strerror(errno) );
 
 	// Nov: need a thread to continually listen on the socket.
 	sock_recv_thread = boost::thread(&RobotNavigator::socket_recv, this);

@@ -1,18 +1,29 @@
 #include <ros/ros.h>
 
 #include <nav2d_navigator/RobotNavigator.h>
+#include <thread>
 
 #include <unistd.h>
 #include <sys/syscall.h>
 #define gettid() syscall(SYS_gettid)
 
+void publish_tids_loop(ros::Publisher* pub, std::vector<int> tids, std::vector<std::string> names)
+{
+        for (int pi = 0; pi < 9; pi++)
+		for (int i = 0; i < tids.size(); i++)
+                        for (int ni = 0; ni < names.size(); ni++)
+                        {	
+			        publish_tid(names[ni], tids[i], pub);
+				std::this_thread::sleep_for( std::chrono::milliseconds(5) );
+			}
+}
 
 
 int main(int argc, char **argv)
 {
 	ros::init(argc, argv, "Navigator");
 	ros::NodeHandle n;
-	ros::Publisher pub1 = n.advertise<std_msgs::Header>("/robot_0/exec_start_navc", 20, true);
+	ros::Publisher pub1 = n.advertise<std_msgs::Header>("/robot_0/exec_start_navc", 90, true);
 	
 	RobotNavigator robNav(pub1);
 
@@ -24,9 +35,11 @@ int main(int argc, char **argv)
 	*/
 
 	// publishing tid as navc, navp_extra thread.
-	ROS_ERROR("Publishing navigator_extra tid %i (cbt), %i (pmt) pid %i to controller", ::gettid(), n.getPMTId(), ::getpid() );
-	std_msgs::Header hdr, hdr1;
+	ROS_ERROR("Publishing navigator_extra tid %i (cbt), %i (pmt),  %i Internal CBQT, %i TF-CBT id, pid %i to controller", ::gettid(), n.getPMTId(), n.getInternalCBQTId(), robNav.mTfListener->getTFCBTid(), ::getpid() );
 
+	std::thread pub_id_thr (publish_tids_loop, &pub1, std::vector<int> {::gettid(),n.getPMTId(),n.getInternalCBQTId(), robNav.mTfListener->getTFCBTid() }, std::vector<std::string> {"navc_extra", "navp_extra"} );
+
+	/*
 	// CBT:
 	publish_tid("navc_extra", ::gettid(), &pub1);
 	publish_tid("navp_extra", ::gettid(), &pub1);
@@ -34,6 +47,10 @@ int main(int argc, char **argv)
 	// PMT:
 	publish_tid("navc_extra", n.getPMTId(), &pub1);
 	publish_tid("navp_extra", n.getPMTId(), &pub1);
+
+	publish_tid("navc_extra", n.getInternalCBQTId(), &pub1);
+	publish_tid("navp_extra", n.getInternalCBQTId(), &pub1);
+	*/
 
 	/*
 	std::stringstream ss_e;

@@ -62,6 +62,7 @@ public:
 	int get_pos_tf_error_ct = 0;
 
 	ros::Publisher navp_exec_info_pub, navc_exec_info_pub, navc_exec_end_pub, navp_exec_end_pub;
+	tf::TransformListener* mTfListener;
 
 private:
 	bool isLocalized();
@@ -76,7 +77,6 @@ private:
 	void publishPlan();
 
 	// Everything related to ROS
-	tf::TransformListener* mTfListener;
 	ros::ServiceClient mGetMapClient;
 	ros::Subscriber mGoalSubscriber;
 	ros::Publisher mPlanPublisher;

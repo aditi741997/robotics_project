@@ -124,6 +124,7 @@ public:
 	int client_sock_fd;
 	boost::thread sock_recv_thread; // to indefinitely listen on the socket fd.
 	void socket_recv(); // does what recv_trigger_exec does when getting a trigger msg.
+	tf::TransformListener mTransformListener;
 
 private:
 	// Private methods
@@ -136,7 +137,6 @@ private:
 	SelfLocalizer* mSelfLocalizer;
 	
 	// Everything related to ROS
-	tf::TransformListener mTransformListener;
 	tf::TransformBroadcaster mTransformBroadcaster;
 	tf::Transform mMapToOdometry;
 	tf::Transform mOdometryOffset;

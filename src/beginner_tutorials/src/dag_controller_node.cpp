@@ -172,6 +172,7 @@ public:
 			else
 			{
 			// we now listen for a msg from this socket.
+				ROS_ERROR("DAGC: Socket::  client_fd is %i , will read now.", client_fd);
 				int n = read(client_fd, msg, 2048);
 				if (n<0) ROS_ERROR("DAGC: Could not read frm socket %i, total connected till now: %i", client_fd, socket_conn_count);
 				else
@@ -182,7 +183,7 @@ public:
 					std::string to;
 					while(std::getline(ss,to,'\n'))
 					{
-						ROS_ERROR("Socket %i recvs triggers for node %s", client_fd, to.c_str());
+						ROS_INFO("Socket %i recvs triggers for node %s", client_fd, to.c_str());
 						trigger_socks[to] = client_fd;
 						trigger_socks_conn[to] = true;
 					}

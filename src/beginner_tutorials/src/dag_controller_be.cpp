@@ -289,7 +289,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::handle_sched_main()
 	{
 		set_high_priority("MAIN sched Thread", 4, 0);
+		for (auto &i : node_dag.name_id_map)
+			printf("#EXTRA THREADS for node %s : %i", i.first.c_str(), node_extra_tids[i.first].size() );
 		printf("Len of exec_order: %zu, curr_cc_period: %f, ceil 0.5: %f \n", exec_order.size(), curr_cc_period, ceil(0.5) );
+		
 		total_period_count = 1;
 		while (!shutdown_scheduler)
 		{
@@ -350,7 +353,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::set_high_priority(std::string thread_name, int prio, int tid)
 	{
-		// set prio to 4, with FIFO.
+		// set prio to prio, with FIFO.
 		struct sched_param sp = { .sched_priority = prio,};
 		int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
 		 printf("MonoTime: %f, RealTime: %f, SETTING priority to %i, for thread: %s, retval: %i \n", get_monotime_now(), get_realtime_now(), prio, thread_name.c_str(), ret);
@@ -443,29 +446,37 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				if ( (node_curr_prio.find( node_dag.id_name_map[sci[j]] ) == node_curr_prio.end()) || (node_curr_prio[ node_dag.id_name_map[sci[j]] ] != prio) )
 				{
 					int n_tid = node_tid[node_dag.id_name_map[sci[j]] ];
-					if (n_tid == 0)
-						std::cerr << "WUTT!!!!" << sci[0] << ", " << node_dag.id_name_map[sci[j]] << ", " << (node_tid.find( node_dag.id_name_map[sci[j]] ) == node_tid.end()) << std::endl;
-					ret = ( ret && ( sched_setscheduler( node_tid[node_dag.id_name_map[sci[j]] ] , SCHED_FIFO, &sp) ) );
-					if (ret != 0)
-						std::cerr << "WEIRD!!! Changing prio for SC with 0th node:" << sci[0] << "-" << j << " to " << prio << std::endl;
-					else
+					int ret = ( changePriorityThread( node_dag.id_name_map[sci[j]], n_tid, prio ) );
+					if (ret == 0)
 						node_curr_prio[ node_dag.id_name_map[sci[j]] ] = prio;
 
-					auto n_extras = node_extra_tids[ node_dag.id_name_map[sci[j]] ];
+					std::set<int>& n_extras = node_extra_tids[ node_dag.id_name_map[sci[j]] ];
 					for (auto ne = n_extras.begin(); ne != n_extras.end(); ne++)
 					{
-						int rete = ( sched_setscheduler(*ne, SCHED_FIFO, &sp) );
-						if (rete != 0)
-							std::cerr << "WEIRD-Extra!!! Changing prio for SC with 0th node:" << sci[0] << "-" << j << "'s extra tid " << *ne << " to " << prio << std::endl;
+						int rete = changePriorityThread( node_dag.id_name_map[sci[j]]+"_extra", *ne, prio );
 					}
 				}
 				// else
 					// std::cout << "Not changing prio for " << node_dag.id_name_map[sci[j]] << ", it was already equal to prio: " << prio << ", mapval: " << node_curr_prio[ node_dag.id_name_map[sci[j]] ] << std::endl;
 			}
 			else
-				std::cerr << "NO THREAD ID FOR " << node_dag.id_name_map[sci[j]] << std::endl;
+				printf("ERROR!!! Monotime %f, realtime %f, No threadID for %s !!! \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[sci[j]].c_str() );
 		}
 		return ret;
+	}
+
+	bool DAGControllerBE::changePriorityThread(std::string nname, int tid, int prio)
+	{
+		if (tid == 0)
+		{
+			printf("ERROR!!! Monotime %f, realtime %f, Node %s tid=0!!! \n", get_monotime_now(), get_realtime_now(), nname.c_str() );
+			return 1;
+		}
+		struct sched_param sp = { .sched_priority = prio,};
+		int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
+		if (ret != 0)
+			std::cerr << "WEIRD-" << nname << " Changing prio to " << prio << ", tid: " << tid << ", RETVAL: " << ret << std::endl;
+		return (ret); // ret=0 : successful.
 	}
 
 	// checks if all nodes' tid/pid info has been received.
