@@ -652,6 +652,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::update_ci(std::string node_name, double ci)
 	{
+		// TODO: Add some extra time based on #Extra threads.
 		node_ci_arr[node_name].push_back(ci);
 	}
 

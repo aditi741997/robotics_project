@@ -131,7 +131,7 @@ public:
 		memset(&saddr, 0, sizeof(saddr));
 		saddr.sin_family = AF_INET;
 		saddr.sin_addr.s_addr = INADDR_ANY;
-		port_no = 7727;
+		port_no = 7227;
 		saddr.sin_port = htons(port_no);
 
 		if (bind(srv_fd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) ROS_ERROR("Socket:: bind FAILED!!");

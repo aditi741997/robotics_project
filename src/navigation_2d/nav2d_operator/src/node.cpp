@@ -75,7 +75,13 @@ int main(int argc, char **argv)
 	std_msgs::Header hdre;
 	hdre.frame_id = ss_e1.str();
 
-	ROS_ERROR("Publishing node LP tid %i, pid %i to controller. strs: %s, %s", ::gettid(), ::getpid(), hdr.frame_id.c_str(), hdre.frame_id.c_str());
+	ROS_ERROR("tid of ROBOTOperator::InternalCBQ TID: %i", n.getInternalCBQTId() );
+	std::stringstream ss_e2;
+	ss_e2 << ::getpid() << " lp_extra "  << n.getInternalCBQTId();
+	std_msgs::Header hdre2;
+	hdre2.frame_id = ss_e2.str();
+
+	ROS_ERROR("Publishing node LP tid %i, pid %i to controller. strs: %s, %s, %s", ::gettid(), ::getpid(), hdr.frame_id.c_str(), hdre.frame_id.c_str(), hdre2.frame_id.c_str());
 	int op_ct = 0;
 
 	while(ok())
@@ -91,12 +97,14 @@ int main(int argc, char **argv)
 		ROS_WARN("RobotOp notified. Will execute now!");
 	
 		op_ct += 1;
-		if (op_ct < 8)
+		if (op_ct < 10)
 		{
-			if (op_ct%2 == 0)
+			if (op_ct%3 == 0)
 				pub1.publish(hdr);
-			else
+			else if (op_ct%3 == 1)
 				pub1.publish(hdre);
+			else
+				pub1.publish(hdre2);
 		}
 	}
 	spinner_thr.join();
