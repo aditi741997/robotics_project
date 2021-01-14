@@ -275,7 +275,7 @@ void MultiMapper::socket_recv()
 
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(7227);
+	serv_addr.sin_port = htons(6227);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
 	// if ( pton_ret <= 0 )
@@ -1048,8 +1048,13 @@ void MultiMapper::mapScanCBLoop(double per)
 			}
 		}
 
-		if (total_map_cb_trig_count<5)
-			publish_tid("mapcb_extra", mTransformListener.getTFCBTid(), &map_cb_exec_info_pub);
+		if (total_map_cb_trig_count<9)
+		{
+			if (total_map_cb_trig_count%2 == 1)
+				publish_tid("mapcb", ::gettid(), &map_cb_exec_info_pub);
+			else
+				publish_tid("mapcb_extra", mTransformListener.getTFCBTid(), &map_cb_exec_info_pub);
+		}
 	
 	}
 }

@@ -208,7 +208,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			cc_period += get_sum_ci_ith(exec_order[i])*offline_fracs[ node_dag.id_name_map[ exec_order[i][0] ] ];
 		int oldstate;
 		int ret_pct = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldstate);
-		printf("MonoTime: %f, RealTime: %f, STARTED startup_trigger thread! CC period: %f, sched_started: %i \n", get_monotime_now(), get_realtime_now(), cc_period, sched_started.load() );
+		printf("MonoTime: %f, RealTime: %f, STARTED startup_trigger thread TID: %i ! CC period: %f, sched_started: %i \n", get_monotime_now(), get_realtime_now(), ::gettid(), cc_period, sched_started.load() );
 
 		curr_cc_period = cc_period;
 
@@ -291,7 +291,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		set_high_priority("MAIN sched Thread", 4, 0);
 		for (auto &i : node_dag.name_id_map)
 			printf("#EXTRA THREADS for node %s : %i", i.first.c_str(), node_extra_tids[i.first].size() );
-		printf("Len of exec_order: %zu, curr_cc_period: %f, ceil 0.5: %f \n", exec_order.size(), curr_cc_period, ceil(0.5) );
+		printf("STARTING MAinSched thread!! tid: %i Len of exec_order: %zu, curr_cc_period: %f, ceil 0.5: %f \n", ::gettid(), exec_order.size(), curr_cc_period, ceil(0.5) );
 		
 		total_period_count = 1;
 		while (!shutdown_scheduler)
@@ -593,7 +593,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		struct sched_param sp = { .sched_priority = 1,};
 		int ret = sched_setscheduler(0, SCHED_OTHER, &sp);
 		*/
-		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i | tid: %i", get_monotime_now(), get_realtime_now(), ret, reoptimize_thread_id);
+		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i | pthread tid: %i, tid: %i \n", get_monotime_now(), get_realtime_now(), ret, reoptimize_thread_id, ::gettid() );
 
 		while (!shutdown_scheduler)
 		{
@@ -653,7 +653,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::update_ci(std::string node_name, double ci)
 	{
 		// TODO: Add some extra time based on #Extra threads.
-		node_ci_arr[node_name].push_back(ci);
+		double e_ci = 0.001*0.5*(node_extra_tids[node_name].size()); // in seconds.
+		// printf("Updating ci for node %s, adding %f to ci, #extra tids: %i", node_name, e_ci,  node_extra_tids[node_name].size() );
+		node_ci_arr[node_name].push_back(ci + e_ci );
 	}
 
 	// Returns sum ci of subchain ind, for current ci vals.
