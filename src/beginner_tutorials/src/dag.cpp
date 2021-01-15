@@ -1098,7 +1098,7 @@ std::vector<int> DAG::compute_rt_solve()
 	// Initialize mosek solver:
 	mosek_model = new Model("single_core_scheduler_algo");
 	auto _mosek_model = finally([&]() { mosek_model->dispose(); });
-	mosek_model->setSolverParam("numThreads", 1);
+	// mosek_model->setSolverParam("numThreads", 1);
 	mosek_model->setSolverParam("intpntMultiThread", "off");
 
 	Variable::t all_l_vars = mosek_model->variable(total_vars);

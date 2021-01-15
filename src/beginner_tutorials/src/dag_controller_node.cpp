@@ -91,7 +91,6 @@ public:
 		ROS_INFO("Initializing DAGController class, params: dyn_opt: %i, use_td: %s, fifo: %s, fmc: %i, fmu %i, fnc %i, fnp %i, ps %i, plc %i, plp %i", dyn_opt, use_td.c_str(), fifo.c_str(), f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
 		controller = new DAGControllerBE(dag_file, this, dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
 
-		ROS_INFO("DAGController: PMT Id: %i, InternalCBQTID: %i", nh.getPMTId(), nh.getInternalCBQTId() );
 		ROS_INFO("DAGController : Subscribe to 'exec_start' topics for ALL nodes, to get tid/pid.");
 		last_node_cc_name = controller->get_last_node_cc_name();
 		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/robot_0/exec_end_" + last_node_cc_name, 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
@@ -118,6 +117,7 @@ public:
 				exec_end_subs[it->first] = esi;
 			}	
 		}
+		ROS_INFO("DAGController: PMT Id: %i, InternalCBQTID: %i", nh.getPMTId(), nh.getInternalCBQTId() );
 		
 		// Nov: for IPC with navigator node:
 		srv_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -132,7 +132,7 @@ public:
 		memset(&saddr, 0, sizeof(saddr));
 		saddr.sin_family = AF_INET;
 		saddr.sin_addr.s_addr = INADDR_ANY;
-		port_no = 7227;
+		port_no = 6327;
 		saddr.sin_port = htons(port_no);
 
 		if (bind(srv_fd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) ROS_ERROR("Socket:: bind FAILED!!");

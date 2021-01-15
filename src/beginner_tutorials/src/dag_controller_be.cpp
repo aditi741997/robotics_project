@@ -43,7 +43,7 @@ double get_realtime_now()
 		struct sched_param params;
 		params.sched_priority = 0;
 		int ret = pthread_setschedparam(pt, SCHED_OTHER, &params);
-		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i |", get_monotime_now(), get_realtime_now(), ret);
+		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD to OTHER: %i |", get_monotime_now(), get_realtime_now(), ret);
 	}
 
 	void set_other_policy(int tid, int nice_val)
@@ -329,13 +329,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			total_period_count += 1;
 			// inc prio of our dynamic_resolve thread for sometime. to fifo,p2, the whole exec_order to p1 or just the last guy to p1.
 			// assuming 20ms -> 40ms for LowCF needed by reopt thread in 1s : 
-			int one_in_k_per = ceil(1000/(float)(40*curr_cc_period));
+			int one_in_k_per = ceil(2000/(float)(40*curr_cc_period));
 			if (total_period_count%( one_in_k_per ) == 0 && (dynamic_reoptimize))
 			{
-				printf("WANNA run dyn_reopt for 1ms now!!");
+				printf("WANNA run dyn_reopt for 2ms now!! one_in_k_per: %i \n", one_in_k_per);
 				changePriority(exec_order, -1);
 				set_high_priority("Dyn Reopt thread!", 2, reoptimize_thread_id);
-				std::this_thread::sleep_for( std::chrono::milliseconds(1) );
+				std::this_thread::sleep_for( std::chrono::milliseconds(2) );
 				// change policy back to rr, p1. RR wont work!!
 				set_other_policy_pthr(reoptimize_thread_p);
 				// set_high_priority("Dyn Reopt thread!", 1, reoptimize_thread_id);
@@ -356,7 +356,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		// set prio to prio, with FIFO.
 		struct sched_param sp = { .sched_priority = prio,};
 		int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
-		 printf("MonoTime: %f, RealTime: %f, SETTING priority to %i, for thread: %s, retval: %i \n", get_monotime_now(), get_realtime_now(), prio, thread_name.c_str(), ret);
+		if (ret != 0) 
+			printf("MonoTime: %f, RealTime: %f, SETTING priority to %i, for thread: %s, retval: %i \n", get_monotime_now(), get_realtime_now(), prio, thread_name.c_str(), ret);
 		// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " SETTING priority to " << prio << " retval: " << ret << thread_name << std::endl;
 	 }
 
@@ -599,6 +600,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		{
 			// 5s period
 			std::this_thread::sleep_for (std::chrono::milliseconds(5000));
+			printf("Reoptimize thread WOKEN UP!! Starting to re-solve... \n");
 			// clear old data
 			node_dag.clear_old_data(frac_var_count);
 			// update compute times to be 75ile of recent data.
@@ -636,8 +638,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 					printf("MonoTime: %f, RealTime: %f, In new soln, CC period is %f \n", get_monotime_now() , get_realtime_now(), period);
 					// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << "In new soln, CC period is " << period << std::endl;
-					std::string cmd = "rosrun dynamic_reconfigure dynparam set /shim_freq_node cc_freq " + std::to_string(1000.0/(period) ); // since period is in millisec.
-					system(cmd.c_str());
+					// std::string cmd = "rosrun dynamic_reconfigure dynparam set /shim_freq_node cc_freq " + std::to_string(1000.0/(period) ); // since period is in millisec.
+					// system(cmd.c_str());
 
 
 				}
@@ -647,6 +649,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				printf("MonoTime: %f, RealTime: %f, EXCEPTION in trying to solve GP %i", get_monotime_now() , get_realtime_now(), e);
 			}
 		}
+		printf("MonoTime: %f, RealTime: %f, OUT OF THE reoptimize LOOP!!! shutdown_scheduler: %i \n", get_monotime_now() , get_realtime_now(), shutdown_scheduler.load());
 	
 	}
 
