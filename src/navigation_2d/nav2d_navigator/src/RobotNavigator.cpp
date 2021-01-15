@@ -195,7 +195,7 @@ RobotNavigator::RobotNavigator(ros::Publisher& nc_pub)
 
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(6227);
+	serv_addr.sin_port = htons(6327);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
 	// if ( pton_ret <= 0 )
@@ -252,12 +252,14 @@ void RobotNavigator::socket_recv()
 			{
 				boost::unique_lock<boost::mutex> lock(navc_trigger_mutex);
 				ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s,  Got a trigger for navc, curr count %i", s_msg.c_str(), navc_trigger_count);
+				/*
 				if (to.find("RESETCOUNT") != std::string::npos)
 				{
 					navc_trigger_count = 1;
 					// ROS_ERROR("Resetting the navc count to 1!!!!");
 				}
 				else
+				*/
 					navc_trigger_count += 1;
 				cv_navc.notify_all();
 			}
@@ -265,12 +267,13 @@ void RobotNavigator::socket_recv()
 			{
 				boost::unique_lock<boost::mutex> lock(navp_trigger_mutex);
 				ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s, Got a trigger for navp, curr_count %i", s_msg.c_str(), navp_trigger_count);
+				/*
 				if (to.find("RESETCOUNT") != std::string::npos)
                                 {
 					navp_trigger_count = 1;
 					// ROS_ERROR("Resetting the navp count to 1!!!!");
 				}
-				else
+				else*/
 					navp_trigger_count += 1;
 				cv_navp.notify_all();
 			}
@@ -1352,13 +1355,12 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		else
 		{
 			boost::unique_lock<boost::mutex> lock(navp_trigger_mutex);
-			if (navp_trigger_count > 0)
-				navp_trigger_count -= 1;
 			while (navp_trigger_count == 0)
 			{
 				cv_navp.wait(lock);
-				ROS_ERROR("About to run navPlan ct:%i", navp_trigger_count);
 			}
+			ROS_ERROR("About to run navPlan ct:%i", navp_trigger_count);
+			navp_trigger_count = 0; // flush_on_read
 		}
 	
 	}
@@ -1478,13 +1480,12 @@ void RobotNavigator::navGenerateCmdLoop()
 		else
 		{
 			boost::unique_lock<boost::mutex> lock(navc_trigger_mutex);
-			if (navc_trigger_count > 0)
-				navc_trigger_count -= 1;
 			while (navc_trigger_count == 0)
 			{
 				cv_navc.wait(lock);
-				ROS_ERROR("About to generateCmd NAVC ct:%i", navc_trigger_count);
 			}
+			ROS_ERROR("About to generateCmd NAVC ct:%i", navc_trigger_count);
+			navc_trigger_count = 0; // flush_on_read.
 		}
 	
 	}

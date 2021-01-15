@@ -275,7 +275,7 @@ void MultiMapper::socket_recv()
 
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(6227);
+	serv_addr.sin_port = htons(6327);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
 	// if ( pton_ret <= 0 )
@@ -338,26 +338,30 @@ void MultiMapper::processTrigger(std::string msg)
 		// its the mapcb trigger.
 		ROS_ERROR("Got a trigger for mapcb, %s curr count: %i", msg.c_str(), mapcb_trigger_count);
 		boost::unique_lock<boost::mutex> lock(mapcb_trigger_mutex);
+		/*
 		if (msg.find("RESETCOUNT") != std::string::npos)
 		{
 			mapcb_trigger_count = 1;
 			// ROS_ERROR("RESET counter for mapcb to 1.");
 		}
 		else
-			mapcb_trigger_count += 1;
+		*/
+		mapcb_trigger_count += 1;
 		cv_mapcb.notify_all();
 	}
 	else
 	{
 		ROS_ERROR("Got a trigger for mapupd %s curr count: %i", msg.c_str(), mapupd_trigger_count);
 		boost::unique_lock<boost::mutex> lock(mapupd_trigger_mutex);
+		/*
 		if (msg.find("RESETCOUNT") != std::string::npos)
 		{
 			mapupd_trigger_count = 1;
 			// ROS_ERROR("RESET counter for mapupd to 1.");
 		}
 		else
-			mapupd_trigger_count += 1;
+		*/	
+		mapupd_trigger_count += 1;
 		cv_mapupd.notify_all();	
 	}
 
@@ -403,13 +407,12 @@ void MultiMapper::mapUpdateLoop(double map_update_rate)
 		else
 		{
 			boost::unique_lock<boost::mutex> lock(mapupd_trigger_mutex);
-			if (mapupd_trigger_count > 0)
-				mapupd_trigger_count -= 1;
 			while (mapupd_trigger_count == 0)
 			{
 				cv_mapupd.wait(lock);
-				ROS_ERROR("About to run updateMap!! %i", mapupd_trigger_count);
 			}
+			ROS_ERROR("About to run updateMap!! %i", mapupd_trigger_count);
+			mapupd_trigger_count = 0; // flush on read
 		}
 	
 		if (map_upd_ct<10)
@@ -1039,13 +1042,12 @@ void MultiMapper::mapScanCBLoop(double per)
 		else
 		{	
 			boost::unique_lock<boost::mutex> lock(mapcb_trigger_mutex);
-			if (mapcb_trigger_count > 0)
-				mapcb_trigger_count -= 1;
 			while (mapcb_trigger_count == 0)
 			{
 				cv_mapcb.wait(lock);
-				ROS_ERROR("About to processLatestScan %i", mapcb_trigger_count);
 			}
+			ROS_ERROR("About to processLatestScan %i", mapcb_trigger_count);
+			mapcb_trigger_count = 0; // flush on read.
 		}
 
 		if (total_map_cb_trig_count<9)

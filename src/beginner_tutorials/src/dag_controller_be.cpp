@@ -441,21 +441,22 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		// it executes first. [since it'll be ahead in the list of same prio.]
 		for (int j = sci.size()-1 ; j >= 0; j-- )
 		{
-			// printf("Monotime %f, realtime %f, ABOUT TO change prio for node %s to %i, tid %i \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[exec_order[ind][j]].c_str(), prio, node_tid[node_dag.id_name_map[exec_order[ind][j]] ] );
 			if (node_tid.find( node_dag.id_name_map[sci[j]] ) != node_tid.end())
 			{
 				if ( (node_curr_prio.find( node_dag.id_name_map[sci[j]] ) == node_curr_prio.end()) || (node_curr_prio[ node_dag.id_name_map[sci[j]] ] != prio) )
 				{
-					int n_tid = node_tid[node_dag.id_name_map[sci[j]] ];
-					int ret = ( changePriorityThread( node_dag.id_name_map[sci[j]], n_tid, prio ) );
-					if (ret == 0)
-						node_curr_prio[ node_dag.id_name_map[sci[j]] ] = prio;
-
+					// printf("CHANGING prio of node %s & its extras to %i", node_dag.id_name_map[sci[j]].c_str(), prio);
 					std::set<int>& n_extras = node_extra_tids[ node_dag.id_name_map[sci[j]] ];
 					for (auto ne = n_extras.begin(); ne != n_extras.end(); ne++)
 					{
 						int rete = changePriorityThread( node_dag.id_name_map[sci[j]]+"_extra", *ne, prio );
 					}
+					
+					int n_tid = node_tid[node_dag.id_name_map[sci[j]] ];
+					int ret = ( changePriorityThread( node_dag.id_name_map[sci[j]], n_tid, prio ) );
+					if (ret == 0)
+						node_curr_prio[ node_dag.id_name_map[sci[j]] ] = prio;
+					
 				}
 				// else
 					// std::cout << "Not changing prio for " << node_dag.id_name_map[sci[j]] << ", it was already equal to prio: " << prio << ", mapval: " << node_curr_prio[ node_dag.id_name_map[sci[j]] ] << std::endl;
