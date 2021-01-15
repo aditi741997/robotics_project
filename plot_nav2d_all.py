@@ -281,14 +281,23 @@ def get_closest_wall_dist(x,y):
 
 letter = 'N'
 opt_total_Area = 339142.0
-runlevel_med_totalarea = [] # one no for each i.
+
+
 runlevel_agg_lowlevelmetrics = [] # list of lists. 
-runlevel_agg_collision_count = [] # one no for each i.
 runlevel_agg_lowlevelmetrics_dict = {} # metric name -> value. [median in runs, then ?]
+
+runlevel_agg_collision_count = [] # one no for each i.
+
+runlevel_agg_path_plan_fail_count = []
+
 run_level_total_times = [] # list of lists
+
 runlevel_agg_lowestTTC = [] # lowest time to collision. Inf. if no collision.
+
 runlevel_mean_totalarea = []
+runlevel_med_totalarea = [] # one no for each i.
 runlevel_tail_totalarea = [] #9th area.
+
 runlevel_med_0veltime = []
 runlevel_mean_0veltime = []
 runlevel_tail_0veltime = []
@@ -329,7 +338,7 @@ exptn = "OfflineMCB_H"
 #expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #expts.append(exptn + "7_5c")
 expts = ["FracV1_1c"]
-runs = [1,12,13,4,5,6,7,8,9,10]
+runs = [1,12,13,4,5,6,7,8,9,10,14,15,16,17,18]
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 #for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 run_rts_percentile = 50
@@ -342,7 +351,9 @@ for i in expts:
 	if i == 2:
 		runs = [1,3,4,5]
 	colln_count = 0 # #runs with collision.
-	run_total_times = []
+	path_plan_fail_count = 0
+        
+        run_total_times = []
         irun_75p_tput = {} # subchain name -> array.
         irun_mean_tput = {}  # subchain name -> array. for a given expt i.
 
@@ -357,8 +368,12 @@ for i in expts:
 
         for run in runs: #1,2]:
 		run_collision_hua = False
+                stall_ct = 0
+                sto_ct = 0
                 run_expl_finished = False
-		#exp_id = str(i) + letter +'run_' + str(run)
+		run_path_plan_fail = False
+                
+                #exp_id = str(i) + letter +'run_' + str(run)
 		exp_id = i + '_run' + str(run)
 		collision[exp_id] = {}
 		# get start, end times
@@ -375,6 +390,8 @@ for i in expts:
 					end_i = float( fl.split(' ')[-2] )
 		                if ("Exploration has finished" in fl):
                                     run_expl_finished = True
+                                if ("No way between robot and goal!" in fl):
+                                    run_path_plan_fail = True
                 end_i += 0.1 # expl should fail after the collision for the collision to count.
 		# JUST to plot area covered in 1st 60sec: 
 		# end_i = start_i + slot + 1.0
@@ -706,8 +723,11 @@ for i in expts:
 		#print("Sum nEW Area covered Agg: ", sum_new_area_cov_agg) # Do this only for first slot.
 		new_area_agg.append(sum_new_area_cov_agg)
 		colln_count += run_collision_hua
+                path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))
                 if run_collision_hua:
                     run_ttc.append(end_i - start_i - 0.1)
+                    print("For expt %s, collision happened!!"%(exp_id) )
+                
                 if ( (last_known_area > (0.9*opt_total_Area)) ): #run_expl_finished and : for now, only checking 90%area time.
                     fullExplTimes.append(end_i - start_i - 0.1)
 	        
@@ -720,6 +740,9 @@ for i in expts:
         # Collision count: [based on stage Stalled]
         runlevel_agg_collision_count.append( colln_count )
 	numrun = len(runs)//2
+
+        runlevel_agg_path_plan_fail_count.append( path_plan_fail_count )
+
 
         # Total Area explored
 	#print("NEW Area Agg array across runs: ", new_area_agg)
@@ -807,6 +830,9 @@ for i in expts:
 print("#Explorations which finished fully per-expt: ", runlevel_agg_fullExpl_count)
 print("Collision coUNT ARR: ", runlevel_agg_collision_count)
 print("RunLevel total times: ", run_level_total_times)
+
+
+print("Arr for #PathPlanFailures: ", runlevel_agg_path_plan_fail_count)
 
 # CC: expected_tputs = [0.05, 0.1, 0.2, 0.4, 1.0] # the tputs set for the experiments 1-5.
 # MCB:
