@@ -203,7 +203,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	{
 		// set CC's fraction=1. log=0
 		assert( sc_id_frac_id[0] == 0 );
-		auto sc0_sol = new_array_ptr<double,1>({-0.0001});
+		auto sc0_sol = new_array_ptr<double,1>({-0.001});
 		all_l_vars->slice(0,1)->setLevel(sc0_sol);
 	}
 
@@ -295,7 +295,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		std::cout << "STARTING adding RT constr for chain " << i << std::endl;
 		std::vector<int>& ith_chain = std::get<1>(all_chains[i]);
 
-		// Add chain0's exec time.
+		// Add chain[0]'s exec time.
 		if ( (id_node_map[ith_chain[0]].fixed_period > 0) || (node_id_sc_id[ith_chain[0]] == 0) )
 		{
 			// add ci.
@@ -337,6 +337,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 				if ( (nj1.fixed_period > 0) || (node_id_sc_id[nj1.id] == 0) )
 				{
 					// Add P+C1
+					// Todo: maybe, add nj fixed period if nj1 fp=0 & CC : assuming that nj period<nj1 period.
 					std::cout << "CaseMC.RT 2.a Adding ci=" << nj1.compute << "+Period" << std::endl;
 					add_ci = true;
 					p_mult_factor = 1.0;
@@ -350,8 +351,8 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			}
 			else if ( (nj1.fixed_period == nj.fixed_period) && (node_id_sc_id[nj1.id] != node_id_sc_id[nj.id]) )
 			{
-				// std::cout << "THIS SHOULD NOT HAPPEN!! fixed_periods are equal but separate subchains!! " << std::endl;
 				// this can happen if both are 0.
+				// Todo: if nj1==CC, add P+CC_sumci.
 				p_mult_factor = 2.0;
 				std::cout << "CaseMC.RT 3. ADDING 2*Period\n";
 			}
@@ -488,18 +489,65 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	std::vector<double> a (total_vars, 0.0);
 	a[total_vars-1] = 1;
 	mosek_model->objective("Objective", ObjectiveSense::Minimize, Expr::dot(new_array_ptr<double> (a), all_l_vars) );	
-	
-	mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
-	mosek_model->solve();
-	auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
 
-	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &solve_end);
-
-	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);
-	for (int i = 0; i < total_vars; i++)
+		std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);
+	try
 	{
-		all_frac_vals[i] = (int) round( 1.0/((*opt_ans)[i]) );
-	        printf("var %i : %f", i, (*opt_ans)[i]);
+		mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
+		mosek_model->solve();
+		// mosek_model->acceptedSolutionStatus(AccSolutionStatus::Optimal);
+		std::cout << "Solved! " << mosek_model->getAcceptedSolutionStatus();
+		auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
+		std::cout << "Extracted opt ans!\n";
+
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &solve_end);
+		std::cout << "got solve_end, total vars: " << total_vars << std::endl;
+		for (int i = 0; i < total_vars; i++)
+		{
+			printf("var %i : %f", i, (*opt_ans)[i]);
+			all_frac_vals[i] = (int) round( 1.0/((*opt_ans)[i]) );
+		}
+		printf("cputIME TAKEN TO solve: %f", (solve_end.tv_sec + solve_end.tv_nsec*1e-9) - (solve_start.tv_sec + 1e-9*solve_start.tv_nsec));
+
 	}
-	printf("cputIME TAKEN TO solve: %f", (solve_end.tv_sec + solve_end.tv_nsec*1e-9) - (solve_start.tv_sec + 1e-9*solve_start.tv_nsec));
+	catch (const OptimizeError& e)
+	{
+                std::cout << "DAG::compute_rt_solve: Optimization failed. Error: " << e.what() << "\n";
+        }
+	catch (const SolutionError& e)
+	{
+		std::cout << "DAG::compute_rt_solve: Requested solution was not available.\n";
+		auto prosta = mosek_model->getProblemStatus();
+		switch(prosta)
+		{
+			case ProblemStatus::DualInfeasible:
+				std::cout << "Dual infeasibility certificate found.\n";
+				break;
+			case ProblemStatus::PrimalInfeasible:
+                                std::cout << "Primal infeasibility certificate found.\n";
+				break;
+			case ProblemStatus::Unknown:
+				{	
+					std::cout << "The solution status is unknown.\n";
+					char symname[MSK_MAX_STR_LEN];
+					char desc[MSK_MAX_STR_LEN];
+					MSK_getcodedesc((MSKrescodee)(mosek_model->getSolverIntInfo("optimizeResponse")), symname, desc);
+					std::cout << "  Termination code: " << symname << " " << desc << "\n";
+					mosek_model->selectedSolution(SolutionType::Interior);
+					auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
+					for (int i = 0; i < total_vars; i++)
+						printf("var %i : %f", i, (*opt_ans)[i]);
+					break;
+
+				}
+			default:
+				std::cout << "Another unexpected problem status: " << prosta << "\n";
+		}
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << "DAG::compute_rt_solve: Unexpected error: " << e.what() << "\n";
+	}
+
+	return all_frac_vals;
 }

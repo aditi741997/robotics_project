@@ -17,7 +17,7 @@ using namespace ros;
 int started = 0;
 ros::Publisher thread_exec_pub;
 
-void spinner_work()
+void spinner_work(ros::Publisher* lc_pub)
 {
 	// this is the thread that execs LC stuff
 	while (started < 3)
@@ -26,12 +26,12 @@ void spinner_work()
 		std_msgs::Header hdr;
 		
 		std::stringstream ss_e;
-		ss_e << ::getpid() << " lc "  << ::gettid();
+		ss_e << ::getpid() << " lc_extra "  << ::gettid();
 		hdr.frame_id = ss_e.str(); 
 
-		ros::NodeHandle nh;
-		thread_exec_pub = nh.advertise<std_msgs::Header>("/robot_0/exec_start_lc", 1, true);
-		thread_exec_pub.publish(hdr);
+		// ros::NodeHandle nh;
+		// thread_exec_pub = nh.advertise<std_msgs::Header>("/robot_0/exec_start_lc", 1, true);
+		lc_pub->publish(hdr);
 		started += 1;
 		ros::Duration(0.2).sleep();
 	}
@@ -50,7 +50,9 @@ int main(int argc, char **argv)
         std::mutex mutex_robot_op_lp;
         std::condition_variable cv_robot_op_lp;
 
-        RobotOperator robOp (&cv_robot_op_lp);
+	ros::Publisher lc_pub = n.advertise<std_msgs::Header>("/robot_0/exec_start_lc", 5, true);
+
+        RobotOperator robOp (&lc_pub, &cv_robot_op_lp);
 
 	Rate loopRate(frequency);
 
@@ -58,18 +60,30 @@ int main(int argc, char **argv)
 
 	// this is the thread that executes LP.
 
-	std::thread spinner_thr(spinner_work);
+	std::thread spinner_thr(spinner_work, &lc_pub);
 	
-	ROS_ERROR("Publishing node LP tid %i, pid %i to controller.", ::gettid(), ::getpid());
+	ros::Publisher pub1 = n.advertise<std_msgs::Header>("/robot_0/exec_start_lp", 50, true);
 	std_msgs::Header hdr;
-        
 	std::stringstream ss_e;
         ss_e << ::getpid() << " lp "  << ::gettid();
         hdr.frame_id = ss_e.str();
 
-	ros::Publisher pub1 = n.advertise<std_msgs::Header>("/robot_0/exec_start_lp", 1, true);
-        pub1.publish(hdr);
-	
+	// tid of PMT for Ope:
+	ROS_ERROR("tid of ROBOTOperator::PMT: %i", n.getPMTId());
+	std::stringstream ss_e1;
+	ss_e1 << ::getpid() << " lp_extra "  << n.getPMTId();
+	std_msgs::Header hdre;
+	hdre.frame_id = ss_e1.str();
+
+	ROS_ERROR("tid of ROBOTOperator::InternalCBQ TID: %i", n.getInternalCBQTId() );
+	std::stringstream ss_e2;
+	ss_e2 << ::getpid() << " lp_extra "  << n.getInternalCBQTId();
+	std_msgs::Header hdre2;
+	hdre2.frame_id = ss_e2.str();
+
+	ROS_ERROR("Publishing node LP tid %i, pid %i to controller. strs: %s, %s, %s", ::gettid(), ::getpid(), hdr.frame_id.c_str(), hdre.frame_id.c_str(), hdre2.frame_id.c_str());
+	int op_ct = 0;
+
 	while(ok())
 	{
 		robOp.executeCommand();
@@ -81,6 +95,17 @@ int main(int argc, char **argv)
 		std::unique_lock<std::mutex> lk_mutex_robot_op_lp (mutex_robot_op_lp);
                 cv_robot_op_lp.wait(lk_mutex_robot_op_lp);
 		ROS_WARN("RobotOp notified. Will execute now!");
+	
+		op_ct += 1;
+		if (op_ct < 10)
+		{
+			if (op_ct%3 == 0)
+				pub1.publish(hdr);
+			else if (op_ct%3 == 1)
+				pub1.publish(hdre);
+			else
+				pub1.publish(hdre2);
+		}
 	}
 	spinner_thr.join();
 	return 0;	

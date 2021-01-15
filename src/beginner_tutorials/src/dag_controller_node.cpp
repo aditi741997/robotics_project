@@ -38,6 +38,13 @@ private:
 	int node_pid;
 };
 
+double get_time_now()
+{
+	        struct timespec ts;
+	        clock_gettime(CLOCK_MONOTONIC, &ts);
+	        return (ts.tv_sec + 1e-9*ts.tv_nsec);
+}
+
 class DAGController: public DAGControllerFE
 {
         ros::NodeHandle nh;
@@ -60,9 +67,13 @@ class DAGController: public DAGControllerFE
 	std::vector<double> reset_count;
 	ros::Subscriber critical_exec_end_sub;
 	std::map<std::string, ros::Publisher> trigger_nc_exec; // may want to trigger CC's first node too, in the future, for a pure RTC thing.
+	// we may need a map of the following params now: [scan,map,nav nodes]
 	int nav_client_fd, srv_fd, port_no; 
 	bool nav_socket_connected; // for IPC with the Navigator node. 	
 	boost::thread socket_conn_thread; // thread to accept client cnn.
+
+	std::map<std::string, bool> trigger_socks_conn;
+	std::map<std::string, int> trigger_socks;
 
 	std::map<std::string, ros::Subscriber> exec_end_subs; // to get ci estimates from all nodes.
 	std::string last_node_cc_name;
@@ -89,7 +100,8 @@ public:
                 {
                         std::string topic = "/robot_0/exec_start_" + it->first;
 			ROS_INFO("Subscribing to %s", topic.c_str());
-			ros::Subscriber si = nh.subscribe<std_msgs::Header>(topic, 1, &DAGController::exec_start_cb, this, ros::TransportHints().tcpNoDelay());
+			// Large queu elen cuz it also receives extra tids.
+			ros::Subscriber si = nh.subscribe<std_msgs::Header>(topic, 100, &DAGController::exec_start_cb, this, ros::TransportHints().tcpNoDelay());
 			exec_start_subs.push_back(si);
 
 			std::string pubtopic = "/robot_0/trigger_exec_" + it->first;
@@ -105,6 +117,7 @@ public:
 				exec_end_subs[it->first] = esi;
 			}	
 		}
+		ROS_INFO("DAGController: PMT Id: %i, InternalCBQTID: %i", nh.getPMTId(), nh.getInternalCBQTId() );
 		
 		// Nov: for IPC with navigator node:
 		srv_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -119,7 +132,7 @@ public:
 		memset(&saddr, 0, sizeof(saddr));
 		saddr.sin_family = AF_INET;
 		saddr.sin_addr.s_addr = INADDR_ANY;
-		port_no = 7727;
+		port_no = 6327;
 		saddr.sin_port = htons(port_no);
 
 		if (bind(srv_fd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) ROS_ERROR("Socket:: bind FAILED!!");
@@ -127,7 +140,9 @@ public:
 		// A thread to accept client's connection when it arrives.
 		nav_socket_connected = false;
 		socket_conn_thread = boost::thread(&DAGController::socket_conn, this);
-        }
+        
+		controller->start();
+	}
 
 	~DAGController()
 	{
@@ -138,17 +153,46 @@ public:
 	void socket_conn()
 	{
 		if (listen(srv_fd, 2) < 0) ROS_ERROR("Socket:: LISTEN failed!!!");
-		ROS_INFO("DAGC: Socket:: Listening on port %i for clients...\n", port_no);
+		ROS_INFO("DAGC: Socket Connecting thread! id: %i Listening on port %i for clients...\n", ::gettid(), port_no);
 
-		// while (true)
+		// want to connect to multiple clients
+		int socket_ct = 3; // scan, mapper, navigator
+		int socket_conn_count = 0;
+
+		int read_size;
+		char msg [2048];
+
+		while (socket_conn_count < socket_ct)
 		{
 			struct sockaddr_in caddr;
 			socklen_t len = sizeof(caddr);
 		
 			// accept is a blocking call : does nothing till someone connects.	
-			nav_client_fd = accept(srv_fd, (struct sockaddr*) &caddr, &len);
-			if (nav_client_fd < 0) ROS_ERROR("DAGC: Socket:: nav_client_fd is <0!!!!");
-			else nav_socket_connected = true;
+			int client_fd = accept(srv_fd, (struct sockaddr*) &caddr, &len);
+			if (client_fd < 0) ROS_ERROR("DAGC: Socket:: nav_client_fd is <0!!!!");
+			else
+			{
+			// we now listen for a msg from this socket.
+				ROS_ERROR("DAGC: Socket::  client_fd is %i , will read now.", client_fd);
+				int n = read(client_fd, msg, 2048);
+				if (n<0) ROS_ERROR("DAGC: Could not read frm socket %i, total connected till now: %i", client_fd, socket_conn_count);
+				else
+				{
+					std::string s_msg = msg;
+					memset(msg, 0, 2048);
+					std::stringstream ss(s_msg);
+					std::string to;
+					while(std::getline(ss,to,'\n'))
+					{
+						ROS_INFO("Socket %i recvs triggers for node %s", client_fd, to.c_str());
+						trigger_socks[to] = client_fd;
+						trigger_socks_conn[to] = true;
+					}
+
+					socket_conn_count++;
+				}
+			}
+
 			ROS_INFO("DAGC: Socket:: Done with socket connection Accept. !!!!!!");
 		}
 	}
@@ -289,19 +333,21 @@ public:
 				reset_count[ind-1] = false; 
 			}
 			hdr.frame_id += "\n";
+			/*
 			if (name.find("nav") == std::string::npos)
 				trigger_nc_exec[name].publish(hdr); // TODO:Later: ind-1 cuz CC does not have a trigger, so ind ka triggerPub is at ind-1.
 			else
+			*/
 			{
 				// Use socket here.
-				if (nav_socket_connected)
+				if (trigger_socks_conn[name])
 				{
 					char msg[1+hdr.frame_id.length()];
 					strcpy(msg, hdr.frame_id.c_str());
-					send(nav_client_fd, msg, strlen(msg), 0);
+					send( trigger_socks[name] , msg, strlen(msg), 0);
 				}
 				else
-					ROS_ERROR("nav_socket_connected IS false!!! Nav-DAGController SOCKET NOT connected!!");
+					ROS_ERROR("trigger_socket_connected IS false for %s!!! DAGController SOCKET NOT connected!!", name.c_str());
 			}
 		}
 	}
@@ -316,20 +362,23 @@ public:
 			hdr.frame_id += " RESETCOUNT";
                         // ROS_WARN("RESETTING trigger_ct for NC %s", name.c_str());
 		}
+		hdr.frame_id += " " + std::to_string(get_time_now());
+		hdr.stamp.fromSec(get_time_now());
 		hdr.frame_id += "\n";
-                if (name.find("nav") == std::string::npos)
+                /*
+		if (name.find("nav") == std::string::npos)
                 	trigger_nc_exec[name].publish(hdr);
 		else
+		*/
 		{
-			if (nav_socket_connected)
+			if (trigger_socks_conn[name])
                         {
 				char msg[1+hdr.frame_id.length()];
                                 strcpy(msg, hdr.frame_id.c_str());
-                                send(nav_client_fd, msg, strlen(msg), 0);
-				std::cout << "Finished sending trigger to node " << name << std::endl;
+                                send(trigger_socks[name], msg, strlen(msg), 0);
 			}
 			else
-				ROS_ERROR("nav_socket_connected IS false!!! Nav-DAGController SOCKET NOT connected!!");
+				ROS_ERROR("trigger_socks_conn SOCKET NOT connected for %s IS false!!! Nav-DAGController SOCKET NOT connected!!", name.c_str());
 		}
 	}
 

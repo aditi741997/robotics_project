@@ -235,6 +235,10 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 		node_dag->print_dvec(wijl_sum_c, "\n ADDING constr pi - sum_ci*(sum wijl) > 0.0 for i"+i_str);
 		mosek_model->constraint("pi_core_equal_share"+i_str, Expr::add( Expr::dot(wijl_sum_c1, wijl), Expr::dot(pi, pi_cm1) ), Domain::greaterThan(0.0-0.01) );
 	}
+
+	// TODO: Handle multi threaded nodes with the perfect scaling assumption.
+	// Make variables bi, i.e. #bins for sc i alone. 1<=bi<=sum aij.
+	// Replace constraint Pi >= Mi BY : Pi * sum aij >= Mi * bi I.E. sum zij >= Mi*bi.
 	
 	// constraint on RT of all chains. [p0 + sum 2*pi + max(all pi)] = RT <= constr.
 	std::map<int, int> node_id_exec_order_id;
@@ -309,7 +313,7 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 		}
 	}
 
-	// TODO: Objective is CC RT + 0.001*(sum of other three RTs)
+	// Done: Objective is CC RT + 0.001*(sum of other three RTs)
 	// rt_sum_ps DOT pi + chains1_X approx_period : objective func. [we dont need to add S0]
 	std::vector<double> chain_pers_sum (num_chains, non_crit_rt_mult*1.0);
 	chain_pers_sum[0] = 0.0;

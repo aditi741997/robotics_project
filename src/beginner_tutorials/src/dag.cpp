@@ -1098,7 +1098,7 @@ std::vector<int> DAG::compute_rt_solve()
 	// Initialize mosek solver:
 	mosek_model = new Model("single_core_scheduler_algo");
 	auto _mosek_model = finally([&]() { mosek_model->dispose(); });
-	mosek_model->setSolverParam("numThreads", 1);
+	// mosek_model->setSolverParam("numThreads", 1);
 	mosek_model->setSolverParam("intpntMultiThread", "off");
 
 	Variable::t all_l_vars = mosek_model->variable(total_vars);
@@ -1248,6 +1248,7 @@ std::vector<int> DAG::compute_rt_solve()
 			printf("var %i : %f", i, (*opt_ans)[i]);
 		}
 		std::cout << "OPTIMAL ANSWER : " << (*opt_ans)[0] << ", " << (*opt_ans)[1] << ", " << (*opt_ans)[2] << ", " << (*opt_ans)[3] << std::endl;
+		print_vec(all_frac_vals, "Here are all the variables [1/fi] rounded to closest integer ");
 
 	}
 	catch (const OptimizeError& e)
@@ -1281,8 +1282,16 @@ std::vector<int> DAG::compute_rt_solve()
 	{
 		std::cerr << "DAG::compute_rt_solve: Unexpected error: " << e.what() << "\n";
 	}
+	if (all_frac_vals[0] == 0)
+	{
+		for (int i = 1; i < all_chains.size(); i++)
+		{
+			std::get<0>(all_chains[i]) = 1.5*(std::get<0>(all_chains[i]));
+			printf("New constraint for chain %i is : %f", i, std::get<0>(all_chains[i])); 
+		}
+		printf("Solver unable to satisfy constraints!! Loosening all non-CC constraints by 1.5x. \n");
+	}
 		// std::cout << (int) round(2.3) << ", " << (int) round(2.7) << ", " << (int) round(1.11) << ", " << std::endl;
-	print_vec(all_frac_vals, "Here are all the variables [1/fi] rounded to closest integer ");
 	double total_time_ci = (double)(clock() - ci_start_rt)/CLOCKS_PER_SEC;
 	double solve_time = (double)(clock() - solve_start_rt)/CLOCKS_PER_SEC;	
 	std::cout << "TOTAL time including stuff that uses ci : " << total_time_ci << ", solve time : " << solve_time << ", CPUTime to solve: " << ( (solve_end.tv_sec + solve_end.tv_nsec*1e-9) - (solve_start.tv_sec + 1e-9*solve_start.tv_nsec) ) << std::endl;
