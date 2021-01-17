@@ -239,7 +239,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	{
                 // total_period_count += 1;
 
-		cc_completion_log << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
 
 		// Nov25: No need to do anything if we're using TD in offline version.
 		if (!offline_use_td)
@@ -310,6 +309,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				offline_fracs_mtx.lock();
 				long i_to = 1000*get_timeout(exec_order[i]);
 				changePriority(exec_order, i); // handles priority & trigger.
+				
+				auto trig_cc = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count();
+
 				offline_fracs_mtx.unlock();
 
 				ready_sched = false;
@@ -328,6 +330,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					}
 					if (ct > 4)
 						printf("Monotime %f, realtime %f, Waited for CC's completion! ct %i ready_sched %i [if 0, CC hasnt ended!] \n", get_monotime_now(), get_realtime_now(), ct, (bool)(ready_sched.load()) );
+					
+		cc_completion_log << trig_cc << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
 				}
 				else
 					std::this_thread::sleep_for( std::chrono::microseconds( i_to ) );
