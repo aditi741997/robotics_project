@@ -8,6 +8,8 @@
 #include <sys/syscall.h>
 #define gettid() syscall(SYS_gettid)
 
+#include <cerrno>
+
 #include <boost/make_shared.hpp>
 #include <boost/shared_ptr.hpp>
 
@@ -37,6 +39,11 @@ double get_time_now()
 }
 
 MultiMapper::MultiMapper()
+{
+	ROS_ERROR("MultiMapper::MultiMapper empty cONSTRUCTOR CALLED!!");
+}
+
+MultiMapper::MultiMapper(ros::Publisher& mcb_pub)
 {
 	// Get parameters from the ROS parameter server
 	ros::NodeHandle robotNode;
@@ -241,15 +248,64 @@ MultiMapper::MultiMapper()
 	mapcb_trigger_sub = robotNode.subscribe("trigger_exec_mapcb", 1, &MultiMapper::recv_trigger_exec, this, ros::TransportHints().tcpNoDelay());
 	mapupd_trigger_sub = robotNode.subscribe("trigger_exec_mapupd", 1, &MultiMapper::recv_trigger_exec, this, ros::TransportHints().tcpNoDelay());
 
-	// For making a separate thread for mapCB:
-        map_cb_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapcb", 1, true);
-        map_scan_cb_thread_ = new boost::thread(boost::bind(&MultiMapper::mapScanCBLoop, this, mMapScanUpdateRate));
+	sock_recv_thread = boost::thread(&MultiMapper::socket_recv, this);
 
-	map_upd_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapupd", 1, true);
+	ROS_ERROR("Mapper's TF CBT tid: %i", mTransformListener.getTFCBTid() );
+	
+	// For making a separate thread for mapCB:
+        // map_cb_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapcb", 1, true);
+        map_cb_exec_info_pub = mcb_pub;
+	// publish_tid("mapcb_extra", mTransformListener.getTFCBTid(), &map_cb_exec_info_pub);
+	map_scan_cb_thread_ = new boost::thread(boost::bind(&MultiMapper::mapScanCBLoop, this, mMapScanUpdateRate));
+
+	map_upd_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapupd", 10, true);
+	// publish_tid("mapupd_extra", mTransformListener.getTFCBTid(), &map_upd_exec_info_pub);
         map_update_thread_ = new boost::thread(boost::bind(&MultiMapper::mapUpdateLoop, this, mMapUpdateRate));
 
 	map_cb_exec_end_pub = robotNode.advertise<std_msgs::Header>("exec_end_mapcb", 1, true);
 	map_upd_exec_end_pub = robotNode.advertise<std_msgs::Header>("exec_end_mapupd", 1, true);
+}
+
+void MultiMapper::socket_recv()
+{
+	// initialize sockets for recv triggers [New:Jan]
+	client_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
+	ROS_ERROR("MultiMapper:: SOCKET: client_sock_fd is %i", client_sock_fd);
+	// if (client_sock_fd < 0) ROS_ERROR("MultiMapper:: SOCKET: client_sock_fd is NEGATIVE!!");
+
+	struct sockaddr_in serv_addr;
+	serv_addr.sin_family = AF_INET;
+	serv_addr.sin_port = htons(6327);
+
+	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
+	// if ( pton_ret <= 0 )
+		ROS_ERROR("MultiMapper:: SOCKET:  inet_pton RET val: %i", pton_ret);
+
+	int con_ret = connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	// if ( con_ret < 0 )
+		ROS_ERROR("MultiMapper:: SOCKET: In connect call!!! ret val: %i, errno: %i, str: %s", con_ret, errno, std::strerror(errno));
+
+	std::string s = "mapcb\nmapupd\n";
+        char smsg[1+s.length()];
+	strcpy(smsg, s.c_str());
+	send(client_sock_fd, smsg, strlen(smsg), 0);
+
+	// priority=3.
+	int ret = 7;
+	struct sched_param sp = { .sched_priority = 3,};
+        ret = sched_setscheduler(::gettid(), SCHED_FIFO, &sp);
+	ROS_ERROR("MultiMapper:: SOCKET tHREAD prio=3, retval: %i, tid: %i, pid: %i", ret, ::gettid(), ::getpid());
+
+	// wait for msgs.
+	int read_size;
+	char msg [2048];
+
+	while ( (read_size = recv(client_sock_fd, msg, 2048, 0) ) > 0 )
+	{
+		std::string s_msg = msg;
+		memset(msg, 0, 2048);
+		processTrigger(s_msg);
+	}
 }
 
 MultiMapper::~MultiMapper()
@@ -271,33 +327,44 @@ MultiMapper::~MultiMapper()
 
 void MultiMapper::recv_trigger_exec(const std_msgs::Header::ConstPtr& msg)
 {
-	if (msg->frame_id.find("cb") != std::string::npos)
+	ROS_ERROR("Got a trigger msg! %s, TS: %f", msg->frame_id.c_str(), msg->stamp.toSec());
+	processTrigger(msg->frame_id);
+}
+
+void MultiMapper::processTrigger(std::string msg)
+{
+	if (msg.find("cb") != std::string::npos)
 	{
 		// its the mapcb trigger.
-		ROS_ERROR("Got a trigger for mapcb, curr count: %i", mapcb_trigger_count);
+		ROS_ERROR("Got a trigger for mapcb, %s curr count: %i", msg.c_str(), mapcb_trigger_count);
 		boost::unique_lock<boost::mutex> lock(mapcb_trigger_mutex);
-		if (msg->frame_id.find("RESETCOUNT") != std::string::npos)
+		/*
+		if (msg.find("RESETCOUNT") != std::string::npos)
 		{
 			mapcb_trigger_count = 1;
-			ROS_ERROR("RESET counter for mapcb to 1.");
+			// ROS_ERROR("RESET counter for mapcb to 1.");
 		}
 		else
-			mapcb_trigger_count += 1;
+		*/
+		mapcb_trigger_count += 1;
 		cv_mapcb.notify_all();
 	}
 	else
 	{
-		ROS_ERROR("Got a trigger for mapupd, curr count: %i", mapupd_trigger_count);
+		ROS_ERROR("Got a trigger for mapupd %s curr count: %i", msg.c_str(), mapupd_trigger_count);
 		boost::unique_lock<boost::mutex> lock(mapupd_trigger_mutex);
-		if (msg->frame_id.find("RESETCOUNT") != std::string::npos)
+		/*
+		if (msg.find("RESETCOUNT") != std::string::npos)
 		{
 			mapupd_trigger_count = 1;
-			ROS_ERROR("RESET counter for mapupd to 1.");
+			// ROS_ERROR("RESET counter for mapupd to 1.");
 		}
 		else
-			mapupd_trigger_count += 1;
+		*/	
+		mapupd_trigger_count += 1;
 		cv_mapupd.notify_all();	
 	}
+
 }
 
 void MultiMapper::mapUpdateLoop(double map_update_rate)
@@ -324,10 +391,14 @@ void MultiMapper::mapUpdateLoop(double map_update_rate)
 	// use_timer = true;
 	ROS_ERROR("In mapUpdateLoop, use_timer is %i, use_td param is %s",use_timer, use_td.c_str() );
 
+	int map_upd_ct = 0;
+
 	while (nh.ok() && !map_update_thread_shutdown_)
 	{
 		if (processed_scans)
 			sendMap();
+		
+		map_upd_ct++;
 		// r.sleep();
 		// Nov5: To be triggered by Scheduler.
 		// Nov23: if not timer then triggered by scheduler.
@@ -336,15 +407,21 @@ void MultiMapper::mapUpdateLoop(double map_update_rate)
 		else
 		{
 			boost::unique_lock<boost::mutex> lock(mapupd_trigger_mutex);
-			if (mapupd_trigger_count > 0)
-				mapupd_trigger_count -= 1;
 			while (mapupd_trigger_count == 0)
 			{
 				cv_mapupd.wait(lock);
-				ROS_ERROR("About to run updateMap!! %i", mapupd_trigger_count);
 			}
+			ROS_ERROR("About to run updateMap!! %i", mapupd_trigger_count);
+			mapupd_trigger_count = 0; // flush on read
 		}
-		
+	
+		if (map_upd_ct<10)
+		{
+			if (map_upd_ct%2 == 0)
+				publish_tid("mapupd_extra", mTransformListener.getTFCBTid(), &map_upd_exec_info_pub);	
+			else
+				publish_tid("mapupd", ::gettid(), &map_upd_exec_info_pub);
+		}
 	}
 }
 
@@ -965,13 +1042,20 @@ void MultiMapper::mapScanCBLoop(double per)
 		else
 		{	
 			boost::unique_lock<boost::mutex> lock(mapcb_trigger_mutex);
-			if (mapcb_trigger_count > 0)
-				mapcb_trigger_count -= 1;
 			while (mapcb_trigger_count == 0)
 			{
 				cv_mapcb.wait(lock);
-				ROS_ERROR("About to processLatestScan %i", mapcb_trigger_count);
 			}
+			ROS_ERROR("About to processLatestScan %i", mapcb_trigger_count);
+			mapcb_trigger_count = 0; // flush on read.
+		}
+
+		if (total_map_cb_trig_count<9)
+		{
+			if (total_map_cb_trig_count%2 == 1)
+				publish_tid("mapcb", ::gettid(), &map_cb_exec_info_pub);
+			else
+				publish_tid("mapcb_extra", mTransformListener.getTFCBTid(), &map_cb_exec_info_pub);
 		}
 	
 	}
@@ -1358,7 +1442,7 @@ void MultiMapper::publishTransform()
 		std_msgs::Header hdr;
 		hdr.stamp = ros::Time(last_scan_mapCB_tf_processed);
 		mScanTSPublisher.publish(hdr);
-		ROS_INFO("From mapScanCB: Publishing transform.. with TS %f", last_scan_mapCB_tf_processed);
+		ROS_ERROR("From mapScanCB: Publishing transform.. with TS %f", last_scan_mapCB_tf_processed);
 
 		//TODO: see if we can put TS within the TF, cuz 
 		// it might happen that the Navigator node uses the TF before the new is published and after new_TS is published.

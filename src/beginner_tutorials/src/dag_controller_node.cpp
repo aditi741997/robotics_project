@@ -117,6 +117,7 @@ public:
 				exec_end_subs[it->first] = esi;
 			}	
 		}
+		ROS_INFO("DAGController: PMT Id: %i, InternalCBQTID: %i", nh.getPMTId(), nh.getInternalCBQTId() );
 		
 		// Nov: for IPC with navigator node:
 		srv_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -131,7 +132,7 @@ public:
 		memset(&saddr, 0, sizeof(saddr));
 		saddr.sin_family = AF_INET;
 		saddr.sin_addr.s_addr = INADDR_ANY;
-		port_no = 7727;
+		port_no = 6327;
 		saddr.sin_port = htons(port_no);
 
 		if (bind(srv_fd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) ROS_ERROR("Socket:: bind FAILED!!");
@@ -152,7 +153,7 @@ public:
 	void socket_conn()
 	{
 		if (listen(srv_fd, 2) < 0) ROS_ERROR("Socket:: LISTEN failed!!!");
-		ROS_INFO("DAGC: Socket:: Listening on port %i for clients...\n", port_no);
+		ROS_INFO("DAGC: Socket Connecting thread! id: %i Listening on port %i for clients...\n", ::gettid(), port_no);
 
 		// want to connect to multiple clients
 		int socket_ct = 3; // scan, mapper, navigator
@@ -172,6 +173,7 @@ public:
 			else
 			{
 			// we now listen for a msg from this socket.
+				ROS_ERROR("DAGC: Socket::  client_fd is %i , will read now.", client_fd);
 				int n = read(client_fd, msg, 2048);
 				if (n<0) ROS_ERROR("DAGC: Could not read frm socket %i, total connected till now: %i", client_fd, socket_conn_count);
 				else
@@ -182,7 +184,7 @@ public:
 					std::string to;
 					while(std::getline(ss,to,'\n'))
 					{
-						ROS_ERROR("Socket %i recvs triggers for node %s", client_fd, to.c_str());
+						ROS_INFO("Socket %i recvs triggers for node %s", client_fd, to.c_str());
 						trigger_socks[to] = client_fd;
 						trigger_socks_conn[to] = true;
 					}

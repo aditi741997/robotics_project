@@ -40,7 +40,7 @@
 #include "ros/init.h"
 #include "ros/file_log.h"
 #include "ros/subscribe_options.h"
-#include "ros/subscription.h"
+
 #include "xmlrpcpp/XmlRpc.h"
 
 #include <ros/console.h>
@@ -275,16 +275,7 @@ bool TopicManager::subscribe(const SubscribeOptions& ops, ros::Publisher cb_T_p)
   std::string datatype = ops.datatype;
 
   SubscriptionPtr s(boost::make_shared<Subscription>(ops.topic, md5sum, datatype, ops.transport_hints));
-  if (!(cb_T_p.getTopic().empty()))
-  {
-	// need to save the susbcription que
-  	s->addCallback(ops.helper, ops.md5sum, ops.callback_queue, ops.queue_size, ops.tracked_object, ops.allow_concurrent_callbacks, node_sub_que_ptr, cb_T_p);
-	ROS_INFO("TopicMgr got subQueue ref. pub_cb_time? %i", node_sub_que_ptr->publish_cb_time);
-  }
-  else
-  {
-	s->addCallback(ops.helper, ops.md5sum, ops.callback_queue, ops.queue_size, ops.tracked_object, ops.allow_concurrent_callbacks, cb_T_p);
-  } 
+  s->addCallback(ops.helper, ops.md5sum, ops.callback_queue, ops.queue_size, ops.tracked_object, ops.allow_concurrent_callbacks, cb_T_p);
 
   if (!registerSubscriber(s, ops.datatype))
   {
@@ -294,14 +285,22 @@ bool TopicManager::subscribe(const SubscribeOptions& ops, ros::Publisher cb_T_p)
   }
 
   subscriptions_.push_back(s);
-  
-   return true;
+  // Save subPtr only if scan in topic: Assuming that dropping used only for mapCB : 
+  // TODO: Check this. we might not even use it for mapCB lol. 
+  if (ops.topic.find("base_scan") != std::string::npos)
+  {
+  	node_sub_ptr = s;
+  	ROS_WARN("In topicMgr:: subscribe. Saving SubscriptionPtr for %s", ops.topic.c_str());
+  }
+
+  return true;
 }
 
-void TopicManager::changeBinSize(int binsz)
+void TopicManager::changeDropFraction(int dropf)
 {
-  ROS_INFO("In TopicMgr changeBinSz");
-  node_sub_que_ptr->changeBinSize(binsz);
+	ROS_WARN("In topicmGR CHANGEdROPfRACTion to %i", dropf);
+	// node_sub_que_ptr->changeDropFraction(Dropf);
+	node_sub_ptr->changeFraction(dropf);
 }
 
 bool TopicManager::advertise(const AdvertiseOptions& ops, const SubscriberCallbacksPtr& callbacks)
@@ -774,7 +773,16 @@ void TopicManager::publish(const std::string& topic, const boost::function<Seria
     // call inside signal() is actually relatively expensive when doing a nocopy publish.
     if (serialize)
     {
-      poll_manager_->getPollSet().signal();
+      // Oct: No need to signal if rosout, since publication->publish call finished all the publish work already.
+      // Doing so to avoid PMThread being heavy.
+      // Nov1: Trying to signal only if 
+      if ( (this_node::getName().find("avigator") != std::string::npos) )
+      {
+	if (  ( (topic.find("cmd") != std::string::npos) || (topic.find("exec_start") != std::string::npos) || (topic.find("plan") != std::string::npos) ) )
+	  poll_manager_->getPollSet().signal();
+      }
+      else
+	poll_manager_->getPollSet().signal();
     }
   }
   else

@@ -23,10 +23,20 @@ typedef actionlib::SimpleActionServer<nav2d_navigator::GetFirstMapAction> GetMap
 typedef actionlib::SimpleActionServer<nav2d_navigator::LocalizeAction> LocalizeActionServer;
 typedef pluginlib::ClassLoader<ExplorationPlanner> PlanLoader;
 
+inline void publish_tid(std::string name, int tid, ros::Publisher* pub)
+{
+        std_msgs::Header hdr;
+        std::stringstream ss;
+        ss << ::getpid() << " " << name << " " << tid; 
+        hdr.frame_id = ss.str();
+        pub->publish(hdr);
+}
+
 class RobotNavigator
 {
 public:
-	RobotNavigator();
+	RobotNavigator() {};
+	RobotNavigator(ros::Publisher& nc_pub);
 	~RobotNavigator();
 
 	bool receiveStop(std_srvs::Trigger::Request &req, std_srvs::Trigger::Response &res);
@@ -52,6 +62,7 @@ public:
 	int get_pos_tf_error_ct = 0;
 
 	ros::Publisher navp_exec_info_pub, navc_exec_info_pub, navc_exec_end_pub, navp_exec_end_pub;
+	tf::TransformListener* mTfListener;
 
 private:
 	bool isLocalized();
@@ -66,7 +77,6 @@ private:
 	void publishPlan();
 
 	// Everything related to ROS
-	tf::TransformListener* mTfListener;
 	ros::ServiceClient mGetMapClient;
 	ros::Subscriber mGoalSubscriber;
 	ros::Publisher mPlanPublisher;

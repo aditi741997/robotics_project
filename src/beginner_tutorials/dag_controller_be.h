@@ -118,6 +118,8 @@ public:
 	// int changePrioritySubChain(int ind, int prio);
 	int changePrioritySubChain(std::vector<int>& sc, int prio);
 
+	bool changePriorityThread(std::string nname, int tid, int prio);
+
 	void recv_node_info(std::string node_name, int tid, int pid=0);
 
 	std::string get_last_node_cc_name();

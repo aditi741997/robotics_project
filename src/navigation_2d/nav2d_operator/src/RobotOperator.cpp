@@ -73,14 +73,14 @@ void write_arr_to_file(std::vector<double>& arr, std::string m)
     arr.clear();
 }
 
-RobotOperator::RobotOperator(std::condition_variable* cv_robot_op)
+RobotOperator::RobotOperator(ros::Publisher* lc_pub, std::condition_variable* cv_robot_op)
 {
 	if( ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info) ) {
         	ros::console::notifyLoggerLevelsChanged();
     	}
 
 	// Create the local costmap
-	mLocalMap = new costmap_2d::Costmap2DROS("local_map", mTfListener, cv_robot_op);
+	mLocalMap = new costmap_2d::Costmap2DROS("local_map", mTfListener, lc_pub, cv_robot_op);
 	mRasterSize = mLocalMap->getCostmap()->getResolution();
 	
 	// Publish / subscribe to ROS topics
@@ -154,6 +154,13 @@ RobotOperator::RobotOperator(std::condition_variable* cv_robot_op)
 	count_scan_mapCB_navPlan_navCmd = 0;
 	count_scan_mapCB_mapUpd_navPlan_navCmd = 0;
 	count_odom_lp = 0;
+
+	ROS_ERROR("FOR robotOperator, tid for TF- CBT : %i, Publishing!", mTfListener.getTFCBTid() );
+	std::stringstream ss_tf;
+	ss_tf << ::getpid() << " lp_extra " << mTfListener.getTFCBTid();
+	std_msgs::Header hdr_tf;
+	hdr_tf.frame_id = ss_tf.str();
+	lc_pub->publish(hdr_tf);
 }
 
 RobotOperator::~RobotOperator()

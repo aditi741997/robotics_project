@@ -43,7 +43,7 @@ double get_realtime_now()
 		struct sched_param params;
 		params.sched_priority = 0;
 		int ret = pthread_setschedparam(pt, SCHED_OTHER, &params);
-		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i |", get_monotime_now(), get_realtime_now(), ret);
+		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD to OTHER: %i |", get_monotime_now(), get_realtime_now(), ret);
 	}
 
 	void set_other_policy(int tid, int nice_val)
@@ -77,7 +77,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
                 node_dag.assign_publishing_rates();
                 node_dag.assign_src_rates();
 
-		// /*
+		/*
 		int num_cores = 1;
 		multi_core_solver = MultiCoreApproxSolver(&node_dag, num_cores);
 		std::vector< std::vector<int> > sc_core_assgt = multi_core_solver.solve();
@@ -85,7 +85,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		node_dag_mc.set_params(num_cores, sc_core_assgt);
 		node_dag_mc.assign_fixed_periods();
 		node_dag_mc.compute_rt_solve();
-		// */
+		*/
 
 		frac_var_count = node_dag.global_var_count;
 		// Nov: Solving for fi's commented for offline stage:
@@ -203,12 +203,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::startup_trigger_func()
 	{
+		set_high_priority("Startup trigger thread", 4, 0);
 		double cc_period = 0.0; // in millisec.
 		for (int i = 0; i < exec_order.size(); i++)
 			cc_period += get_sum_ci_ith(exec_order[i])*offline_fracs[ node_dag.id_name_map[ exec_order[i][0] ] ];
 		int oldstate;
 		int ret_pct = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldstate);
-		printf("MonoTime: %f, RealTime: %f, STARTED startup_trigger thread! CC period: %f, sched_started: %i \n", get_monotime_now(), get_realtime_now(), cc_period, sched_started.load() );
+		printf("MonoTime: %f, RealTime: %f, STARTED startup_trigger thread TID: %i ! CC period: %f, sched_started: %i \n", get_monotime_now(), get_realtime_now(), ::gettid(), cc_period, sched_started.load() );
 
 		curr_cc_period = cc_period;
 
@@ -289,7 +290,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::handle_sched_main()
 	{
 		set_high_priority("MAIN sched Thread", 4, 0);
-		printf("Len of exec_order: %zu, curr_cc_period: %f, ceil 0.5: %f \n", exec_order.size(), curr_cc_period, ceil(0.5) );
+		for (auto &i : node_dag.name_id_map)
+			printf("#EXTRA THREADS for node %s : %i", i.first.c_str(), node_extra_tids[i.first].size() );
+		printf("STARTING MAinSched thread!! tid: %i Len of exec_order: %zu, curr_cc_period: %f, ceil 0.5: %f \n", ::gettid(), exec_order.size(), curr_cc_period, ceil(0.5) );
+		
 		total_period_count = 1;
 		while (!shutdown_scheduler)
 		{
@@ -326,13 +330,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			total_period_count += 1;
 			// inc prio of our dynamic_resolve thread for sometime. to fifo,p2, the whole exec_order to p1 or just the last guy to p1.
 			// assuming 20ms -> 40ms for LowCF needed by reopt thread in 1s : 
-			int one_in_k_per = ceil(1000/(float)(40*curr_cc_period));
+			int one_in_k_per = ceil(2000/(float)(40*curr_cc_period));
 			if (total_period_count%( one_in_k_per ) == 0 && (dynamic_reoptimize))
 			{
-				printf("WANNA run dyn_reopt for 1ms now!!");
+				printf("WANNA run dyn_reopt for 2ms now!! one_in_k_per: %i \n", one_in_k_per);
 				changePriority(exec_order, -1);
 				set_high_priority("Dyn Reopt thread!", 2, reoptimize_thread_id);
-				std::this_thread::sleep_for( std::chrono::milliseconds(1) );
+				std::this_thread::sleep_for( std::chrono::milliseconds(2) );
 				// change policy back to rr, p1. RR wont work!!
 				set_other_policy_pthr(reoptimize_thread_p);
 				// set_high_priority("Dyn Reopt thread!", 1, reoptimize_thread_id);
@@ -350,10 +354,11 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::set_high_priority(std::string thread_name, int prio, int tid)
 	{
-		// set prio to 4, with FIFO.
+		// set prio to prio, with FIFO.
 		struct sched_param sp = { .sched_priority = prio,};
 		int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
-		 printf("MonoTime: %f, RealTime: %f, SETTING priority to %i, for thread: %s, retval: %i \n", get_monotime_now(), get_realtime_now(), prio, thread_name.c_str(), ret);
+		if (ret != 0) 
+			printf("MonoTime: %f, RealTime: %f, SETTING priority to %i, for thread: %s, retval: %i \n", get_monotime_now(), get_realtime_now(), prio, thread_name.c_str(), ret);
 		// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " SETTING priority to " << prio << " retval: " << ret << thread_name << std::endl;
 	 }
 
@@ -437,35 +442,44 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		// it executes first. [since it'll be ahead in the list of same prio.]
 		for (int j = sci.size()-1 ; j >= 0; j-- )
 		{
-			// printf("Monotime %f, realtime %f, ABOUT TO change prio for node %s to %i, tid %i \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[exec_order[ind][j]].c_str(), prio, node_tid[node_dag.id_name_map[exec_order[ind][j]] ] );
 			if (node_tid.find( node_dag.id_name_map[sci[j]] ) != node_tid.end())
 			{
 				if ( (node_curr_prio.find( node_dag.id_name_map[sci[j]] ) == node_curr_prio.end()) || (node_curr_prio[ node_dag.id_name_map[sci[j]] ] != prio) )
 				{
-					int n_tid = node_tid[node_dag.id_name_map[sci[j]] ];
-					if (n_tid == 0)
-						std::cerr << "WUTT!!!!" << sci[0] << ", " << node_dag.id_name_map[sci[j]] << ", " << (node_tid.find( node_dag.id_name_map[sci[j]] ) == node_tid.end()) << std::endl;
-					ret = ( ret && ( sched_setscheduler( node_tid[node_dag.id_name_map[sci[j]] ] , SCHED_FIFO, &sp) ) );
-					if (ret != 0)
-						std::cerr << "WEIRD!!! Changing prio for SC with 0th node:" << sci[0] << "-" << j << " to " << prio << std::endl;
-					else
-						node_curr_prio[ node_dag.id_name_map[sci[j]] ] = prio;
-
-					auto n_extras = node_extra_tids[ node_dag.id_name_map[sci[j]] ];
+					// printf("CHANGING prio of node %s & its extras to %i", node_dag.id_name_map[sci[j]].c_str(), prio);
+					std::set<int>& n_extras = node_extra_tids[ node_dag.id_name_map[sci[j]] ];
 					for (auto ne = n_extras.begin(); ne != n_extras.end(); ne++)
 					{
-						int rete = ( sched_setscheduler(*ne, SCHED_FIFO, &sp) );
-						if (rete != 0)
-							std::cerr << "WEIRD-Extra!!! Changing prio for SC with 0th node:" << sci[0] << "-" << j << "'s extra tid " << *ne << " to " << prio << std::endl;
+						int rete = changePriorityThread( node_dag.id_name_map[sci[j]]+"_extra", *ne, prio );
 					}
+					
+					int n_tid = node_tid[node_dag.id_name_map[sci[j]] ];
+					int ret = ( changePriorityThread( node_dag.id_name_map[sci[j]], n_tid, prio ) );
+					if (ret == 0)
+						node_curr_prio[ node_dag.id_name_map[sci[j]] ] = prio;
+					
 				}
 				// else
 					// std::cout << "Not changing prio for " << node_dag.id_name_map[sci[j]] << ", it was already equal to prio: " << prio << ", mapval: " << node_curr_prio[ node_dag.id_name_map[sci[j]] ] << std::endl;
 			}
 			else
-				std::cerr << "NO THREAD ID FOR " << node_dag.id_name_map[sci[j]] << std::endl;
+				printf("ERROR!!! Monotime %f, realtime %f, No threadID for %s !!! \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[sci[j]].c_str() );
 		}
 		return ret;
+	}
+
+	bool DAGControllerBE::changePriorityThread(std::string nname, int tid, int prio)
+	{
+		if (tid == 0)
+		{
+			printf("ERROR!!! Monotime %f, realtime %f, Node %s tid=0!!! \n", get_monotime_now(), get_realtime_now(), nname.c_str() );
+			return 1;
+		}
+		struct sched_param sp = { .sched_priority = prio,};
+		int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
+		if (ret != 0)
+			std::cerr << "WEIRD-" << nname << " Changing prio to " << prio << ", tid: " << tid << ", RETVAL: " << ret << std::endl;
+		return (ret); // ret=0 : successful.
 	}
 
 	// checks if all nodes' tid/pid info has been received.
@@ -490,8 +504,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		{
 			// add it to list of extra tids for node.
 			std::string nname = node_name.substr( 0, node_name.find("_") );
-			printf("Monotime %f, realtime %f, RECEIVED EXTRA TID for %s, nodename: %s, tid: %i", get_monotime_now(), get_realtime_now(), node_name.c_str(), nname.c_str(), tid);
 			node_extra_tids[nname].insert(tid);
+			printf("Monotime %f, realtime %f, RECEIVED EXTRA TID for %s, nodename: %s, tid: %i, NEW setsize: %i", get_monotime_now(), get_realtime_now(), node_name.c_str(), nname.c_str(), tid, node_extra_tids[nname].size());
 			return;
 		}
 		node_tid[node_name] = tid;
@@ -582,12 +596,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		struct sched_param sp = { .sched_priority = 1,};
 		int ret = sched_setscheduler(0, SCHED_OTHER, &sp);
 		*/
-		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i | tid: %i", get_monotime_now(), get_realtime_now(), ret, reoptimize_thread_id);
+		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i | pthread tid: %i, tid: %i \n", get_monotime_now(), get_realtime_now(), ret, reoptimize_thread_id, ::gettid() );
 
 		while (!shutdown_scheduler)
 		{
 			// 5s period
 			std::this_thread::sleep_for (std::chrono::milliseconds(5000));
+			printf("Reoptimize thread WOKEN UP!! Starting to re-solve... \n");
 			// clear old data
 			node_dag.clear_old_data(frac_var_count);
 			// update compute times to be 75ile of recent data.
@@ -625,8 +640,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 					printf("MonoTime: %f, RealTime: %f, In new soln, CC period is %f \n", get_monotime_now() , get_realtime_now(), period);
 					// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << "In new soln, CC period is " << period << std::endl;
-					std::string cmd = "rosrun dynamic_reconfigure dynparam set /shim_freq_node cc_freq " + std::to_string(1000.0/(period) ); // since period is in millisec.
-					system(cmd.c_str());
+					// std::string cmd = "rosrun dynamic_reconfigure dynparam set /shim_freq_node cc_freq " + std::to_string(1000.0/(period) ); // since period is in millisec.
+					// system(cmd.c_str());
 
 
 				}
@@ -636,12 +651,16 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				printf("MonoTime: %f, RealTime: %f, EXCEPTION in trying to solve GP %i", get_monotime_now() , get_realtime_now(), e);
 			}
 		}
+		printf("MonoTime: %f, RealTime: %f, OUT OF THE reoptimize LOOP!!! shutdown_scheduler: %i \n", get_monotime_now() , get_realtime_now(), shutdown_scheduler.load());
 	
 	}
 
 	void DAGControllerBE::update_ci(std::string node_name, double ci)
 	{
-		node_ci_arr[node_name].push_back(ci);
+		// TODO: Add some extra time based on #Extra threads.
+		double e_ci = 0.001*0.5*(node_extra_tids[node_name].size()); // in seconds.
+		// printf("Updating ci for node %s, adding %f to ci, #extra tids: %i", node_name, e_ci,  node_extra_tids[node_name].size() );
+		node_ci_arr[node_name].push_back(ci + e_ci );
 	}
 
 	// Returns sum ci of subchain ind, for current ci vals.

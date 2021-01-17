@@ -39,6 +39,7 @@
 #include "ros/xmlrpc_manager.h"
 #include "ros/topic_manager.h"
 #include "ros/service_manager.h"
+#include "ros/poll_manager.h"
 #include "ros/master.h"
 #include "ros/param.h"
 #include "ros/names.h"
@@ -207,6 +208,11 @@ void NodeHandle::initRemappings(const M_string& remappings)
   }
 }
 
+void NodeHandle::changeDropFraction(int dropf)
+{
+  TopicManager::instance()->changeDropFraction(dropf);
+}
+
 void NodeHandle::setCallbackQueue(CallbackQueueInterface* queue)
 {
   callback_queue_ = queue;
@@ -282,6 +288,12 @@ std::string NodeHandle::resolveName(const std::string& name, bool remap, no_vali
   return names::resolve(final, false);
 }
 
+int NodeHandle::getPMTId()
+{
+	PollManagerPtr pmptr = PollManager::instance();
+	return pmptr->getThreadId();
+}
+
 Publisher NodeHandle::advertise(AdvertiseOptions& ops)
 {
   ops.topic = resolveName(ops.topic);
@@ -350,11 +362,6 @@ Subscriber NodeHandle::subscribe(SubscribeOptions& ops)
   }
 
   return Subscriber();
-}
-
-void NodeHandle::changeBinSize(int binsz)
-{
-  TopicManager::instance()->changeBinSize(binsz);	
 }
 
 ServiceServer NodeHandle::advertiseService(AdvertiseServiceOptions& ops)

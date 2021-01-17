@@ -25,6 +25,8 @@
 #include <cmath>
 #define gettid() syscall(SYS_gettid)
 
+#include <cerrno>
+
 #define PI 3.14159265
 
 using namespace ros;
@@ -75,7 +77,7 @@ void write_arr_to_file(std::vector<double>& tput, std::string s)
 	}
 }
 
-RobotNavigator::RobotNavigator()
+RobotNavigator::RobotNavigator(ros::Publisher& nc_pub)
 {	
 	NodeHandle robotNode;
 
@@ -173,8 +175,8 @@ RobotNavigator::RobotNavigator()
 	// seting tcp nodelay to false...
 	mScanUsedTSTFSubscriber = navigatorNode.subscribe("/robot_0/mapper_scan_ts_used_TF", 1, &RobotNavigator::updateMapperScanTSUsedTF, this, ros::TransportHints().tcpNoDelay());
 
-	navp_exec_info_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_start_navp", 1, true);
-	navc_exec_info_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_start_navc", 1, true);
+	navp_exec_info_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_start_navp", 10, true);
+	navc_exec_info_pub = nc_pub; // navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_start_navc", 1, true);
 
 	navc_exec_end_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_end_navc", 1, true);
 	navp_exec_end_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_end_navp", 1, true);
@@ -188,18 +190,20 @@ RobotNavigator::RobotNavigator()
 
 	// For conencting socket to Controller.
 	client_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-	if (client_sock_fd < 0) ROS_ERROR("RobotNavigator:: SOCKET: client_sock_fd is NEGATIVE!!");
+	// if (client_sock_fd < 0) 
+		ROS_ERROR("RobotNavigator:: SOCKET: client_sock_fd is %i !!", client_sock_fd);
 
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(7727);
+	serv_addr.sin_port = htons(6327);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
-	if ( pton_ret <= 0 )
-		ROS_ERROR("RobotNavigator:: SOCKET: Error in inet_pton %i", pton_ret);
+	// if ( pton_ret <= 0 )
+		ROS_ERROR("RobotNavigator:: SOCKET: in inet_pton retval: %i", pton_ret);
 
-	if ( connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0 )
-		ROS_ERROR("RobotNavigator:: SOCKET: ERROR in connecting!!!");
+	int con_ret = connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
+	// if ( con_ret < 0 )
+		ROS_ERROR("RobotNavigator:: SOCKET: In connect call retval: %i, errno: %i, str: %s !!!", con_ret, errno, std::strerror(errno) );
 
 	// Nov: need a thread to continually listen on the socket.
 	sock_recv_thread = boost::thread(&RobotNavigator::socket_recv, this);
@@ -207,20 +211,30 @@ RobotNavigator::RobotNavigator()
 
 	navc_trigger_count = 0;
 	navp_trigger_count = 0;
+
+	// TF-CBT thread id:
+	ROS_ERROR("Publishing TF-CBT tid %i as extra.", mTfListener->getTFCBTid());
+	publish_tid("navc_extra", mTfListener->getTFCBTid(), &navc_exec_info_pub);
+	publish_tid("navp_extra", mTfListener->getTFCBTid(), &navp_exec_info_pub);
 }
 
 void RobotNavigator::socket_recv()
 {
+	// tell scheduler that it can send triggers for navc,navp on this skt.
+	std::string s = "navc\nnavp\n";
+	char smsg[1+s.length()];
+	strcpy(smsg, s.c_str());
+	send(client_sock_fd, smsg, strlen(smsg), 0);
+
 	int read_size;
 	char msg [2048];
 
-
 	// Setting priority=2 so that this gets notified at the right time.
 	int ret = 7;
-	struct sched_param sp = { .sched_priority = 2,};
+	struct sched_param sp = { .sched_priority = 3,};
 	ret = sched_setscheduler(::gettid(), SCHED_FIFO, &sp);
 	
-	ROS_ERROR("RobotNavigator::socket_recv THREAD: tid %i, pid %i, Changed prio to 2, retval: %i", ::gettid(), ::getpid(), ret);	
+	ROS_ERROR("RobotNavigator::socket_recv THREAD: tid %i, pid %i, Changed prio to 3, retval: %i", ::gettid(), ::getpid(), ret);	
 
 	// recv call waits for a message, thats why this is in a separate thread.
 	while ( (read_size = recv(client_sock_fd, msg, 2048, 0) ) > 0 )
@@ -238,12 +252,14 @@ void RobotNavigator::socket_recv()
 			{
 				boost::unique_lock<boost::mutex> lock(navc_trigger_mutex);
 				ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s,  Got a trigger for navc, curr count %i", s_msg.c_str(), navc_trigger_count);
+				/*
 				if (to.find("RESETCOUNT") != std::string::npos)
 				{
 					navc_trigger_count = 1;
 					// ROS_ERROR("Resetting the navc count to 1!!!!");
 				}
 				else
+				*/
 					navc_trigger_count += 1;
 				cv_navc.notify_all();
 			}
@@ -251,12 +267,13 @@ void RobotNavigator::socket_recv()
 			{
 				boost::unique_lock<boost::mutex> lock(navp_trigger_mutex);
 				ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s, Got a trigger for navp, curr_count %i", s_msg.c_str(), navp_trigger_count);
+				/*
 				if (to.find("RESETCOUNT") != std::string::npos)
                                 {
 					navp_trigger_count = 1;
 					// ROS_ERROR("Resetting the navp count to 1!!!!");
 				}
-				else
+				else*/
 					navp_trigger_count += 1;
 				cv_navp.notify_all();
 			}
@@ -303,6 +320,10 @@ bool RobotNavigator::getMap()
 		ROS_ERROR("Could not get a map.");
 		return false;
 	}
+
+	struct timespec map_upd_start, map_upd_end;
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &map_upd_start);
+
 	mCurrentMap.update(srv.response.map);
 
 	currentPlanMutex.lock();	
@@ -321,6 +342,10 @@ bool RobotNavigator::getMap()
 	}
 	
 	mHasNewMap = true;
+	
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &map_upd_end);
+	ROS_ERROR("GOT new map!! Time taken to process that map: %f", (get_time_diff(map_upd_start, map_upd_end) ) );
+
 	return true;
 }
 
@@ -1330,13 +1355,12 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		else
 		{
 			boost::unique_lock<boost::mutex> lock(navp_trigger_mutex);
-			if (navp_trigger_count > 0)
-				navp_trigger_count -= 1;
 			while (navp_trigger_count == 0)
 			{
 				cv_navp.wait(lock);
-				ROS_ERROR("About to run navPlan ct:%i", navp_trigger_count);
 			}
+			ROS_ERROR("About to run navPlan ct:%i", navp_trigger_count);
+			navp_trigger_count = 0; // flush_on_read
 		}
 	
 	}
@@ -1456,13 +1480,12 @@ void RobotNavigator::navGenerateCmdLoop()
 		else
 		{
 			boost::unique_lock<boost::mutex> lock(navc_trigger_mutex);
-			if (navc_trigger_count > 0)
-				navc_trigger_count -= 1;
 			while (navc_trigger_count == 0)
 			{
 				cv_navc.wait(lock);
-				ROS_ERROR("About to generateCmd NAVC ct:%i", navc_trigger_count);
 			}
+			ROS_ERROR("About to generateCmd NAVC ct:%i", navc_trigger_count);
+			navc_trigger_count = 0; // flush_on_read.
 		}
 	
 	}

@@ -31,7 +31,9 @@
 #include "forwards.h"
 #include "common.h"
 #include "ros/message_event.h"
+#include "ros/this_node.h"
 #include "publisher.h"
+
 // #include "node_handle.h"
 #include "callback_queue_interface.h"
 
@@ -45,6 +47,10 @@
 #include <cstdlib>
 #include <iostream>
 #include <fstream>
+
+#include <unistd.h>
+#include <sys/syscall.h>
+#define gettid() syscall(SYS_gettid)
 
 namespace ros
 {
@@ -84,21 +90,14 @@ public:
   virtual bool ready();
   bool full();
 
-  void changeBinSize(int binsz);
-
   // store stats since t=0
   double cb_eval_start_time;
   double cb_eval_durn;
   bool cb_eval_init;
-  int cb_eval_num_stages;
-  std::vector<bool> cb_eval_restart; // used if multiple stages in offline eval. We clear up the arr, sum after every stage : PROBABLY Don't need this now cuz the change bin sz function can do this...
-  std::vector<double> med_cb_arr;
-  std::vector<double> tail_cb_arr;
-  int current_bin_size; // denotes bin sz or stage
 
   double sum_cb_time;
   std::vector<double> arr_cb_time;
-  // double mean_cb, med_cb, tail_cb;
+  double mean_cb, med_cb, tail_cb;
   long int total_count;
   long int max_count;
 
@@ -117,13 +116,18 @@ public:
   double cb_threshold;
   int percentile;
 
+  // For implementing fractional approach with Callbacks:
+  int full_total_msgs_recv;
+  int drop_fraction;
+
+  void changeDropFraction(int dropf);
+
 private:
   bool fullNoLock();
   std::string topic_;
   int32_t size_;
   bool full_;
 
-  boost::mutex bin_sz_mutex;
   boost::mutex queue_mutex_;
   D_Item queue_;
   uint32_t queue_size_;
