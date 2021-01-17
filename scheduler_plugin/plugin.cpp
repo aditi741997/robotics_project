@@ -20,6 +20,7 @@ public:
 				id,
 				name + "_thread_id",
 				[this, name](switchboard::ptr<const thread_info> event, size_t) {
+					std::cerr << "thread_id for " << event->name << " is " << event->pid << std::endl;
 					controller->recv_node_info(event->name, event->pid, ::getpid());
 				}
 			);
@@ -33,7 +34,6 @@ public:
 			id,
 			controller->get_last_node_cc_name() + "_completion",
 			[this](switchboard::ptr<const switchboard::event_wrapper<bool>>, size_t event) {
-				std::cerr << "event = " << event << std::endl;
 				controller->recv_critical_exec_end();
 			}
 		);
