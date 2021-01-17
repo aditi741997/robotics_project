@@ -48,10 +48,9 @@ public:
 	}
 
 private:
-	const std::unique_ptr<DAGControllerBE> controller;
 	const std::shared_ptr<switchboard> sb;
 	std::unordered_map<std::string, switchboard::writer<switchboard::event_wrapper<bool>>> triggers;
-	
+	const std::unique_ptr<DAGControllerBE> controller;
 };
 
 // This line makes the plugin importable by Spindle
