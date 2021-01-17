@@ -68,6 +68,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		// Note that the last 4 inputs are just for the offline stage.
 		node_dag = DAG(dag_file);
 		trigger_log.open("TriggerLog.csv");
+		cc_completion_log.open("CCCompletionLog.csv");
 		dag_name = dag_file;
 
 		timer_thread_running = false;
@@ -237,6 +238,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::recv_critical_exec_end()
 	{
                 // total_period_count += 1;
+
+		cc_completion_log << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
 
 		// Nov25: No need to do anything if we're using TD in offline version.
 		if (!offline_use_td)

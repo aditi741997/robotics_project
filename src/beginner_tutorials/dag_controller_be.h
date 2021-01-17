@@ -71,6 +71,8 @@ public:
 	std::ofstream trigger_log;
 	std::map<std::string, double> last_trig_ts;
 
+	std::ofstream cc_completion_log;
+
         // DAG data structure : to be used by the scheduling algorithm
         std::map<std::string, int> node_ci, node_fi;
 
