@@ -68,6 +68,9 @@ public:
 	std::map<std::string, std::set<int> > node_extra_tids; 
 	std::map<std::string, int> node_curr_prio;
 
+	std::ofstream trigger_log;
+	std::map<std::string, double> last_trig_ts;
+
         // DAG data structure : to be used by the scheduling algorithm
         std::map<std::string, int> node_ci, node_fi;
 
@@ -147,6 +150,7 @@ private:
 	// For multi-core scheduling:
 	std::map<int, boost::thread> per_core_sched_threads;
 	std::map<int, long int> per_core_period_count;
+	// pass core # to each function to easily access period ct etc.
 
 	boost::thread* startup_thread; // triggers nodes until main scheduling starts
 	void startup_trigger_func();

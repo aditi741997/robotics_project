@@ -316,6 +316,8 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			DAGNode& nj = id_node_map[ith_chain[j]];
 			DAGNode& nj1 = id_node_map[ith_chain[j+1]];
 
+			// TODO: Differentiate bw cases where Add subchain's sum ci vs node's ci
+
 			bool add_ci = false;
 			double p_mult_factor = -1.0; // -1: dont add period, o.w. multiply period by this.
 
@@ -337,7 +339,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 				if ( (nj1.fixed_period > 0) || (node_id_sc_id[nj1.id] == 0) )
 				{
 					// Add P+C1
-					// Todo: maybe, add nj fixed period if nj1 fp=0 & CC : assuming that nj period<nj1 period.
+					// Todo:maybe, add nj fixed period if nj1 fp=0 & CC : assuming that nj period<nj1 period.
 					std::cout << "CaseMC.RT 2.a Adding ci=" << nj1.compute << "+Period" << std::endl;
 					add_ci = true;
 					p_mult_factor = 1.0;
@@ -352,8 +354,14 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			else if ( (nj1.fixed_period == nj.fixed_period) && (node_id_sc_id[nj1.id] != node_id_sc_id[nj.id]) )
 			{
 				// this can happen if both are 0.
-				// Todo: if nj1==CC, add P+CC_sumci.
-				p_mult_factor = 2.0;
+				// if nj1==CC, add P+CC_sumci else 2P.
+				if ( node_id_sc_id[nj1.id] == 0 )
+				{
+					p_mult_factor = 1.0;
+					add_ci = true;
+				}
+				else
+					p_mult_factor = 2.0;
 				std::cout << "CaseMC.RT 3. ADDING 2*Period\n";
 			}
 			else
@@ -376,6 +384,8 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			// Finally adding stuff:
 			if (add_ci)
 			{
+				int sc_id = node_id_sc_id[nj1.id];
+
 				printf("Add_ci was true. Adding ci = %f \n", nj1.compute);
 				ith_ap.push_back( std::vector<double>(total_vars, 0.0) );
 				ith_ac.push_back( log( nj1.compute ) );
