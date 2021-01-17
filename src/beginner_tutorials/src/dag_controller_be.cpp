@@ -724,7 +724,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				frontend->trigger_node("7", true);
 
 			if (last_trig_ts[name] > 0)
-				trigger_log << name << ", " << get_realtime_now() << "\n";
+				trigger_log << name << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
 			last_trig_ts[name] = get_realtime_now();
 
 			// reset_count[ind-1] = false;
