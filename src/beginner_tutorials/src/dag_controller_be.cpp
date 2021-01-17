@@ -10,6 +10,7 @@
 #include <boost/thread/condition_variable.hpp>
 #include <bits/stdc++.h>
 #include <map>
+#include <fstream>
 
 #include <sys/types.h>
 #include <signal.h>
@@ -66,6 +67,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	{
 		// Note that the last 4 inputs are just for the offline stage.
 		node_dag = DAG(dag_file);
+		trigger_log.open("TriggerLog.csv");
 		dag_name = dag_file;
 
 		timer_thread_running = false;
@@ -179,6 +181,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		{
 			node_ci_arr[x.second] = boost::circular_buffer<double> (50);
 			// node_extra_tids[x.second] = std::vector<int> ();
+			last_trig_ts[x.second] = 0.0;
 		}
 
 		sched_started = false;
@@ -719,6 +722,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			frontend->trigger_node(name, true);
 			if ( (name.find("2") != std::string::npos) && (dag_name.find("ill") != std::string::npos) )
 				frontend->trigger_node("7", true);
+
+			if (last_trig_ts[name] > 0)
+				trigger_log << name << ", " << get_realtime_now() << "\n";
+			last_trig_ts[name] = get_realtime_now();
 
 			// reset_count[ind-1] = false;
 			
