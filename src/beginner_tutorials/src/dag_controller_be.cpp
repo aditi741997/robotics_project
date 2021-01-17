@@ -109,9 +109,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		}
 		else if (dag_name.find("illixr") != std::string::npos)
 		{
-			offline_fracs["2"] = 1.0;
-			offline_fracs["3"] = 1.0/f_mu; // cam-slam : 3,4
-			offline_fracs["7"] = 1.0/f_mc; // render : 7
+			offline_fracs["8"] = 1.0;
+			offline_fracs["9"] = 1.0/f_mu; // cam-slam : 3,4
+			offline_fracs["5"] = 1.0/f_mc; // render : 7
 		}
 
 		if (!offline_use_td)
@@ -500,7 +500,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		else if (dag_name.find("ill") != std::string::npos)
 		{
 			bool ans = true;
-			std::vector<std::string> node_ids {"2", "3", "5", "4", "7", "8"};
+			std::vector<std::string> node_ids {"6", "9", "3", "2", "5", "8"};
 			for (int i = 0; i < node_ids.size(); i++)
 				ans = ans && ( node_tid.find(node_ids[i]) != node_tid.end() );
 			return ans;
@@ -727,8 +727,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
                 	// This is because we always want the node to run exactly once whenever it wakes up, and hence only a bool is needed.	
 			// frontend->trigger_node(name, reset_count[ind-1]);
 			frontend->trigger_node(name, true);
-			if ( (name.find("2") != std::string::npos) && (dag_name.find("ill") != std::string::npos) )
-				frontend->trigger_node("8", true);
+			if ( (name.find("8") != std::string::npos) && (dag_name.find("ill") != std::string::npos) )
+				frontend->trigger_node("6", true);
 
 			if (last_trig_ts[name] > 0)
 				trigger_log << name << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
