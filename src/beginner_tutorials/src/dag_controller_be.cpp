@@ -118,6 +118,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			offline_fracs["5"] = 1.0/f_mc; // render : 7
 		}
 
+		/* This was needed only when we were not using optimal core assgt for expts:
 		if (!offline_use_td)
 		{
 			if (use_td.find("2c") != std::string::npos )
@@ -147,7 +148,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				offline_node_core_map["mapcb"] = 0;
 				offline_node_core_map["s"] = 0;
 			}
-		}
+		} */
 
 		if (fifo.find("yes") != std::string::npos)
 		{
@@ -283,8 +284,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				}
 				else
 				{
-					// Moved to handle_Sched_main: total_period_count += 1;
-					
 					// Notify the handle_sched_main : it waits for CC to end before moving on to NC nodes.	
 					boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
 					cc_end = true;
@@ -295,15 +294,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 				
 			}
-			/* MOVED to startup thread.
-			else
-			{
-				std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " | GOT exec_end msg. NOT making a timer,Will trigger nodes" << std::endl;
-				for (int i = 1; i < exec_order.size(); i++)
-					checkTriggerExec(i);
-					//frontend->trigger_node(node_dag.id_name_map[exec_order[i][0]], false);
-			}
-			*/
 		}
 			
 	}
@@ -695,9 +685,12 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		double max = get_max_ci_ith(sci);
 		// Assuming that f is set to 1 for an alone subchain.
 		tot *= offline_fracs[node_dag.id_name_map[ sci[0] ] ];
-		
-		double ans = std::max( max, ( tot/cores.size() ) );
-                return ans;
+	
+		double ans = tot;
+		if (cores.size()>1)	
+			ans = std::max( max, ( tot/cores.size() ) );
+                // ans = std::max(ans, 1); // to keep low overhead, can make ci*fi atleast 1ms. Might not be needed since linux sched_min_gran is 3ms.
+		return ans;
 	}
 
 	// Func to just sleep for timeout millisec and then notify cv.

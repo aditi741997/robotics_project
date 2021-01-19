@@ -144,7 +144,7 @@ void DAGMultiCore::get_period_map_core(int i, int total_vars, std::vector<std::v
 		printf("ADDING ci for subchain id %i, sum=%f, frac var id = %i \n", scid, sumci, sc_id_frac_id[scid]);
 
 		// add a vec to ans : sumci*fi :
-		// Assuming f=1 for SCid=0 i.e. CC
+		// Assuming f=1 for SCid=0 i.e. CC, OR can just normalize all fracs.
 		std::vector<double> ai (total_vars, 0.0);
 		if (scid > 0)
 			ai[ sc_id_frac_id[scid] ] = 1.0;
