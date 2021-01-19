@@ -1167,7 +1167,7 @@ std::vector<int> DAG::compute_rt_solve()
 		for (int i = 0; i < all_chains.size(); i++)
 		{
 			double wt = 1.0;
-			if (i > 1.0)
+			if (i > 0.99)
 				wt = 0.001;
 			std::map<std::string, Monomial>& all_rt_monos = all_rt_periods[i];
 			for (std::map<std::string, Monomial>::iterator cit = all_rt_monos.begin(); cit != all_rt_monos.end(); cit++)

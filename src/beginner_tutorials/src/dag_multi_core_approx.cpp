@@ -31,10 +31,12 @@ MultiCoreApproxSolver::MultiCoreApproxSolver(DAG* ndag, int k)
 std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 {
 	struct timespec full_start, solve_start, full_end;
-	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &full_start);
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &full_start);
 
 	Model::t mosek_model = new Model("multi_core_solver");
 	auto _M = finally([&]() { mosek_model->dispose(); });
+	mosek_model->setSolverParam("numThreads", 1);
+	mosek_model->setSolverParam("intpntMultiThread", "off");
 
 	int large_n = 50000;
 
@@ -307,7 +309,7 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 			// RT : ps.pi + ith_ch_per_c.chains_pers <= cons
 			mosek_model->constraint("chain"+std::to_string(ch)+"_rt_cons", Expr::add( Expr::dot(ith_ch_per_c, chains_pers), Expr::dot(pi, rt_ps) ) , Domain::lessThan(cons) );
 			
-			// For objective:
+			// For objective: [since ch>0 here]
 			for (int i = 0; i < num_subchains; i++)
 				sum_rts_ps[i] += non_crit_rt_mult*ps[i];
 		}
@@ -323,47 +325,90 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 
 	mosek_model->objective("Objective", ObjectiveSense::Minimize, Expr::add( Expr::dot(sum_rts_ps1, pi), Expr::dot(chain_pers_sum1, chains_pers) ) );
 
-	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &solve_start);
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_start);
 
-	mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
-	mosek_model->solve();
-	
-	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &full_end);
-	auto opt_aij = std::make_shared<ndarray<double, 1>>(shape(num_subchains*num_cores), [aij](ptrdiff_t i) { return ((*(aij->level()))[i]); });
-	for (int i = 0; i < num_subchains; i++)
-		for (int j = 0; j < num_cores; j++)
-			printf("Value of a[%i][%i] : %f, ", i, j, (*opt_aij)[i*num_cores+j] );
-	
-	auto opt_xi = std::make_shared<ndarray<double, 1>>(shape(num_subchains), [xi](ptrdiff_t i) {return ((*(xi->level()))[i]); } );
-	for (int i = 0; i < num_subchains; i++)
-		printf("Value of xi[%i]: %f, ", i, (*opt_xi)[i]);
-	
-	auto opt_yij = std::make_shared<ndarray<double, 1>>(shape(num_subchains*num_cores), [yij](ptrdiff_t i) { return ((*(yij->level()))[i]); });
-	for (int i = 0; i < num_subchains; i++)
-		for (int j = 0; j < num_cores; j++)
-			printf("Value of y[%i][%i] : %f, ", i, j, (*opt_yij)[i*num_cores+j] );
-	
-	auto opt_pi = std::make_shared<ndarray<double, 1>>(shape(num_subchains), [pi](ptrdiff_t i) {return ((*(pi->level()))[i]); } );
-	for (int i = 0; i < num_subchains; i++)
-		printf("Value of pi[%i]: %f, ", i, (*opt_pi)[i]);
-
-	auto opt_zij = std::make_shared<ndarray<double, 1>>(shape(num_subchains*num_cores), [zij](ptrdiff_t i) { return ((*(zij->level()))[i]); });
-	for (int i = 0; i < num_subchains; i++)
-		for (int j = 0; j < num_cores; j++)
-			printf("Value of z[%i][%i] : %f, ", i, j, (*opt_zij)[i*num_cores+j] );
-
-	auto opt_wijl = std::make_shared<ndarray<double, 1>>(shape(num_subchains*num_cores*num_subchains), [wijl](ptrdiff_t i) { return ((*(wijl->level()))[i]); });
-	for (int i = 0; i < num_subchains; i++)
-		for (int l = 0; l < num_subchains; l++)
-			for (int j = 0; j < num_cores; j++)
-				printf("Value of w[%i][%i][%i] : %f, ", i, j, l, (*opt_wijl)[i*num_cores*num_subchains + l*num_cores + j] );
-
-	std::cout << "Time Full: " << ( (full_end.tv_sec + full_end.tv_nsec*1e-9) - (full_start.tv_sec + 1e-9*full_start.tv_nsec) ) << std::endl;
-	
 	std::vector<std::vector<int>> core_assgt (num_subchains, std::vector<int>() );
-	for (int i = 0; i < num_subchains; i++)
-		for (int j = 0; j < num_cores; j++)
-			if ( (*opt_aij)[i*num_cores+j] > 0.9 )
-				core_assgt[i].push_back(j); // = j;
+	try
+	{
+		mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
+		mosek_model->solve();
+		
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &full_end);
+		auto opt_aij = std::make_shared<ndarray<double, 1>>(shape(num_subchains*num_cores), [aij](ptrdiff_t i) { return ((*(aij->level()))[i]); });
+		for (int i = 0; i < num_subchains; i++)
+			for (int j = 0; j < num_cores; j++)
+				printf("Value of a[%i][%i] : %f, ", i, j, (*opt_aij)[i*num_cores+j] );
+		
+		auto opt_xi = std::make_shared<ndarray<double, 1>>(shape(num_subchains), [xi](ptrdiff_t i) {return ((*(xi->level()))[i]); } );
+		for (int i = 0; i < num_subchains; i++)
+			printf("Value of xi[%i]: %f, ", i, (*opt_xi)[i]);
+		
+		auto opt_yij = std::make_shared<ndarray<double, 1>>(shape(num_subchains*num_cores), [yij](ptrdiff_t i) { return ((*(yij->level()))[i]); });
+		for (int i = 0; i < num_subchains; i++)
+			for (int j = 0; j < num_cores; j++)
+				printf("Value of y[%i][%i] : %f, ", i, j, (*opt_yij)[i*num_cores+j] );
+		
+		auto opt_pi = std::make_shared<ndarray<double, 1>>(shape(num_subchains), [pi](ptrdiff_t i) {return ((*(pi->level()))[i]); } );
+		for (int i = 0; i < num_subchains; i++)
+			printf("Value of pi[%i]: %f, ", i, (*opt_pi)[i]);
+
+		auto opt_zij = std::make_shared<ndarray<double, 1>>(shape(num_subchains*num_cores), [zij](ptrdiff_t i) { return ((*(zij->level()))[i]); });
+		for (int i = 0; i < num_subchains; i++)
+			for (int j = 0; j < num_cores; j++)
+				printf("Value of z[%i][%i] : %f, ", i, j, (*opt_zij)[i*num_cores+j] );
+
+		auto opt_wijl = std::make_shared<ndarray<double, 1>>(shape(num_subchains*num_cores*num_subchains), [wijl](ptrdiff_t i) { return ((*(wijl->level()))[i]); });
+		for (int i = 0; i < num_subchains; i++)
+			for (int l = 0; l < num_subchains; l++)
+				for (int j = 0; j < num_cores; j++)
+					printf("Value of w[%i][%i][%i] : %f, ", i, j, l, (*opt_wijl)[i*num_cores*num_subchains + l*num_cores + j] );
+
+		std::cout << "Time Full: " << ( (full_end.tv_sec + full_end.tv_nsec*1e-9) - (full_start.tv_sec + 1e-9*full_start.tv_nsec) ) << std::endl;
+		
+		for (int i = 0; i < num_subchains; i++)
+			for (int j = 0; j < num_cores; j++)
+				if ( (*opt_aij)[i*num_cores+j] > 0.9 )
+					core_assgt[i].push_back(j); // = j;
+	}
+	catch (const OptimizeError& e)
+	{
+                std::cout << "DAG::compute_rt_solve: Optimization failed. Error: " << e.what() << "\n";
+        }
+	catch (const SolutionError& e)
+	{
+		std::cout << "DAG::compute_rt_solve: Requested solution was not available.\n";
+		auto prosta = mosek_model->getProblemStatus();
+		switch(prosta)
+		{
+			case ProblemStatus::DualInfeasible:
+                        	std::cout << "Dual infeasibility certificate found.\n";
+				break;
+			case ProblemStatus::PrimalInfeasible:
+				std::cout << "Primal infeasibility certificate found.\n";
+				break;
+			case ProblemStatus::Unknown:
+				{
+					std::cout << "The solution status is unknown.\n";
+		                        char symname[MSK_MAX_STR_LEN];
+					char desc[MSK_MAX_STR_LEN];
+					MSK_getcodedesc((MSKrescodee)(mosek_model->getSolverIntInfo("optimizeResponse")), symname, desc);
+                                        std::cout << "  Termination code: " << symname << " " << desc << "\n";
+                                        /* This solution shouldnt be used cuz it can be garbage.
+					mosek_model->selectedSolution(SolutionType::Interior);
+					auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [aij](ptrdiff_t i) { return exp((*(aij->level()))[i]); });
+					for (int i = 0; i < num_subchains*num_cores; i++)
+						printf("var %i : %f", i, (*opt_ans)[i]);
+					*/
+					break;
+				}
+			default:
+				std::cout << "Another unexpected problem status: " << prosta << "\n";
+		}
+	}
+	catch (const std::exception& e)
+	{
+		std::cerr << "DAG::compute_rt_solve: Unexpected error: " << e.what() << "\n";
+	}
+
 	return core_assgt;
 }

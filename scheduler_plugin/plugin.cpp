@@ -10,7 +10,7 @@ class scheduler_plugin : public plugin, public DAGControllerFE {
 public:
     scheduler_plugin(std::string name_, phonebook* pb_)
         : plugin{name_, pb_}
-		, controller{std::make_unique<DAGControllerBE>("../robotics_project/illixr_dag.txt", this, false, "no", "no", 1, 2, 3, 4, 5, 6, 7)}
+		, controller{std::make_unique<DAGControllerBE>("../robotics_project/illixr_dag.txt", this, false, "no", "no", 1, 2, 3, 4, 5, 6, 7, 2)}
 		, sb{pb->lookup_impl<switchboard>()}
 	{
 		for (const auto& pair : controller->node_dag.name_id_map) {

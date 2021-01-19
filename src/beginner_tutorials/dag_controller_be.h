@@ -82,7 +82,7 @@ public:
 	double curr_cc_period = 0.0;
         std::map<int, std::vector<int>> period_map;
         std::vector<int> all_frac_values;
-        int curr_exec_index;
+        // int curr_exec_index;
 
         // Oct: just for offline expts:
         std::map<std::string, double> offline_fracs;
@@ -99,10 +99,12 @@ public:
 
         DAG node_dag;
 	MultiCoreApproxSolver multi_core_solver;
+	DAGMultiCore node_dag_mc;
 	std::string dag_name;
-	
+	int num_cores;
+
 	DAGControllerBE();
-        DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool dyn_resolve, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp);
+        DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool dyn_resolve, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp, int numc);
 
 	DAGControllerBE(const DAGControllerBE&) = delete;
 	~DAGControllerBE();
@@ -115,30 +117,33 @@ public:
 
 	void handle_noncritical_exec();
 
-	void handle_noncritical_loop();
-
 	// void changePriority(int ind); change ind of iexec_order to p2, others to p1
-	void changePriority(std::vector<std::vector<int>>& iexec_order, int ind);
+	void changePriority(std::vector<std::vector<int>>& iexec_order, int ind, int core_id = 0);
 
 	// int changePrioritySubChain(int ind, int prio);
 	int changePrioritySubChain(std::vector<int>& sc, int prio);
 
-	bool changePriorityThread(std::string nname, int tid, int prio);
 
 	void recv_node_info(std::string node_name, int tid, int pid=0);
 
 	std::string get_last_node_cc_name();
 	void update_ci(std::string node_name, double ci);
+
+	// Helper functions:
+	bool changePriorityThread(std::string nname, int tid, int prio);
+	int changeAffinityThread(std::string nname, int tid, std::vector<int> cores);
+
 private:
 	void set_high_priority(std::string thread_name, int prio, int tid);
 
 	// double get_timeout(int ind); New version for multi-core:  
-	double get_timeout(std::vector<int>& sci);
+	double get_timeout(std::vector<int>& sci, std::vector<int>& cores);
 	double get_sum_ci_ith(std::vector<int>& sci);
+	double get_max_ci_ith(std::vector<int>& sci);
 	bool got_all_info();
 	
 	// void checkTriggerExec(int ind);
-	void checkTriggerExec(std::vector<int>& sci);
+	void checkTriggerExec(std::vector<int>& sci, int core_id = 0);
 
 	boost::thread* timer_thread;
 	void timer_thread_func(double timeout);
@@ -147,17 +152,19 @@ private:
 	boost::thread handle_sched_thread;
 	boost::mutex sched_thread_mutex;
 	std::atomic<bool> cc_end, ready_sched;
-	boost::condition_variable cv_sched_thread;
+	boost::condition_variable cv_sched_thread; // this is just for the core with CC in it.
 
 	// For multi-core scheduling:
 	std::map<int, boost::thread> per_core_sched_threads;
-	std::map<int, long int> per_core_period_count;
+	std::map<int, long int> per_core_period_counts;
+	std::map<int, double> per_core_period; // HP of each core sched.
+	// std::map<int, boost::condition_variable> cv_;
 	// pass core # to each function to easily access period ct etc.
 
 	boost::thread* startup_thread; // triggers nodes until main scheduling starts
 	void startup_trigger_func();
 
-	void handle_sched_main();
+	void handle_sched_main(std::vector<int> core_id);
 	std::atomic<bool> shutdown_scheduler;
 
 	DAGControllerFE* frontend;

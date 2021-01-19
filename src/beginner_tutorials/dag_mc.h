@@ -34,10 +34,10 @@ class DAGMultiCore: public DAG
 		void set_params(int numc, std::vector< std::vector<int> >& sc_core_assgt);
 
 		int num_cores;
-		std::vector< std::vector<int> > core_sc_assgt; // in order of exec_order.
+		std::vector< std::vector<int> > sc_core_assgt; // in order of exec_order.
 		std::map<int, std::vector<int> > core_sc_list; // list of subchains on each core.
 		
-		std::map<int, int> sc_id_frac_id; // sc id [as in exec_order] -> frac variable id 
+		std::map<int, int> sc_id_frac_id; // sc id [as in exec_order] -> frac variable id. Also denotes if a SC is not alone. 
 		std::map<int, int> node_id_sc_id; // node if -> sc id
 		std::map< int, std::vector<std::vector<double> > > per_core_period_mono_powers;
 		std::map<int, std::vector<double> > per_core_period_mono_const;

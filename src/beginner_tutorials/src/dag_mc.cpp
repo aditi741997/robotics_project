@@ -5,11 +5,11 @@ DAGMultiCore::DAGMultiCore()
 {
 }
 
-void DAGMultiCore::set_params(int numc, std::vector< std::vector<int> >& sc_core_assgt)
+void DAGMultiCore::set_params(int numc, std::vector< std::vector<int> >& sc_core_a)
 {
-	printf("IN DAGMultiCore::set_params, numc: %i, len of sc_core_assgt: %i, len of sc_core_assgt[0]: %i \n", numc, sc_core_assgt.size(), sc_core_assgt[0].size());
+	printf("IN DAGMultiCore::set_params, numc: %i, len of sc_core_assgt: %i, len of sc_core_assgt[0]: %i \n", numc, sc_core_assgt.size(), sc_core_a[0].size());
 	num_cores = numc;
-	core_sc_assgt = sc_core_assgt;
+	sc_core_assgt = sc_core_a;
 }
 
 void DAGMultiCore::assign_fixed_periods()
@@ -24,8 +24,8 @@ void DAGMultiCore::assign_fixed_periods()
 	std::vector<std::vector<int> > exec_order = get_exec_order();
 	for (int i = 0; i < exec_order.size(); i++)
 	{
-		for (int j = 0; j < core_sc_assgt[i].size(); j++)
-			core_sc_list[ core_sc_assgt[i][j] ].push_back(i);
+		for (int j = 0; j < sc_core_assgt[i].size(); j++)
+			core_sc_list[ sc_core_assgt[i][j] ].push_back(i);
 	}
 	std::cout << "Filled the list of subchains for each core. \n";
 	for (int i = 0; i < num_cores; i++)
@@ -35,8 +35,8 @@ void DAGMultiCore::assign_fixed_periods()
 	for (int i = 0; i < exec_order.size(); i++)
 	{
 		bool alone = true;
-		for (int j = 0; j < core_sc_assgt[i].size(); j++)
-			alone = alone && (core_sc_list[ core_sc_assgt[i][j] ].size() == 1);
+		for (int j = 0; j < sc_core_assgt[i].size(); j++)
+			alone = alone && (core_sc_list[ sc_core_assgt[i][j] ].size() == 1);
 		printf("FOR subchain id %i, value of alone: %i \n", i, alone);
 		if (alone)
 		{
@@ -49,9 +49,10 @@ void DAGMultiCore::assign_fixed_periods()
 				max_ci = std::max(max_ci, ci);
 				sum_ci += ci;
 			}
-			int k = core_sc_assgt[i].size();
+			int k = sc_core_assgt[i].size();
 			double per = std::max(max_ci, sum_ci/k);
 			
+			// TODO: Adjust this based on #bins variable for multi threaded scenario.
 			printf("SUBCHAIN id %i ALONE! Assigning fixed_period: %f \n", i, per);
 
 			// modify fixed_period only if its not set currently.
@@ -143,8 +144,10 @@ void DAGMultiCore::get_period_map_core(int i, int total_vars, std::vector<std::v
 		printf("ADDING ci for subchain id %i, sum=%f, frac var id = %i \n", scid, sumci, sc_id_frac_id[scid]);
 
 		// add a vec to ans : sumci*fi :
+		// Assuming f=1 for SCid=0 i.e. CC
 		std::vector<double> ai (total_vars, 0.0);
-		ai[ sc_id_frac_id[scid] ] = 1.0;
+		if (scid > 0)
+			ai[ sc_id_frac_id[scid] ] = 1.0;
 		mono_powers.push_back(ai);
 
 		print_dvec(ai, "ADDED this vec to period for core " + std::to_string(i));
@@ -156,18 +159,19 @@ void DAGMultiCore::get_period_map_core(int i, int total_vars, std::vector<std::v
 
 std::pair< std::vector<std::vector<double> >, std::vector<double> > DAGMultiCore::get_period_node(int node_id)
 {
-	assert( core_sc_assgt[node_id_sc_id[node_id]].size() == 1 );
-	std::vector<std::vector<double> >& cvp = per_core_period_mono_powers[ core_sc_assgt[node_id_sc_id[node_id]][0] ];
-	std::vector<double>& cvc = per_core_period_mono_const[ core_sc_assgt[node_id_sc_id[node_id]][0] ];
+	assert( sc_core_assgt[node_id_sc_id[node_id]].size() == 1 );
+	std::vector<std::vector<double> >& cvp = per_core_period_mono_powers[ sc_core_assgt[node_id_sc_id[node_id]][0] ];
+	std::vector<double>& cvc = per_core_period_mono_const[ sc_core_assgt[node_id_sc_id[node_id]][0] ];
 
 	std::vector<std::vector<double> > ap (cvp.begin(), cvp.end());
 	std::vector<double> ac (cvc.begin(), cvc.end());
-	printf("Node %i belongs to subchain %i, core %i, len of ap,ac: %i %i \n", node_id, node_id_sc_id[node_id], core_sc_assgt[node_id_sc_id[node_id]][0], ap.size(), ac.size());
+	printf("Node %i belongs to subchain %i, core %i, len of ap,ac: %i %i \n", node_id, node_id_sc_id[node_id], sc_core_assgt[node_id_sc_id[node_id]][0], ap.size(), ac.size());
 
 	// multiply by 1/f to get period
 	for (int i = 0; i < ap.size(); i++)
 	{
-		ap[i][ sc_id_frac_id[ node_id_sc_id[node_id] ] ] -= 1.0;
+		if (node_id_sc_id[node_id] > 0)
+			ap[i][ sc_id_frac_id[ node_id_sc_id[node_id] ] ] -= 1.0;
 		print_dvec(ap[i], "SUBchain Period_posynomial "+ std::to_string(i)+"th term power, const: " + std::to_string(ac[i]) );
 	}
 
@@ -178,7 +182,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 {
 	std::cout << "IN DAGMultiCore: ##### STARTING Step5 : computing RT for each chain" << std::endl;
 	struct timespec solve_start, solve_end;
-	clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &solve_start);
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_start);
 	
 	// RT for each chain:
 	int frac_var_ct = global_var_count;
@@ -199,13 +203,16 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	// num_vars: curr_count + num_chains (one approx_tput for each chain)
 	int total_vars = global_var_count+1;
 	Variable::t all_l_vars = mosek_model->variable(total_vars);
+
+	/*
 	if (sc_id_frac_id.find(0) != sc_id_frac_id.end())
 	{
 		// set CC's fraction=1. log=0
+		// Jan: Will do this by NOT making a variable for this. [This leads to solution unknown.]
 		assert( sc_id_frac_id[0] == 0 );
 		auto sc0_sol = new_array_ptr<double,1>({-0.001});
 		all_l_vars->slice(0,1)->setLevel(sc0_sol);
-	}
+	} */
 
 	// Constraint 1 : All fi's are <= 1, i.e. all log fi's are < 0.
 	for (int i = 0; i < frac_var_ct; i++)
@@ -257,19 +264,26 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			{
 				// get period of the node's SC.
 				// 1/fi * period of that core <= ch_i_period
-				assert(core_sc_assgt[node_id_sc_id[jnode.id]].size() == 1);
+				assert(sc_core_assgt[node_id_sc_id[jnode.id]].size() == 1);
 				
-				auto& cp_p = per_core_period_mono_powers[ core_sc_assgt[node_id_sc_id[jnode.id]][0] ];
-				auto& cp_c = per_core_period_mono_const[ core_sc_assgt[node_id_sc_id[jnode.id]][0] ];
+				/*
+				auto& cp_p = per_core_period_mono_powers[ sc_core_assgt[node_id_sc_id[jnode.id]][0] ];
+				auto& cp_c = per_core_period_mono_const[ sc_core_assgt[node_id_sc_id[jnode.id]][0] ];
 				std::vector<std::vector<double>> ap (cp_p.begin(), cp_p.end());
 				std::vector<double> ac (cp_c.begin(), cp_c.end());
+				*/
 
-				printf("ABOUT to put constraint on approx_period of chain %i, var id %i using period of subchain %i, its on core %i, #monos in this core's period: %i %i \n", i, frac_var_ct + i, node_id_sc_id[jnode.id], core_sc_assgt[node_id_sc_id[jnode.id]][0], ap.size(), ac.size() );
+				std::pair< std::vector<std::vector<double>>, std::vector<double> > a_p_c = get_period_node(jnode.id);
+				std::vector<std::vector<double>> ap (a_p_c.first.begin(), a_p_c.first.end());
+				std::vector<double> ac (a_p_c.second.begin(), a_p_c.second.end() );
+
+				printf("ABOUT to put constraint on approx_period of chain %i, var id %i using period of subchain %i, its on core %i, #monos in this core's period: %i %i \n", i, frac_var_ct + i, node_id_sc_id[jnode.id], sc_core_assgt[node_id_sc_id[jnode.id]][0], ap.size(), ac.size() );
 
 				// Divide all terms by sc_frac and by ch_i_period. <= 1.
 				for (int api = 0; api < ap.size(); api++)
 				{
-					ap[api][ sc_id_frac_id[ node_id_sc_id[jnode.id] ] ] -= 1.0;
+					// Using subchain's period_node func, so dont need this: 
+					// ap[api][ sc_id_frac_id[ node_id_sc_id[jnode.id] ] ] -= 1.0;
 					ap[api][ frac_var_ct + i ] -= 1.0;
 				
 					print_dvec(ap[api], "In period_posynomial for sc"+std::to_string(i)+std::to_string(api)+"ith term, const: " + std::to_string(ac[api]) );
@@ -413,44 +427,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 				}
 			}
 
-			/*
-			if ( ( (nj1.fixed_period > 0) && (nj1.fixed_period == nj.fixed_period) ) || ( (nj.fixed_period == 0.0) && (node_id_sc_id[nj1.id] == node_id_sc_id[nj.id]) && (node_id_sc_id[nj1.id] == 0) ) )
-			{
-				// just add ci.
-				std::cout << "CaseMC.RT 1. Adding ci=" << nj1.compute << std::endl;
-				ith_ap.push_back( std::vector<double>(total_vars, 0.0) );
-				ith_ac.push_back( log( nj1.compute ) );
-			}
-			else
-			{
-				if ( (node_id_sc_id[nj1.id] == node_id_sc_id[nj.id]) )
-				{
-				// same period NC, non-fixed period: do nothing
-					assert( node_id_sc_id[nj1.id]>0 );
-					std::cout << "CaseMC.RT 2. Do nothing!" << std::endl;
-				}
-				else
-				{
-					// period map:
-					std::pair< std::vector<std::vector<double> >, std::vector<double> > nj1_period = get_period_node(nj1.id);
-					
-					if (node_id_sc_id[nj1.id] == 0)
-					{
-				// Add period + ci.
-						std::cout << "CaseMC.RT 3. Adding period + ci"  << std::endl;
-						ith_ap.push_back( std::vector<double>(total_vars, 0.0) );
-						ith_ac.push_back( log( nj1.compute ) );
-
-						ith_ap.insert(ith_ap.end(), nj1_period.first.begin(), nj1_period.first.end() );
-						ith_ac.insert(ith_ac.end(), nj1_period.second.begin(), nj1_period.second.end() );
-					}
-					else
-					{
-				// Add 2*period.
-						
-					}
-				}
-			} */
+			
 		}
 
 		// Add approx tput of this chain.
@@ -500,7 +477,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	a[total_vars-1] = 1;
 	mosek_model->objective("Objective", ObjectiveSense::Minimize, Expr::dot(new_array_ptr<double> (a), all_l_vars) );	
 
-		std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);
+	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);
 	try
 	{
 		mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
@@ -510,15 +487,22 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
 		std::cout << "Extracted opt ans!\n";
 
-		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &solve_end);
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_end);
 		std::cout << "got solve_end, total vars: " << total_vars << std::endl;
+		for (int sci = 0; sci < exec_order.size(); sci++)
+		{
+			if (sc_id_frac_id.find(sci) != sc_id_frac_id.end())
+				all_frac_vals[sci] = (int) round( 1.0/((*opt_ans)[ sc_id_frac_id[sci] ]) );
+			else
+				all_frac_vals[sci] = 1;
+		}
 		for (int i = 0; i < total_vars; i++)
 		{
 			printf("var %i : %f", i, (*opt_ans)[i]);
-			all_frac_vals[i] = (int) round( 1.0/((*opt_ans)[i]) );
 		}
 		printf("cputIME TAKEN TO solve: %f", (solve_end.tv_sec + solve_end.tv_nsec*1e-9) - (solve_start.tv_sec + 1e-9*solve_start.tv_nsec));
 
+		print_vec(all_frac_vals, "final FRAC Answers from DAGMC");
 	}
 	catch (const OptimizeError& e)
 	{
