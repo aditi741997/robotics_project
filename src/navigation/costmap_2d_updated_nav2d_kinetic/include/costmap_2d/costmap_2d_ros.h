@@ -81,7 +81,7 @@ public:
    * @param name The name for this costmap
    * @param tf A reference to a TransformListener
    */
-  Costmap2DROS(std::string name, tf::TransformListener& tf, std::condition_variable* cv_robot_op = NULL);
+  Costmap2DROS(std::string name, tf::TransformListener& tf, ros::Publisher* lc_pub = NULL, std::condition_variable* cv_robot_op = NULL);
   ~Costmap2DROS();
 
   /**
@@ -228,6 +228,7 @@ public:
   std::condition_variable cv_map_update;
 
   std::condition_variable* cv_robot_op_lp;
+  ros::Publisher* lc_pub;
 
 protected:
   LayeredCostmap* layered_costmap_;

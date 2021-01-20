@@ -1,0 +1,18 @@
+N s 1 0
+N lc 1.1 0
+N lp 1.23 0
+N mapcb 30.4 0
+N mapupd 216 0
+N navp 375.6 0
+N navc 3.3 0
+E s lc mapcb X
+E lc lp X
+E mapcb navc navp mapupd X
+E mapupd navp X
+E navp navc X
+E navc lp X
+C 35 s lc lp X
+C 3300 s mapcb navc lp X
+C 6800 s mapcb navp navc lp X
+C 9000 s mapcb mapupd navp navc lp X
+constraint

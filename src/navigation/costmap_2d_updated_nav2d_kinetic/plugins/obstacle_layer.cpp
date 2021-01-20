@@ -153,12 +153,14 @@ void ObstacleLayer::onInitialize()
         "expected update rate: %.2f, observation persistence: %.2f",
         source.c_str(), topic.c_str(), global_frame_.c_str(), expected_update_rate, observation_keep_time);
 
+    recv_scan_ts_log.open("/home/ubuntu/OpeCBT_recvScan_log.csv");
+
     // create a callback for the topic
     if (data_type == "LaserScan")
     {
       
       boost::shared_ptr < message_filters::Subscriber<sensor_msgs::LaserScan>
-          > sub(new message_filters::Subscriber<sensor_msgs::LaserScan>(g_nh, topic, 1));
+          > sub(new message_filters::Subscriber<sensor_msgs::LaserScan>(g_nh, topic, 1, ros::TransportHints().tcpNoDelay() ));
 
       // Oct: Commenting out the filter since it delays the scanCB... 
       boost::shared_ptr < tf::MessageFilter<sensor_msgs::LaserScan> > filter(new tf::MessageFilter<sensor_msgs::LaserScan>(*sub, *tf_, global_frame_, 50));
@@ -263,6 +265,7 @@ void ObstacleLayer::laserScanCallback(const sensor_msgs::LaserScanConstPtr& mess
   sensor_msgs::PointCloud2 cloud;
   cloud.header = message->header;
   ROS_WARN("CMP Obstlayer got scan with real TS %f", message->scan_time);
+  recv_scan_ts_log << message->scan_time << "," << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
   // double real_ts = 
 
   // project the scan into a point cloud

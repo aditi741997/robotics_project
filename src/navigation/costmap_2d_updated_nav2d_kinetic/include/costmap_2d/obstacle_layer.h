@@ -56,6 +56,9 @@
 #include <costmap_2d/ObstaclePluginConfig.h>
 #include <costmap_2d/footprint.h>
 
+#include <fstream>
+#include <chrono>
+
 namespace costmap_2d
 {
 
@@ -66,6 +69,8 @@ public:
   {
     costmap_ = NULL;  // this is the unsigned char* member of parent class Costmap2D.
   }
+
+  std::ofstream recv_scan_ts_log;
 
   virtual ~ObstacleLayer();
   virtual void onInitialize();

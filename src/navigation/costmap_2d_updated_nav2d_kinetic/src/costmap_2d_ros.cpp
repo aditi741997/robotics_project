@@ -81,7 +81,7 @@ void move_parameter(ros::NodeHandle& old_h, ros::NodeHandle& new_h, std::string 
   if (should_delete) old_h.deleteParam(name);
 }
 
-Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf, std::condition_variable* cv_robot_op) :
+Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf, ros::Publisher* lc_p, std::condition_variable* cv_robot_op) :
     layered_costmap_(NULL),
     name_(name),
     tf_(tf),
@@ -98,6 +98,9 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf, std::con
     dsrv_(NULL),
     footprint_padding_(0.0)
 {
+  // lc tid info pub
+  lc_pub = lc_p;
+
   // Initialize old pose with something
   old_pose_.setIdentity();
   old_pose_.setOrigin(tf::Vector3(1e30, 1e30, 1e30));
@@ -426,9 +429,17 @@ void Costmap2DROS::mapUpdateLoop(double frequency)
   if (frequency == 0.0)
     return;
 
-  ROS_INFO("COSTMAP2DROS %s mapUpdateLoop started. thread id : %i", name_.c_str(), boost::this_thread::get_id());
-
   ros::NodeHandle nh;
+  // publish LC tid to controller:
+  std_msgs::Header hdr;
+  std::stringstream ss_e;
+  ss_e << ::getpid() << " lc " << ::gettid();
+  hdr.frame_id = ss_e.str();
+  if (lc_pub != NULL)
+  	lc_pub->publish(hdr);
+  
+  ROS_ERROR("COSTMAP2DROS %s mapUpdateLoop started. thread id : %i", name_.c_str(), ::gettid());
+
   ros::Rate r(frequency);
   while (nh.ok() && !map_update_thread_shutdown_)
   {
@@ -513,14 +524,12 @@ void Costmap2DROS::mapUpdateLoop(double frequency)
     };
 
     // Notify the robotOperator (LocalPLanner):
-    ROS_WARN("Costmap2DROS Notifying RobotOperator!!!!");
     cv_robot_op_lp->notify_all();
 
     // For converting critical chain of S - LC - LP to ED,
     // LC update needs to wait for a scan to come in [will be notified by obstacle layer].
     std::unique_lock<std::mutex> lk_mutex_map_update(mutex_map_update);
     cv_map_update.wait(lk_mutex_map_update);
-    // ROS_WARN("Costmap2DROS got Notified!!!!");  
 
   }
 }

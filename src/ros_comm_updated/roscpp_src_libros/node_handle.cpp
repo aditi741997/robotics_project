@@ -213,6 +213,11 @@ void NodeHandle::changeDropFraction(int dropf)
   TopicManager::instance()->changeDropFraction(dropf);
 }
 
+int NodeHandle::getInternalCBQTId()
+{
+	return TopicManager::instance()->getInternalCBQTId();
+}
+
 void NodeHandle::setCallbackQueue(CallbackQueueInterface* queue)
 {
   callback_queue_ = queue;
