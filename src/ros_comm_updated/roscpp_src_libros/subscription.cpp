@@ -66,6 +66,21 @@ using XmlRpc::XmlRpcValue;
 namespace ros
 {
 
+std::vector<std::string> explode(const std::string& s, const char& c)
+{
+	std::string buff{""};
+	std::vector<std::string> v;
+				
+	for(auto n:s)
+	{
+		if(n != c) buff+=n; else
+		if(n == c && buff != "") { v.push_back(buff); buff = ""; }
+	}
+	if(buff != "") v.push_back(buff);
+
+	return v;
+}
+
 Subscription::Subscription(const std::string &name, const std::string& md5sum, const std::string& datatype, const TransportHints& transport_hints)
 : name_(name)
 , md5sum_(md5sum)
@@ -77,6 +92,17 @@ Subscription::Subscription(const std::string &name, const std::string& md5sum, c
 {
 	full_total = 0;
 	fraction_drop = 1;
+	// split node name and topic name by / and take last one.
+	if ( (name_.find("base_scan") != std::string::npos) || (name_.find("tf") != std::string::npos ) )
+	{
+		std::vector<std::string> topic_split = explode(name_, '/');
+		std::vector<std::string> nname_split = explode(this_node::getName(), '/');
+		int tind = topic_split.size()-1;
+		int nind = nname_split.size()-1;
+		std::string shm_name = "/home/ubuntu/Sub_handleMsg_"+nname_split[nind]+topic_split[tind]+".csv";
+		ROS_ERROR("MAKING A Subscription for topic %s, node: %s, log file name: %s, len of Topicexplode: %i", name_.c_str(), this_node::getName().c_str(), shm_name.c_str(), topic_split.size());
+	handle_msg_ts_log.open(shm_name);
+	}
 }
 
 Subscription::~Subscription()
@@ -609,18 +635,12 @@ uint32_t Subscription::handleMessage(const SerializedMessage& m, bool ser, bool 
   boost::mutex::scoped_lock lock(callbacks_mutex_);
 
   // Process a fraction of the pkts. This function is called for all incoming msgs, and puts msgs to the queue/drops if queue full.
-  if (full_total%fraction_drop != 0)
-  {
-          ROS_INFO("Subscription explicitly DROPPING. full_total : %i, fraction : %i", full_total, fraction_drop);
-          full_total += 1;
-          return 1;
-  }
 
   full_total += 1;
 
-  // for navigator, note when it gets tf msgs.
-  if ( (name_.find("base_scan") != std::string::npos) || (name_.find("trigger_exec") != std::string::npos) || ( (this_node::getName().find("Navig") != std::string::npos) && (name_.find("tf") != std::string::npos) ) )
-	ROS_INFO("In Subscription::handleMessage func for topic %s, full_total %i", name_.c_str(), full_total);
+  // for navigator, note when it gets tf msgs. (this_node::getName().find("Navig") != std::string::npos) &&
+  if ( (name_.find("base_scan") != std::string::npos) || (  (name_.find("tf") != std::string::npos)  && (full_total%2 == 1) ) )
+	handle_msg_ts_log << full_total << "," << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count()<< "\n";
 
   uint32_t drops = 0;
 

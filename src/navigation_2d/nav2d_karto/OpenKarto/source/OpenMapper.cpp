@@ -2267,14 +2267,34 @@ namespace karto
     m_Initialized = false;
   }
 
+  // double time from a to b.
+  double get_tdiff(timespec& a, timespec& b)
+  {
+	  return (( b.tv_sec + 1e-9*b.tv_nsec ) - ( a.tv_sec + 1e-9*a.tv_nsec ));
+  }
+
+  void check_tdiff(timespec& a, timespec& b, std::string s)
+  {
+	  double d = get_tdiff(a,b);
+	  if (d > 0.054)
+		  std::cerr << "OpenMapper:: Process " << s <<  " took > 10ms!! time: " << d << std::endl;
+  }
+
   kt_bool OpenMapper::Process(Object* pObject)
   {
+struct timespec process_start;
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_start);
+
     if (pObject == NULL)
     {
       return false;
     }
+struct timespec process_end1, process_end2, process_end3, process_end4, process_end5, process_end6, process_end7, process_end8, process_end9, process_end10;
     
     kt_bool isObjectProcessed = Module::Process(pObject);
+    	
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end1);
+check_tdiff(process_start, process_end1, "Start_End1");
 
     if (IsLaserRangeFinder(pObject))
     {
@@ -2289,6 +2309,9 @@ namespace karto
       // register sensor
       m_pMapperSensorManager->RegisterSensor(pLaserRangeFinder->GetIdentifier());
       
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end2);
+check_tdiff(process_end1, process_end2, "End1_End2");
+
       return true;
     }
     
@@ -2303,6 +2326,8 @@ namespace karto
         // validate scan
         if (pLaserRangeFinder == NULL)
         {
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end3);
+check_tdiff(process_end1, process_end3, "End1_End3");
           return false;
         }
         
@@ -2314,6 +2339,8 @@ namespace karto
           // initialize mapper with range threshold from sensor
           Initialize(pLaserRangeFinder->GetRangeThreshold());
         }
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end4);
+check_tdiff(process_end1, process_end4, "End1_End4");
       }
 
       // ensures sensor has been registered with mapper--does nothing if the sensor has already been registered
@@ -2322,11 +2349,17 @@ namespace karto
       // get last scan
       LocalizedLaserScan* pLastScan = m_pMapperSensorManager->GetLastScan(pLocalizedObject->GetSensorIdentifier());
       
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end5);
+check_tdiff(process_end1, process_end5, "End1_End5");
+
       // update scans corrected pose based on last correction
       if (pLastScan != NULL)
       {
         Transform lastTransform(pLastScan->GetOdometricPose(), pLastScan->GetCorrectedPose());
         pLocalizedObject->SetCorrectedPose(lastTransform.TransformPose(pLocalizedObject->GetOdometricPose()));
+      
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end6);
+check_tdiff(process_end1, process_end6, "End1_End6");
       }
       
       // check custom data if object is not a scan or if scan has not moved enough (i.e.,
@@ -2340,10 +2373,15 @@ namespace karto
           // add to graph
           m_pGraph->AddVertex(pLocalizedObject);
           m_pGraph->AddEdges(pLocalizedObject);
-          
+         
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end7);
+check_tdiff(process_end1, process_end7, "End1_End7 True");
+
           return true;
         }
-        
+
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end7);
+check_tdiff(process_end1, process_end7, "End1_End7 False");
         return false;
       }
       
@@ -2362,7 +2400,10 @@ namespace karto
       }
       
       ScanMatched(pScan);
-      
+     
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end7);
+check_tdiff(process_end1, process_end7, "End1_End7 AfterScanMatched");
+
       // add scan to buffer and assign id
       m_pMapperSensorManager->AddLocalizedObject(pLocalizedObject);
       
@@ -2374,11 +2415,17 @@ namespace karto
         
         m_pMapperSensorManager->AddRunningScan(pScan);
         
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end10);
+check_tdiff(process_end1, process_end10, "End1_End10 If GetVal AddRunningScan");
+
         List<Identifier> sensorNames = m_pMapperSensorManager->GetSensorNames();
         karto_const_forEach(List<Identifier>, &sensorNames)
         {
           m_pGraph->TryCloseLoop(pScan, *iter);
         }      
+      
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end8);
+check_tdiff(process_end1, process_end8, "End1_End8 If GetVal done CloseLoop");
       }
       
       m_pMapperSensorManager->SetLastScan(pScan);
@@ -2388,6 +2435,8 @@ namespace karto
       isObjectProcessed = true;
     } // if object is LocalizedObject
     
+clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end9);
+check_tdiff(process_end1, process_end9, "End1_End9 AllDone!");
     return isObjectProcessed;
   }
 

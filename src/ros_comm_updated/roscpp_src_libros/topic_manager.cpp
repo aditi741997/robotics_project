@@ -750,9 +750,6 @@ void TopicManager::publish(const std::string& topic, const boost::function<Seria
       m.message.reset();
       m.type_info = 0;
     }
-	double b4_ser_time = (ros::Time::now() - st1).toSec();
-	if ((b4_ser_time > 0.0009) && (topic.find("camera1") != std::string::npos))
-	  ROS_INFO("%s st1 to b4 serial took more than 1ms %f", topic.c_str(), b4_ser_time);
 
     if (serialize || p->isLatching())
     {
@@ -788,11 +785,6 @@ void TopicManager::publish(const std::string& topic, const boost::function<Seria
   else
   {
     p->incrementSequence();
-  }
-  double t = (ros::Time::now() - st).toSec();
-  if ((t > 0.004) && (topic.find("camera1") != std::string::npos))
-  {
-    ROS_INFO("TopicMgr publish takes almost 1ms %f", t);
   }
 }
 

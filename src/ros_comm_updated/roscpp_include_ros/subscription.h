@@ -37,6 +37,9 @@
 #include "ros/statistics.h"
 #include "xmlrpcpp/XmlRpc.h"
 
+#include <chrono>
+#include <fstream>
+
 #include <boost/thread.hpp>
 #include <boost/shared_ptr.hpp>
 #include <boost/enable_shared_from_this.hpp>
@@ -123,6 +126,8 @@ public:
   void changeFraction(int newf);
   int full_total; // will be used to drop msgs in nc nodes.  
   int fraction_drop = 1; // 1 denotes dont drop any. This should be set to the desired fraction.
+
+  std::ofstream handle_msg_ts_log;
 
   // We'll keep a list of these objects, representing in-progress XMLRPC 
   // connections to other nodes.

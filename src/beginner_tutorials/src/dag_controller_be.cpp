@@ -288,7 +288,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
 					cc_end = true;
 					ready_sched = true;
-					printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
+					// printf("ABOUT to NOTIFY the main thread, cc_End: TRUE! \n");
 					cv_sched_thread.notify_all();
 				}
 
@@ -346,11 +346,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 				ready_sched = false;
 
-				// cv.wait (i=0), sleep for all others
 				// cv wait only if CC, i.e. sc id == 0 & only 1core.
 				if ( (core_exec_list[i] == 0) && (core_ids.size() == 1) )
 				{
-					printf("Monotime %f, realtime %f, TID %i WILL wait for CC-end. \n", get_monotime_now(), get_realtime_now(), ::gettid() );
+					// printf("Monotime %f, realtime %f, TID %i WILL wait for CC-end. \n", get_monotime_now(), get_realtime_now(), ::gettid() );
 					boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
 					int ct = 0;
 
@@ -371,9 +370,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 			total_period_count += 1;
 			per_core_period_counts[core_ids[0]] += 1;
-			// inc prio of our dynamic_resolve thread for sometime. to fifo,p2, the whole exec_order to p1 or just the last guy to p1.
-			// assuming 20ms -> 40ms for LowCF needed by reopt thread in 1s :
-			
+			// inc prio of our dynamic_resolve thread for sometime.	
 			// TODO: what is curr_cc_period in multi core case? Maybe only core0 runs re-solve thr, use its period.
 			int one_in_k_per = ceil(2000/(float)(40*curr_cc_period));
 			if (total_period_count%( one_in_k_per ) == 0 && (dynamic_reoptimize))
@@ -385,6 +382,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				// change policy back to rr, p1. RR wont work!!
 				set_other_policy_pthr(reoptimize_thread_p);
 			}
+			else
+				// Just some slack time in each period.
+				std::this_thread::sleep_for( std::chrono::milliseconds(1) );
 		}
 		printf("shutdown_scheduler is %i, handle_Sched_main is EXITING!!! \n", shutdown_scheduler.load());
 	}
@@ -409,7 +409,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	// Changes subchain[ind] prio = 2, all others = 1.
 	void DAGControllerBE::changePriority(std::vector<std::vector<int> >& iexec_order, int ind, int core_id)
 	{
-		// curr_exec_index = ind;
 		for (int i = 0; i < iexec_order.size(); i++)
                 {
                         int ret = 7;
@@ -417,9 +416,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
                                 ret = changePrioritySubChain(iexec_order[i], 2);
                         else
                                 ret = changePrioritySubChain(iexec_order[i], 1);
-			// if (ret != 0)
-				// std::cerr << "WEIRD, Ret value " << ret << " for setting prio of SC node " << node_dag.id_name_map[exec_order[i][0]] << " curr_exec_index: " << curr_exec_index << std::endl;
-                                // ROS_WARN("Weird: Ret value %i for setting priority of subchain node %s, ind to be exec : %i", ret, node_dag.id_name_map[exec_order[i][0]].c_str(), curr_exec_index);
 		}
 		if (ind>=0)
 			checkTriggerExec(iexec_order[ind], core_id);
@@ -677,7 +673,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		return max;
 	}
 
-	// returns the timeout for ind subchain, for current ci,fi vals.
+	// returns the timeout for ind subchain, for current ci,fi vals. This is in millisec.
 	double DAGControllerBE::get_timeout(std::vector<int>& sci, std::vector<int>& cores)
 	{
 		// TODO: If this subchain is alone on >=1 cores, use max (sum ci / k, max ci). Also acct for multi threading.
@@ -689,7 +685,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		double ans = tot;
 		if (cores.size()>1)	
 			ans = std::max( max, ( tot/cores.size() ) );
-                // ans = std::max(ans, 1); // to keep low overhead, can make ci*fi atleast 1ms. Might not be needed since linux sched_min_gran is 3ms.
+                ans = std::max(ans, 1.0); // to keep low overhead, can make ci*fi atleast 1ms. Might not be needed since linux sched_min_gran is 3ms.
 		return ans;
 	}
 
@@ -723,7 +719,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		std::string name = node_dag.id_name_map[id];
 		if ( (ind_p == 1 || ( (per_core_period_counts[core_id]) %ind_p == 1) ) ) // && (node_tid.find(name) != node_tid.end() ) ) // (ind > 0) && : Removing cuz CC now triggered by scheduler. 
 		{
-			printf("MonoTime: %f, RealTime: %f, About to trigger node: %s, frac: %i, period_count: %li \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, per_core_period_counts[core_id]);
+			printf("MonoTime: %f, RealTime: %f, trigger node: %s, frac: %i, period_count: %li \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, per_core_period_counts[core_id]);
 		
                 	// we always want the node to run exactly once whenever it wakes up, and hence only a bool is needed.	
 			frontend->trigger_node(name, true);

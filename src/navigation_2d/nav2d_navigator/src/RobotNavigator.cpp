@@ -251,7 +251,7 @@ void RobotNavigator::socket_recv()
 			if (to.find("navc") != std::string::npos)
 			{
 				boost::unique_lock<boost::mutex> lock(navc_trigger_mutex);
-				ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s,  Got a trigger for navc, curr count %i", s_msg.c_str(), navc_trigger_count);
+				// ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s,  Got a trigger for navc, curr count %i", s_msg.c_str(), navc_trigger_count);
 				/*
 				if (to.find("RESETCOUNT") != std::string::npos)
 				{
@@ -266,7 +266,7 @@ void RobotNavigator::socket_recv()
 			else
 			{
 				boost::unique_lock<boost::mutex> lock(navp_trigger_mutex);
-				ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s, Got a trigger for navp, curr_count %i", s_msg.c_str(), navp_trigger_count);
+				// ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s, Got a trigger for navp, curr_count %i", s_msg.c_str(), navp_trigger_count);
 				/*
 				if (to.find("RESETCOUNT") != std::string::npos)
                                 {
@@ -300,7 +300,6 @@ RobotNavigator::~RobotNavigator()
 void RobotNavigator::updateMapperScanTSUsedTF(const std_msgs::Header& hdr)
 {
 	current_mapper_tf_scan_ts = hdr.stamp.toSec();
-	// ROS_WARN("In ROBOTNavigator::updateMapperScanTSUsedTF : Mapper's TF TS is now %f", current_mapper_tf_scan_ts);
 }
 
 bool RobotNavigator::getMap()
@@ -522,7 +521,7 @@ bool RobotNavigator::createPlan()
 				}
 			}
 		}
-		if (count%17500 == 77)
+		if (count%22500 == 77)
 			ROS_ERROR("In navPlan createPlan, curr que sz : %i, count %i", queue.size(), count);
 	}
 
@@ -708,7 +707,6 @@ bool RobotNavigator::generateCommand()
 	int steps = mCommandTargetDistance / mCurrentMap.getResolution();
 	for(int i = 0; i < steps; i++)
 	{
-		// ROS_WARN("Iterating over #steps : i = %i, steps : %i", i, steps);
 		unsigned int bestPoint = target;
 		std::vector<unsigned int> neighbors = mCurrentMap.getFreeNeighbors(target);
 		for(unsigned int i = 0; i < neighbors.size(); i++)
@@ -762,7 +760,6 @@ bool RobotNavigator::generateCommand()
 	msg.LastScanTSScanMapCBMapUpdNavPlanNavCmd = using_curr_plan_mapUpd_scan_ts;
 	msg.LastScanTSScanMapCBNavCmd = current_mapCB_tf_navCmd_scan_ts;// dont need to store 'using' here since NavCmd runs in the order : setCurrentPosition, stuff, generateCommand.
 	msg.LastScanTSScanMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_scan_ts;
-	// ROS_WARN("IN NAV2D::ROBOTNavigator generateCommand - About to publish command for operator!!!");
 	mCommandPublisher.publish(msg);
 	return true;
 }
@@ -1155,7 +1152,6 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		struct timespec cb_start, cb_end;
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
 
-		// ROS_WARN("In nav2d::RobotNavigator STARTING Explore Loop!");
 		// Check if we are asked to preempt
 		if(!ok() || mExploreActionServer->isPreemptRequested() || mIsStopped)
 		{
@@ -1259,6 +1255,8 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 						{
 							tput_nav_plan.push_back(time_now - last_nav_plan_out);
 							ROS_ERROR("MADE NEW NAV PLAN, Tput : %f , realtime: %f", (time_now - last_nav_plan_out), time_now );
+							if ( (time_now - last_nav_plan_out) > 5.0 )
+								ROS_ERROR("WEIRD!!!!! NAV PLAN TPUT TOO HIGH!!!");
 						}
 
 						last_nav_plan_out = time_now;
@@ -1442,7 +1440,9 @@ void RobotNavigator::navGenerateCmdLoop()
 				if (last_nav_cmd_out > 0.0)
 				{
 					tput_nav_cmd.push_back(time_now - last_nav_cmd_out);
-					ROS_ERROR("MADE NEW NAV CMD, tput %f", time_now - last_nav_cmd_out);
+					// ROS_ERROR("MADE NEW NAV CMD, tput %f", time_now - last_nav_cmd_out);
+					if ( (time_now - last_nav_cmd_out) > 1.0)
+						ROS_ERROR("WEIRD!!!!! MADE NEW NAV CMD TPUT TOO HIGH %f", time_now - last_nav_cmd_out);
 				}
 
 				last_nav_cmd_out = time_now;	

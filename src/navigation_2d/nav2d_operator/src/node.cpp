@@ -50,9 +50,10 @@ int main(int argc, char **argv)
         std::mutex mutex_robot_op_lp;
         std::condition_variable cv_robot_op_lp;
 
-	ros::Publisher lc_pub = n.advertise<std_msgs::Header>("/robot_0/exec_start_lc", 5, true);
+	ros::Publisher lc_pub = n.advertise<std_msgs::Header>("/robot_0/exec_start_lc", 9, true);
+	ros::Publisher pub1 = n.advertise<std_msgs::Header>("/robot_0/exec_start_lp", 50, true);
 
-        RobotOperator robOp (&lc_pub, &cv_robot_op_lp);
+        RobotOperator robOp (&lc_pub, &pub1, &cv_robot_op_lp);
 
 	Rate loopRate(frequency);
 
@@ -62,7 +63,6 @@ int main(int argc, char **argv)
 
 	std::thread spinner_thr(spinner_work, &lc_pub);
 	
-	ros::Publisher pub1 = n.advertise<std_msgs::Header>("/robot_0/exec_start_lp", 50, true);
 	std_msgs::Header hdr;
 	std::stringstream ss_e;
         ss_e << ::getpid() << " lp "  << ::gettid();
@@ -94,11 +94,11 @@ int main(int argc, char **argv)
                 // We need to wait on the CV.
 		std::unique_lock<std::mutex> lk_mutex_robot_op_lp (mutex_robot_op_lp);
                 cv_robot_op_lp.wait(lk_mutex_robot_op_lp);
-		ROS_WARN("RobotOp notified. Will execute now!");
 	
 		op_ct += 1;
-		if (op_ct < 10)
+		if (op_ct < 16)
 		{
+			ROS_ERROR("Val of op ct: %i, mod3: %i", op_ct, op_ct%3);
 			if (op_ct%3 == 0)
 				pub1.publish(hdr);
 			else if (op_ct%3 == 1)

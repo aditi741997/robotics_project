@@ -442,12 +442,8 @@ void Publication::publish(SerializedMessage& m)
     */
     // ROS_WARN("In Publication for topic %s, About to push to publish_queue.", name_.c_str() );
     // Nov1: Navigator PMT does not do any publish work: Hopefully wont hang the system?
-    if ( ( (this_node::getName().find("Operator") != std::string::npos) && ( (name_.find("cmd_vel") != std::string::npos) || (name_.find("exec_end") != std::string::npos) ) ) || this_node::getName().find("avigator") != std::string::npos ) 
-    {
-	    if ( (this_node::getName().find("Operator") != std::string::npos) && ( name_.find("exec_end") != std::string::npos ))
-	    	ROS_ERROR("Operator node publishing exec_end!!! monotime: %f", get_monotime_now());
+    if ( ( (this_node::getName().find("Operator") != std::string::npos) && ( (name_.find("cmd_vel") != std::string::npos) || (name_.find("exec_end") != std::string::npos) ) ) || (this_node::getName().find("avigator") != std::string::npos) || (name_.find("scan") != std::string::npos) ) 
 	    enqueueMessage(m);
-    }
     else
     	publish_queue_.push_back(m);
     // }

@@ -30,9 +30,6 @@
 #include <sys/syscall.h>
 #define gettid() syscall(SYS_gettid)
 
-#include <dynamic_reconfigure/server.h>
-#include <beginner_tutorials/cc_freqConfig.h>
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
@@ -99,6 +96,8 @@ public:
     // ShimFreqNode();
     ShimFreqNode(double f, std::string sub_topic, std::string pub_topic, std::string msg_type);
 
+	std::ofstream pub_scan_ts_log;
+
     // for locking the data fields used both by publisher & subscriber.
 protected: 
     boost::mutex data_lock; 
@@ -116,6 +115,7 @@ protected:
 
 ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topic, std::string msg_type)
 {
+	pub_scan_ts_log.open("shq_pubScan_log.csv");
     freq = f;
 
     // dyn_f = boost::bind(&ShimFreqNode::callback, this, _1, _2);
@@ -134,7 +134,6 @@ ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topi
     real_last_recv_ts = 0.0;
 
     thread_exec_info_pub = nh.advertise<std_msgs::Header>("/robot_0/exec_start_s", 100, true);
-
     
     // start thread for publishing :
     // Dont need this thread if Scheduler triggers CC:
@@ -151,7 +150,7 @@ ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topi
 	
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(6227);
+	serv_addr.sin_port = htons(6327);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
 	// if ( pton_ret <= 0 )
@@ -184,7 +183,6 @@ void ShimFreqNode::socket_recv()
 	int read_size;
 	char msg [2048];
 
-	// ROS_ERROR("ShimFreqNode just started socket_recv thread!! tid: %i, pid: %i", ::gettid(), ::getpid());
 
 	while ( (read_size = recv(client_sock_fd, msg, 2048, 0) ) > 0 )
 	{
@@ -236,12 +234,9 @@ void ShimFreqNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
 	boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
 	boost::chrono::system_clock::duration tse = now.time_since_epoch();
 	std::time_t secs = boost::chrono::system_clock::to_time_t(now);
-        // secs is the tv_sec, and cast_to_secs.count * 1e-9 is the tv_nsec. TODO: Use for scan TS in stageros.
-	double wt = (double)secs + (double)( boost::chrono::duration_cast<boost::chrono::seconds>(tse).count() * 1e-9 );
-	if (ros_recv_deltas.size()%10 == 6)
+	if (ros_recv_deltas.size()%50 == 6)
 	{
             ROS_WARN("Got scan with TS %f, current clockMono time %f, scan RT Stamp %f", msg->header.stamp.toSec(), ts_mono.tv_sec + ts_mono.tv_nsec * 1e-9, msg->scan_time );
-	    std::cout << secs << std::endl;
 	}
 
         
@@ -305,8 +300,9 @@ void ShimFreqNode::printVecStats(std::vector<double> v, std::string st)
 void ShimFreqNode::publishLatestData()
 {
 	//publish thread id info.
-	if (pub_count < 5)
+	if (pub_count < 11)
 	{
+		ROS_INFO("SHQ:: PUBLISHING s TID: %i", ::gettid());
 		std_msgs::Header hdr;
 		std::stringstream ss_e;
         	ss_e << ::getpid() << " s " << ::gettid();
@@ -330,8 +326,10 @@ void ShimFreqNode::publishLatestData()
 			neg_lat_count += 1;
 			ROS_ERROR("-VE LAT: ShimFreqNode: Publishing scan!!!! with realTS %f, time_now: %f", latest_scan.scan_time, time_now);
 		}
-		else
-			ROS_WARN("ShimFreqNode: Publishing scan!!!! with realTS %f", latest_scan.scan_time);
+		// else
+			// ROS_WARN("ShimFreqNode: Publishing scan!!!! with realTS %f", latest_scan.scan_time);
+		pub_scan_ts_log << latest_scan.scan_time << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
+
 		// publish latest_scan...
 		sensor_pub.publish(latest_scan);
 		

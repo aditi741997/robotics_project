@@ -63,7 +63,7 @@ void write_arr_to_file(std::vector<double>& arr, std::string m)
         nh.param<std::string>("/expt_name", ename, "");
 
         std::ofstream of;
-        ROS_ERROR("IN RobotOperator: write_arr_to_file CALLED. Ename %s", ename.c_str());
+        // ROS_ERROR("IN RobotOperator: write_arr_to_file CALLED. Ename %s", ename.c_str());
     of.open("/home/ubuntu/robot_nav2d_" + ename + "_rt_stats.txt", std::ios_base::app);
     of << m << ": ";
     for (int i = 0; i < arr.size(); i++)
@@ -73,11 +73,12 @@ void write_arr_to_file(std::vector<double>& arr, std::string m)
     arr.clear();
 }
 
-RobotOperator::RobotOperator(ros::Publisher* lc_pub, std::condition_variable* cv_robot_op)
+RobotOperator::RobotOperator(ros::Publisher* lc_pub, ros::Publisher* lppub, std::condition_variable* cv_robot_op)
 {
 	if( ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Info) ) {
         	ros::console::notifyLoggerLevelsChanged();
     	}
+	lp_pub = lppub;
 
 	// Create the local costmap
 	mLocalMap = new costmap_2d::Costmap2DROS("local_map", mTfListener, lc_pub, cv_robot_op);
@@ -292,7 +293,6 @@ void RobotOperator::receiveOdomTFTS(const std_msgs::Header::ConstPtr& msg)
 {
 	//Note that whenever LP runs, it uses the latest odom TF.
 	//Latest since mTrajtable has ts=0 for all entries.
-	// ROS_ERROR("GOT Odom TF TS!!");
 	latest_odom_tf_ts = msg->stamp.toSec();
 }
 
@@ -322,7 +322,6 @@ void RobotOperator::receiveCommand(const nav2d_operator::cmd::ConstPtr& msg)
 
 void RobotOperator::executeCommand()
 {
-	// ROS_ERROR("In RobotOperator executeCmd!!");
 	struct timespec exec_start, exec_end;
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &exec_start);	
 

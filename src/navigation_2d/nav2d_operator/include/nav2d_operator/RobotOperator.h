@@ -44,7 +44,7 @@ class RobotOperator
 {
 public:
 	// Default Constructor & Destructor
-	RobotOperator(ros::Publisher* lcpub, std::condition_variable* cv_robot_op);
+	RobotOperator(ros::Publisher* lcpub, ros::Publisher* lppub, std::condition_variable* cv_robot_op);
 	~RobotOperator();
 	
 	// Public Methods
@@ -70,6 +70,8 @@ public:
         double last_scan_mapCB_navPlan_navCmd_ts; // TS of last scan used wrt S-MapCB-LC chain
         double last_scan_mapCB_navCmd_ts;
         double last_scan_mapCB_mapUpd_navPlan_navCmd_ts;
+
+	ros::Publisher* lp_pub;
 
         double last_scan_mapCB_ts;
 

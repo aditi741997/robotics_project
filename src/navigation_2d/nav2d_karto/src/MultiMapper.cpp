@@ -351,7 +351,7 @@ void MultiMapper::processTrigger(std::string msg)
 	}
 	else
 	{
-		ROS_ERROR("Got a trigger for mapupd %s curr count: %i", msg.c_str(), mapupd_trigger_count);
+		// ROS_ERROR("Got a trigger for mapupd %s curr count: %i", msg.c_str(), mapupd_trigger_count);
 		boost::unique_lock<boost::mutex> lock(mapupd_trigger_mutex);
 		/*
 		if (msg.find("RESETCOUNT") != std::string::npos)
@@ -567,7 +567,6 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 	*/
 
 	// Ignore own readings until map has been received
-	// ROS_WARN("ROBOT_%i IN nav2d::Mapper receiveLaserScan 1", mRobotID);
 	if(mState == ST_WAITING_FOR_MAP)
 	{
 		return;
@@ -598,7 +597,7 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 		    latest_scan_recv.intensities.push_back(scan->intensities[i]);
 	
 		received_scans = true;
-		ROS_WARN("ROBOT_%i IN nav2d::Mapper receiveLaserScan with TS %f", mRobotID, scan->scan_time);
+		// ROS_WARN("ROBOT_%i IN nav2d::Mapper receiveLaserScan with TS %f", mRobotID, scan->scan_time);
 		publishTransform();
 	}
 	/*	
@@ -918,6 +917,9 @@ void MultiMapper::processLatestScan()
 					ss << t;
 					mcb_ee.frame_id = ss.str() + " mapcb";
 					map_cb_exec_end_pub.publish(mcb_ee);
+
+					if (t > 2.0)
+						ROS_ERROR("WEIRD!!!! MAP CB SLOW TPUT >2s!!! TPUT: %f", t);
 
 				boost::chrono::time_point<boost::chrono::system_clock> now = boost::chrono::system_clock::now();
 				// boost::chrono::system_clock::duration tse = now.time_since_epoch();
@@ -1258,9 +1260,12 @@ bool MultiMapper::updateMap()
 	if (total_mapupdate_count > 1)
 	{
 		// boost::chrono::duration<double> diff = now - last_map_upd_out;
-                ROS_ERROR("NAV2D::MAPPER NEW MAP TPUT!!");
+                ROS_ERROR("NAV2D::MAPPER NEW MAP TPUT!! %f", exec_rt_end - last_map_upd_out);
 		// tput_map_update.push_back( diff.count() );	
 		tput_map_update.push_back(exec_rt_end - last_map_upd_out);
+
+		if ( (exec_rt_end - last_map_upd_out) > 3.0 )
+			ROS_ERROR("WEIRD!!!! MAPPER MAPUPD TPUT TOO HIGH!!");
 	}
 
 	last_map_upd_out = exec_rt_end;
@@ -1442,10 +1447,7 @@ void MultiMapper::publishTransform()
 		std_msgs::Header hdr;
 		hdr.stamp = ros::Time(last_scan_mapCB_tf_processed);
 		mScanTSPublisher.publish(hdr);
-		ROS_ERROR("From mapScanCB: Publishing transform.. with TS %f", last_scan_mapCB_tf_processed);
-
-		//TODO: see if we can put TS within the TF, cuz 
-		// it might happen that the Navigator node uses the TF before the new is published and after new_TS is published.
+		// ROS_ERROR("From mapScanCB: Publishing transform.. with TS %f", last_scan_mapCB_tf_processed);
 
 		mTransformBroadcaster.sendTransform(tf::StampedTransform (mOdometryOffset, ros::Time::now() , mOffsetFrame, mOdometryFrame));
 		mTransformBroadcaster.sendTransform(tf::StampedTransform (mMapToOdometry, ros::Time::now() , mMapFrame, mOffsetFrame));
