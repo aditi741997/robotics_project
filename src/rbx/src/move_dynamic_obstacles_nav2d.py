@@ -5,7 +5,7 @@ from geometry_msgs.msg import Twist
 import time
 from nav_msgs.msg import Odometry
 
-obstacle_ids = ['robot_1', 'robot_2', 'robot_3', 'robot_4', 'robot_5', 'robot_6', 'robot_7'] #, 'robot_8']
+obstacle_ids = ['robot_1', 'robot_2', 'robot_3', 'robot_4', 'robot_5', 'robot_6', 'robot_7', 'robot_8']
 
 # directions:
 obstacle_dir_x = [1 for x in obstacle_ids]
@@ -23,8 +23,9 @@ turn_poses_x = {'target1': [-2.75, -12, 5.25, 5.3, 13.2, -2.8, -10.9, 2.25], 'ta
 turn_poses_y = {'target1': [2,2.5,9,3.1,-4.9,11,11,-9.25], 'target0': [2,0,9,3.1,-4.9,11,11,-11.75]}
 
 # for large map:
-turn_poses_x = {'target1': [-21.5, 8.5, 2.75, 12.5, 18.5, -22.5, -12.9], 'target0': [-24, 8.5, 2.75, 10, 16, -25, -15.4]}
-turn_poses_y = {'target1': [-8.25, -8, 10.3, 10, -8.2, 12.5, 0.0], 'target0': [-8.25, -10.5, 7.8, 10, -8.2, 12.5, 0.0]}
+turn_poses_x = {'target1': [-21.8, 8.5, 2.75, 12.8, 18.8, -22, -12.5, -11.2], 'target0': [-24.3, 8.5, 2.75, 9.7, 15.5, -25.5, -16, -16]}
+turn_poses_y = {'target1': [-8.25, -7.7, 10.6, 10, -8.2, 12.5, 0.0, 7.5], 'target0': [-8.25, -10.8, 7.5, 10, -8.2, 12.5, 0.0, 7.5]}
+
 
 cmd_vel_pubs = []
 pose_subs = []

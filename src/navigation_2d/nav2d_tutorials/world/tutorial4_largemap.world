@@ -93,4 +93,11 @@ pioneer3at
 )
 # room7: x: -16 to -8, y: 9 to 13
 
+pioneer3at
+(
+  name "robot_8"
+  pose [-16 7.5 0 0]
+  color "blue"
+)
+
 
