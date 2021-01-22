@@ -172,6 +172,7 @@ private:
 	boost::thread reoptimize_thread;
 	bool dynamic_reoptimize;
 	void dynamic_reoptimize_func(); // update the fraction of all nodes.
+	void update_per_core_periods(); // called after each re-solve.
 	int frac_var_count; // #vars make during fill_trigger, assign_publishing, assign_src.
 	int reoptimize_thread_id;
 	pthread_t reoptimize_thread_p;	

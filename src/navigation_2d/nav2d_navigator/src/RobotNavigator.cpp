@@ -195,7 +195,7 @@ RobotNavigator::RobotNavigator(ros::Publisher& nc_pub)
 
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(6327);
+	serv_addr.sin_port = htons(5327);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
 	// if ( pton_ret <= 0 )
@@ -263,7 +263,7 @@ void RobotNavigator::socket_recv()
 					navc_trigger_count += 1;
 				cv_navc.notify_all();
 			}
-			else
+			if (to.find("navp") != std::string::npos)
 			{
 				boost::unique_lock<boost::mutex> lock(navp_trigger_mutex);
 				// ROS_ERROR("RobotNavigator::socket_recv THREAD: GOT msg %s, Got a trigger for navp, curr_count %i", s_msg.c_str(), navp_trigger_count);

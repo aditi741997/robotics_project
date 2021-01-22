@@ -120,6 +120,7 @@ public:
 	// Sorted by the criticality : first chain is the most critical.
 	// ci/wi, chain, criticality_no., id	
 	std::vector<std::tuple<float, std::vector<int>, float, int > > all_chains; 
+	std::vector<double> all_chains_rel_weights; // rel wt of chain = cc constr/ constr.
 	// maintains the ids of all nodes in most_critical_chain.
 	std::map<int, int> nodes_in_most_critical_chain;
 	
@@ -164,6 +165,7 @@ public:
 	// Useful for re solving the OPT with varying ci:
 	void clear_old_data(int frac_var_count);
 	void update_cis(std::map<std::string, boost::circular_buffer<double> >& node_ci_arr);
+	void scale_nc_constraints(double f);
 
 	// Helper functions:
 	void add_mono_to_map(std::map<std::string, Monomial>& monos, Monomial m);

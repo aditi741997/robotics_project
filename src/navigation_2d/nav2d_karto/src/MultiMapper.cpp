@@ -275,7 +275,7 @@ void MultiMapper::socket_recv()
 
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(6327);
+	serv_addr.sin_port = htons(5327);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
 	// if ( pton_ret <= 0 )
@@ -349,9 +349,9 @@ void MultiMapper::processTrigger(std::string msg)
 		mapcb_trigger_count += 1;
 		cv_mapcb.notify_all();
 	}
-	else
+	if (msg.find("upd") != std::string::npos)
 	{
-		// ROS_ERROR("Got a trigger for mapupd %s curr count: %i", msg.c_str(), mapupd_trigger_count);
+		ROS_ERROR("Got a trigger for mapupd %s curr count: %i", msg.c_str(), mapupd_trigger_count);
 		boost::unique_lock<boost::mutex> lock(mapupd_trigger_mutex);
 		/*
 		if (msg.find("RESETCOUNT") != std::string::npos)
@@ -1166,7 +1166,7 @@ bool MultiMapper::sendMap()
 bool MultiMapper::updateMap()
 {
 	if(!mMapChanged) return true;
-	ROS_ERROR("IN MultiMapper::updateMap, mMapChanged is TRUE!!!");
+	// ROS_ERROR("IN MultiMapper::updateMap, mMapChanged is TRUE!!!");
 
 	// to measure updateMap time ALSO #scans.
 	struct timespec map_update_start, map_update_end;
@@ -1264,8 +1264,8 @@ bool MultiMapper::updateMap()
 		// tput_map_update.push_back( diff.count() );	
 		tput_map_update.push_back(exec_rt_end - last_map_upd_out);
 
-		if ( (exec_rt_end - last_map_upd_out) > 3.0 )
-			ROS_ERROR("WEIRD!!!! MAPPER MAPUPD TPUT TOO HIGH!!");
+		if ( (exec_rt_end - last_map_upd_out) > 4.0 )
+			ROS_ERROR("WEIRD!!!! MAPPER MAPUPD TPUT TOO HIGH!! %f", exec_rt_end - last_map_upd_out);
 	}
 
 	last_map_upd_out = exec_rt_end;

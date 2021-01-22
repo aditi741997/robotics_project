@@ -7,7 +7,7 @@ DAGMultiCore::DAGMultiCore()
 
 void DAGMultiCore::set_params(int numc, std::vector< std::vector<int> >& sc_core_a)
 {
-	printf("IN DAGMultiCore::set_params, numc: %i, len of sc_core_assgt: %i, len of sc_core_assgt[0]: %i \n", numc, sc_core_assgt.size(), sc_core_a[0].size());
+	printf("IN DAGMultiCore::set_params, numc: %i, len of sc_core_assgt: %lu, len of sc_core_assgt[0]: %lu \n", numc, sc_core_assgt.size(), sc_core_a[0].size());
 	num_cores = numc;
 	sc_core_assgt = sc_core_a;
 }
@@ -17,6 +17,8 @@ void DAGMultiCore::assign_fixed_periods()
 	printf("DAGMultiCore ABOUT TO assign_fixed_periods!! WILL clear global_var info first! \n");
 	global_var_count = 0;
 	global_var_desc.clear();
+
+	sc_id_frac_id.clear();
 
 	for (int i = 0; i < num_cores; i++)
 		core_sc_list[i] = std::vector<int> ();
@@ -58,6 +60,7 @@ void DAGMultiCore::assign_fixed_periods()
 			// modify fixed_period only if its not set currently.
 			for (int n = 0; n < exec_order[i].size(); n++ )
 			{
+				// TODO: dont overload fixed_period, cuz how will we identify when we re-solve and get a diff core assgt?
 				if (id_node_map[ exec_order[i][n] ].fixed_period == 0)
 					id_node_map[ exec_order[i][n] ].fixed_period = per;
 				
@@ -128,6 +131,7 @@ void DAGMultiCore::get_period_map_core(int i, int total_vars, std::vector<std::v
 	if (core_sc_list[i].size() <= 1)
 		return;
 
+	double cpu_util_mul = 1.05;
 	for (int sci = 0; sci < core_sc_list[i].size(); sci++ )
 	{
 		int scid = core_sc_list[i][sci];
@@ -139,7 +143,7 @@ void DAGMultiCore::get_period_map_core(int i, int total_vars, std::vector<std::v
 		// i.e. we're accounting for CCfreq*their ci in our schedule, will only need to care about (200Hz-CCfreq)*ci separately.
 		for (int j = 0; j < exec_order[scid].size(); j++)
 			sumci += id_node_map[ exec_order[scid][j] ].compute;
-		mono_const.push_back(log(sumci));
+		mono_const.push_back(log(sumci) + log(cpu_util_mul) );
 		
 		printf("ADDING ci for subchain id %i, sum=%f, frac var id = %i \n", scid, sumci, sc_id_frac_id[scid]);
 
@@ -152,7 +156,7 @@ void DAGMultiCore::get_period_map_core(int i, int total_vars, std::vector<std::v
 
 		print_dvec(ai, "ADDED this vec to period for core " + std::to_string(i));
 	}
-	printf("We have the mono arrs ready for core %i, len: %i %i \n", i, mono_powers.size(), mono_const.size());
+	printf("We have the mono arrs ready for core %i, len: %lu %lu \n", i, mono_powers.size(), mono_const.size());
 	per_core_period_mono_powers[i] = mono_powers;
 	per_core_period_mono_const[i] = mono_const;
 }
@@ -165,7 +169,7 @@ std::pair< std::vector<std::vector<double> >, std::vector<double> > DAGMultiCore
 
 	std::vector<std::vector<double> > ap (cvp.begin(), cvp.end());
 	std::vector<double> ac (cvc.begin(), cvc.end());
-	printf("Node %i belongs to subchain %i, core %i, len of ap,ac: %i %i \n", node_id, node_id_sc_id[node_id], sc_core_assgt[node_id_sc_id[node_id]][0], ap.size(), ac.size());
+	printf("Node %i belongs to subchain %i, core %i, len of ap,ac: %lu %lu \n", node_id, node_id_sc_id[node_id], sc_core_assgt[node_id_sc_id[node_id]][0], ap.size(), ac.size());
 
 	// multiply by 1/f to get period
 	for (int i = 0; i < ap.size(); i++)
@@ -204,16 +208,6 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	int total_vars = global_var_count+1;
 	Variable::t all_l_vars = mosek_model->variable(total_vars);
 
-	/*
-	if (sc_id_frac_id.find(0) != sc_id_frac_id.end())
-	{
-		// set CC's fraction=1. log=0
-		// Jan: Will do this by NOT making a variable for this. [This leads to solution unknown.]
-		assert( sc_id_frac_id[0] == 0 );
-		auto sc0_sol = new_array_ptr<double,1>({-0.001});
-		all_l_vars->slice(0,1)->setLevel(sc0_sol);
-	} */
-
 	// Constraint 1 : All fi's are <= 1, i.e. all log fi's are < 0.
 	for (int i = 0; i < frac_var_ct; i++)
 	{
@@ -222,9 +216,26 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		mosek_model->constraint( Expr::dot(new_array_ptr<double>(a) , all_l_vars) , Domain::lessThan(0.0) );
 		std::cout << "ADDED vi < 0 constraint for var " << i << std::endl;
 	}
+	
+	std::vector<std::vector<int> > exec_order = get_exec_order();
+	
+	// ci*fi > 1 for all. ci: sum of ith subchain compute.
+	// To minimize overhead and keep sleep time error < 10%.
+	for (int i = 0; i < exec_order.size(); i++)
+		if (sc_id_frac_id.find(i) != sc_id_frac_id.end())
+		{
+			std::vector<double> a (total_vars, 0.0);
+			a[ sc_id_frac_id[i] ] = -1;
+
+			double sumci = 0.0;
+			for (int ei = 0; ei < exec_order[i].size(); ei++)
+				sumci += id_node_map[ exec_order[i][ei] ].compute;
+
+			mosek_model->constraint( Expr::dot(new_array_ptr<double>(a) , all_l_vars) , Domain::lessThan( log(sumci) ) );
+			print_dvec(a, "Adding ci*fi>=1 constr, sumci="+std::to_string(sumci) );
+		}
 
 	// hyper-period of each core as vec of vecs...
-	std::vector<std::vector<int> > exec_order = get_exec_order();
 	for (int i = 0; i < num_cores; i++)
 	// need a period map for each core with >1 subchains.
 		if (core_sc_list[i].size() > 1)
@@ -266,18 +277,11 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 				// 1/fi * period of that core <= ch_i_period
 				assert(sc_core_assgt[node_id_sc_id[jnode.id]].size() == 1);
 				
-				/*
-				auto& cp_p = per_core_period_mono_powers[ sc_core_assgt[node_id_sc_id[jnode.id]][0] ];
-				auto& cp_c = per_core_period_mono_const[ sc_core_assgt[node_id_sc_id[jnode.id]][0] ];
-				std::vector<std::vector<double>> ap (cp_p.begin(), cp_p.end());
-				std::vector<double> ac (cp_c.begin(), cp_c.end());
-				*/
-
 				std::pair< std::vector<std::vector<double>>, std::vector<double> > a_p_c = get_period_node(jnode.id);
 				std::vector<std::vector<double>> ap (a_p_c.first.begin(), a_p_c.first.end());
 				std::vector<double> ac (a_p_c.second.begin(), a_p_c.second.end() );
 
-				printf("ABOUT to put constraint on approx_period of chain %i, var id %i using period of subchain %i, its on core %i, #monos in this core's period: %i %i \n", i, frac_var_ct + i, node_id_sc_id[jnode.id], sc_core_assgt[node_id_sc_id[jnode.id]][0], ap.size(), ac.size() );
+				printf("ABOUT to put constraint on approx_period of chain %i, var id %i using period of subchain %i, its on core %i, #monos in this core's period: %lu %lu \n", i, frac_var_ct + i, node_id_sc_id[jnode.id], sc_core_assgt[node_id_sc_id[jnode.id]][0], ap.size(), ac.size() );
 
 				// Divide all terms by sc_frac and by ch_i_period. <= 1.
 				for (int api = 0; api < ap.size(); api++)
@@ -300,6 +304,8 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	// Objective: 
 	std::vector<std::vector<double>> obj_ap;
 	std::vector<double> obj_ac;
+
+	double cons0 = std::get<0>(all_chains[0]);
 
 	// RTs for each chain:
 	for (int i = 0; i < all_chains.size(); i++)
@@ -420,7 +426,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 					std::pair< std::vector<std::vector<double> >, std::vector<double> > nj1_period = get_period_node(nj1.id);
 					for (int pmfi = 0; pmfi < nj1_period.second.size(); pmfi++)
 						nj1_period.second[pmfi] += log(p_mult_factor);
-					printf("Adding period posynomial, num_terms: %i %i \n", nj1_period.first.size(), nj1_period.second.size() );
+					printf("Adding period posynomial, num_terms: %lu %lu \n", nj1_period.first.size(), nj1_period.second.size() );
 
 					ith_ap.insert(ith_ap.end(), nj1_period.first.begin(), nj1_period.first.end() );
 					ith_ac.insert(ith_ac.end(), nj1_period.second.begin(), nj1_period.second.end() );
@@ -438,15 +444,16 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		ith_ap.push_back(app_per_ap);
 		ith_ac.push_back(0.0);
 
-		// Add to the obj_ arrs.
+		double cons = std::get<0>(all_chains[i]);
+		
+		// Add to the obj_ arrs, in ratio of constr.
 		obj_ap.insert(obj_ap.end(), ith_ap.begin(), ith_ap.end() );
 		std::vector<double> ith_ac_copy (ith_ac.begin(), ith_ac.end());
 		if (i > 0)
 			for (int ic = 0; ic < ith_ac.size(); ic++)
-				ith_ac_copy[ic] += log(0.001); // NC nodes' RT*0.001 in obj.
+				ith_ac_copy[ic] += log( all_chains_rel_weights[i] ); // NC nodes'0.001 RT*relative_constr in obj.
 		obj_ac.insert(obj_ac.end(), ith_ac_copy.begin(), ith_ac_copy.end());
 
-		double cons = std::get<0>(all_chains[i]);
 		printf("MODIFYing the const vector for chain %i, dividing by constr %f", i, cons);
 		for (int ic = 0; ic < ith_ac.size(); ic++)
 			ith_ac[ic] += (log(1.0/cons) );
@@ -477,7 +484,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	a[total_vars-1] = 1;
 	mosek_model->objective("Objective", ObjectiveSense::Minimize, Expr::dot(new_array_ptr<double> (a), all_l_vars) );	
 
-	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 1);
+	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 0.0);
 	try
 	{
 		mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
@@ -488,18 +495,26 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		std::cout << "Extracted opt ans!\n";
 
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_end);
-		std::cout << "got solve_end, total vars: " << total_vars << std::endl;
+		std::cout << "DAGMC:: got solve_end, exec order sz:" << exec_order.size() << ",total vars: " << total_vars << ",sz of opt_ans: " << opt_ans->size() << ",sz of return arr:" << all_frac_vals.size() << std::endl;
+		for (int i = 0; i < total_vars; i++)
+		{
+			std::cout << "i=" << i;
+			printf("|var %i : %f", i, (*opt_ans)[i]);
+		}
 		for (int sci = 0; sci < exec_order.size(); sci++)
 		{
-			if (sc_id_frac_id.find(sci) != sc_id_frac_id.end())
-				all_frac_vals[sci] = (int) round( 1.0/((*opt_ans)[ sc_id_frac_id[sci] ]) );
+			if ( (sc_id_frac_id.find(sci) != sc_id_frac_id.end()) && (sci>0) )
+			{
+				double fr = (*opt_ans)[ sc_id_frac_id[sci] ];
+				double fr1 = (double)1.0/fr;
+				int fr_r = (int) round(fr1);
+				printf("SC ID %i HAS a frac var id %i! opt_ans : %f, 1/ans: %f round:  %i", sci, sc_id_frac_id[sci], fr, fr1, fr_r );
+				all_frac_vals[sci] = fr_r;
+			}
 			else
 				all_frac_vals[sci] = 1;
 		}
-		for (int i = 0; i < total_vars; i++)
-		{
-			printf("var %i : %f", i, (*opt_ans)[i]);
-		}
+		
 		printf("cputIME TAKEN TO solve: %f", (solve_end.tv_sec + solve_end.tv_nsec*1e-9) - (solve_start.tv_sec + 1e-9*solve_start.tv_nsec));
 
 		print_vec(all_frac_vals, "final FRAC Answers from DAGMC");
@@ -527,10 +542,10 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 					char desc[MSK_MAX_STR_LEN];
 					MSK_getcodedesc((MSKrescodee)(mosek_model->getSolverIntInfo("optimizeResponse")), symname, desc);
 					std::cout << "  Termination code: " << symname << " " << desc << "\n";
-					mosek_model->selectedSolution(SolutionType::Interior);
+					/* mosek_model->selectedSolution(SolutionType::Interior);
 					auto opt_ans = std::make_shared<ndarray<double, 1>>(shape(total_vars), [all_l_vars](ptrdiff_t i) { return exp((*(all_l_vars->level()))[i]); });
 					for (int i = 0; i < total_vars; i++)
-						printf("var %i : %f", i, (*opt_ans)[i]);
+						printf("var %i : %f", i, (*opt_ans)[i]); */
 					break;
 
 				}
@@ -542,6 +557,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	{
 		std::cerr << "DAG::compute_rt_solve: Unexpected error: " << e.what() << "\n";
 	}
-
+	
+	mosek_model->dispose();
 	return all_frac_vals;
 }

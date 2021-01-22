@@ -218,7 +218,8 @@ def get_robot_edges(px,py,oz,ow):
 	return [ Segment2D(verts[0], verts[1]), Segment2D(verts[1], verts[2]), Segment2D(verts[2], verts[3]), Segment2D(verts[3], verts[0]) ]
 
 def get_obstacle_no_stage(x,y):
-	if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
+        '''
+        if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
 		return 1 # robot1 is line_no+1
 	elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
 		return 2 # robot2 is line_no+2
@@ -234,7 +235,23 @@ def get_obstacle_no_stage(x,y):
 		return 7
 	elif (x >= 0) and (x <= 4.5) and (y >= -13) and (y <= -8):
 		return 8
-	else:
+	This is for normal map
+        '''
+        if (x >= -27) and (x <= -18) and (y >= -11) and (y <= -5):
+                return 1
+        elif (x >= 5.5) and (x <= 11.5) and (y >= -14) and (y <= -5):
+                return 2
+        elif (x >= 0) and (x <= 5.5) and (y >= 5) and (y <= 13):
+                return 3
+        elif (x >= 7) and (x <= 15) and (y >= 7) and (y <= 13):
+                return 4
+        elif (x >= 13) and (x <= 21) and (y >= -11) and (y <= -5):
+                return 5
+        elif (x >= -28) and (x <= -19) and (y >= 9.5) and (y <= 15.5):
+                return 6
+        elif (x >= -18) and (x <= -10) and (y >= -3) and (y <= 3):
+                return 7
+        else:
 		return -1
 
 def get_dist(x1,y1,x2,y2):
@@ -282,6 +299,8 @@ def get_closest_wall_dist(x,y):
 letter = 'N'
 opt_total_Area = 339142.0
 
+# LMap: 818045, 817667, 818141, 817838
+#opt_total_Area = 818045.0
 
 runlevel_agg_lowlevelmetrics = [] # list of lists. 
 runlevel_agg_lowlevelmetrics_dict = {} # metric name -> value. [median in runs, then ?]
@@ -337,8 +356,8 @@ runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 exptn = "OfflineMCB_H"
 #expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #expts.append(exptn + "7_5c")
-expts = ["FracV1_1c"]
-runs = [1,12,13,4,5,6,7,8,9,10,14,15,16,17,18]
+expts = ["DFracV2_1c"] #"DFracV11_1c", "DFracV2_1c", "FracV11_1c"]
+runs = [1,2,3,4,11,6,7,8,9,10] #14,15,16,17,18]
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 #for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 run_rts_percentile = 50
@@ -392,7 +411,9 @@ for i in expts:
                                     run_expl_finished = True
                                 if ("No way between robot and goal!" in fl):
                                     run_path_plan_fail = True
-                end_i += 0.1 # expl should fail after the collision for the collision to count.
+                		if ("Exploration failed." in fl):
+				    	end_i = float( fl.split(' ')[-2] )
+		end_i += 0.1 # expl should fail after the collision for the collision to count.
 		# JUST to plot area covered in 1st 60sec: 
 		# end_i = start_i + slot + 1.0
 		print("For i ", i, " Start, end times: ", start_i, end_i)
@@ -575,8 +596,12 @@ for i in expts:
 				wall_dist_arr.append( closest_wall_dist )
 
 				# read TS:
-				pos_st_ts = float(obfl[o*numl].split(' ')[1])
-				pos_rt_ts = float(obfl[o*numl].split(' ')[3])
+                                try:
+				    pos_st_ts = float(obfl[o*numl].split(' ')[1])
+				    pos_rt_ts = float(obfl[o*numl].split(' ')[3])
+                                except:
+                                    print("ERROR in numl = %i, o: %i, line split: "%(numl,o), obfl[o*numl].split(' ') )
+
 
 				if ( (pos_rt_ts > start_i) and (pos_rt_ts < end_i) ):
 				        # Calculating dist travelled for pathlen:
@@ -614,8 +639,8 @@ for i in expts:
 					if ( (pos_rt_ts > start_i) and (pos_rt_ts < end_i) and (int( rob_stalled ) == 1) ):
 						run_collision_hua = True
                                         
-                                        if "St_O" in obfl[o*numl + num_obst + 2].split(' '):
-                                            print(obst_ind, obfl[o*numl + num_obst + 2], "St_O!!!!")
+                                        #if "St_O" in obfl[o*numl + num_obst + 2].split(' '):
+                                            #print(obst_ind, obfl[o*numl + num_obst + 2], "St_O!!!!")
 					
 					if obst_ind != -1:
 						obst_line = obfl[rob_pos + obst_ind].split(' ')
@@ -713,8 +738,10 @@ for i in expts:
                                             time_80area.append( float(l.split(' ')[4]) - start_i )
                                         if ( (known >= 0.6*opt_total_Area) and (last_known_area < 0.6*opt_total_Area) ):
                                             time_60area.append( float(l.split(' ')[4]) - start_i )
+		                        if ( (known >= 0.9*opt_total_Area) and (last_known_area < 0.9*opt_total_Area) ):
+                                            fullExplTimes.append( float(l.split(' ')[4]) - start_i )
                                         last_known_area = known
-		runlevel_total_area_expl[exp_id] = last_known_area
+                runlevel_total_area_expl[exp_id] = last_known_area
 		run_totalareas.append(last_known_area)
 		new_area_cov_Agg = aggregate_over_time(new_area_covered, new_area_covered_ts, start_i, slot, end_i)
 		sum_new_area_cov_agg = {}
@@ -728,8 +755,8 @@ for i in expts:
                     run_ttc.append(end_i - start_i - 0.1)
                     print("For expt %s, collision happened!!"%(exp_id) )
                 
-                if ( (last_known_area > (0.9*opt_total_Area)) ): #run_expl_finished and : for now, only checking 90%area time.
-                    fullExplTimes.append(end_i - start_i - 0.1)
+                #if ( (last_known_area > (0.9*opt_total_Area)) ): #run_expl_finished and : for now, only checking 90%area time.
+                    #fullExplTimes.append(end_i - start_i - 0.1)
 	        
                 run_pathlens.append(run_path_len_sum)
                 run_areabypaths.append( last_known_area / run_path_len_sum )

@@ -46,7 +46,7 @@ double get_realtime_now()
 		struct sched_param params;
 		params.sched_priority = 0;
 		int ret = pthread_setschedparam(pt, SCHED_OTHER, &params);
-		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD to OTHER: %i |", get_monotime_now(), get_realtime_now(), ret);
+		printf("Monotime %f, realtime %f, retval for changing dyn_reopt THREAD to OTHER: %i |", get_monotime_now(), get_realtime_now(), ret);
 	}
 
 	void set_other_policy(int tid, int nice_val)
@@ -84,6 +84,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 		num_cores = num_c;
 		// /*
+		// TODO: When doing dynamic, use node_dag_mc as input to MCApproxSolver:
 		multi_core_solver = MultiCoreApproxSolver(&node_dag, num_cores);
 		std::vector< std::vector<int> > sc_core_assgt = multi_core_solver.solve();
 		node_dag_mc = DAGMultiCore(dag_file);
@@ -218,7 +219,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			cc_period += get_sum_ci_ith(exec_order[i])*offline_fracs[ node_dag.id_name_map[ exec_order[i][0] ] ];
 		int oldstate;
 		int ret_pct = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldstate);
-		printf("MonoTime: %f, RealTime: %f, STARTED startup_trigger thread TID: %i ! CC period: %f, sched_started: %i \n", get_monotime_now(), get_realtime_now(), ::gettid(), cc_period, sched_started.load() );
+		printf("MonoTime: %f, RealTime: %f, STARTED startup_trigger thread TID: %li ! CC period: %f, sched_started: %i \n", get_monotime_now(), get_realtime_now(), ::gettid(), cc_period, sched_started.load() );
 
 		curr_cc_period = cc_period;
 
@@ -233,7 +234,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			{
 				total_period_count += 1;
 				per_core_period_counts[0] += 1;
-				printf("MonoTime: %f, RealTime: %f, Period ct: %li, checking Trigger for all, exec_order sz: %i, curr_cc_period: %f", get_monotime_now(), get_realtime_now(), total_period_count, exec_order.size(), curr_cc_period);
+				printf("MonoTime: %f, RealTime: %f, Period ct: %li, checking Trigger for all, exec_order sz: %lu, curr_cc_period: %f", get_monotime_now(), get_realtime_now(), total_period_count, exec_order.size(), curr_cc_period);
 				for (int i = 0; i < exec_order.size(); i++)
 					checkTriggerExec(exec_order[i], 0); // just for startup, we keep triggering nodes at some rate.
 			}
@@ -302,7 +303,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	{
 		set_high_priority("MAIN sched Thread", 4, 0);
 		for (auto &i : node_dag.name_id_map)
-			printf("#EXTRA THREADS for node %s : %i", i.first.c_str(), node_extra_tids[i.first].size() );
+			printf("#EXTRA THREADS for node %s : %lu", i.first.c_str(), node_extra_tids[i.first].size() );
 		
 		per_core_period_counts[core_ids[0] ] = 1;
 		total_period_count = 1;
@@ -328,7 +329,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		}
 		changeAffinityThread("handle_Sched_main for core="+std::to_string(core_ids[0]), 0, core_ids );
 		
-		printf("STARTING MAinSched thread!! tid: %i Len of exec_order: %zu, curr_cc_period: %f, #cores: %i, core0: %i \n", ::gettid(), core_exec_order.size(), curr_cc_period, core_ids.size(), core_ids[0] );
+		printf("STARTING MAinSched thread!! tid: %li Len of exec_order: %zu, curr_cc_period: %f, #cores: %zu, core0: %i \n", ::gettid(), core_exec_order.size(), curr_cc_period, core_ids.size(), core_ids[0] );
 		
 		while (!shutdown_scheduler)
 		{
@@ -337,11 +338,11 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				// printf("Monotime %f, realtime %f, TIME to run subchain #%i, Timeout: %f \n", get_monotime_now(), get_realtime_now(), i,  );
 				// prio(i) = 2, all others = 1.
 				offline_fracs_mtx.lock();
+				
 				long i_to = 1000*get_timeout(core_exec_order[i], core_ids);
 				changePriority(core_exec_order, i, core_ids[0]); // handles priority & trigger.
-				
 				auto trig_cc = std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count();
-
+				
 				offline_fracs_mtx.unlock();
 
 				ready_sched = false;
@@ -375,18 +376,23 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			int one_in_k_per = ceil(2000/(float)(40*curr_cc_period));
 			if (total_period_count%( one_in_k_per ) == 0 && (dynamic_reoptimize))
 			{
-				printf("WANNA run dyn_reopt for 2ms now!! one_in_k_per: %i \n", one_in_k_per);
+				printf("WANNA run dyn_reopt-2ms now!! 1in?Per: %i \n", one_in_k_per);
 				changePriority(core_exec_order, -1, core_ids[0]);
 				set_high_priority("Dyn Reopt thread!", 2, reoptimize_thread_id);
 				std::this_thread::sleep_for( std::chrono::milliseconds(2) );
-				// change policy back to rr, p1. RR wont work!!
+				// change policy back to other. 
 				set_other_policy_pthr(reoptimize_thread_p);
 			}
 			else
-				// Just some slack time in each period.
-				std::this_thread::sleep_for( std::chrono::milliseconds(1) );
+				// Just some slack time in each period. 5% of this core's period.
+				std::this_thread::sleep_for( std::chrono::microseconds( (int) round(1000*0.05*curr_cc_period) ) );
 		}
 		printf("shutdown_scheduler is %i, handle_Sched_main is EXITING!!! \n", shutdown_scheduler.load());
+	}
+
+	void DAGControllerBE::update_per_core_periods()
+	{
+		// for each core, its period is sum ci*fi. 
 	}
 
 	std::string DAGControllerBE::get_last_node_cc_name()
@@ -446,8 +452,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 						node_curr_prio[ node_dag.id_name_map[sci[j]] ] = prio;
 					
 				}
-				// else
-					// std::cout << "Not changing prio for " << node_dag.id_name_map[sci[j]] << ", it was already equal to prio: " << prio << ", mapval: " << node_curr_prio[ node_dag.id_name_map[sci[j]] ] << std::endl;
 			}
 			else
 				printf("ERROR!!! Monotime %f, realtime %f, No threadID for %s !!! \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[sci[j]].c_str() );
@@ -581,63 +585,82 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		reoptimize_thread_p = this_thread;
 		struct sched_param params;
 		params.sched_priority = 0;
-		int ret = pthread_setschedparam(this_thread, SCHED_OTHER, &params);
-		// RR doesnt work cuz timeslice=100ms. Setting nice prio highest, will inc its priority for 1ms per period.
-		/*
-		struct sched_param sp = { .sched_priority = 1,};
-		int ret = sched_setscheduler(0, SCHED_OTHER, &sp);
-		*/
-		printf("Monotime %f, realtime %f, retval for changing prio of dynamic_reoptimize_func THREAD: %i | pthread tid: %i, tid: %i \n", get_monotime_now(), get_realtime_now(), ret, reoptimize_thread_id, ::gettid() );
+		set_other_policy_pthr(reoptimize_thread_p); // pthread_setschedparam(this_thread, SCHED_OTHER, &params);
+		
+		printf("Monotime %f, realtime %f, dynamic_reoptimize_func THREAD pthread tid: %i, tid: %i \n", get_monotime_now(), get_realtime_now(), reoptimize_thread_id, ::gettid() );
+
+		int sleep_time = 5000;
 
 		while (!shutdown_scheduler)
 		{
-			// 5s period
-			std::this_thread::sleep_for (std::chrono::milliseconds(5000));
-			printf("Reoptimize thread WOKEN UP!! Starting to re-solve... \n");
-			// clear old data
-			node_dag.clear_old_data(frac_var_count);
-			// update compute times to be 75ile of recent data.
-			// TODO: Update node_dag_mc ci, re-solve using that and update offline_fracs. 
+			std::this_thread::sleep_for (std::chrono::milliseconds(sleep_time));
+			printf("Reoptimize thread WOKEN UP [Slept for %i]!! Starting to re-solve... \n", sleep_time);
+
+			// Not needed for dag_mc: clear old data
+			// node_dag.clear_old_data(frac_var_count);
+			// Done: Update node_dag_mc ci, re-solve using that and update offline_fracs. 
 			// TODO: Re-solve for core assgt every 7.5s or 10s.
-			node_dag.update_cis(node_ci_arr);
+			
 			try
 			{
-				// call compute_rt_solve
+			// update compute times to be 75ile of recent data.
+			node_dag_mc.update_cis(node_ci_arr);
+			printf("DONE Updating all cis! Will start solving now: ");
 				double solve_start = get_monotime_now();
-				all_frac_values = node_dag.compute_rt_solve();
+				node_dag_mc.assign_fixed_periods();
+				all_frac_values = node_dag_mc.compute_rt_solve();
 				printf("Monotime %f, realtime %f, Mono-time taken to solve GP: %f \n", get_monotime_now(), get_realtime_now(), (get_monotime_now()-solve_start) );
 
 				if (all_frac_values[0] > 0)
 				{
-					// get period map node_id -> set of f_ids.
-					period_map = node_dag.period_map; 
-					// update CC freq:
-					// Update fractions.
+					// [node_dag:] get period map node_id -> set of f_ids.
+					// period_map = node_dag.period_map; 
 					// For each NC subchain, fraction = 1.0/[multiply all_frac_vals[i] for all i in period_map[subchain]]
 					double period = 0.0;
 
 					// take a lock to change offline_fracs: [i.e. the handle_Sched thread might have to wait a little bit sometimes before getting timeout value.] 
 					offline_fracs_mtx.lock();
+					/*
 					for (auto const& x : period_map)
 					{
 						double frac = 1.0;
 						for (int i = 0; i < x.second.size(); i++)
 							frac *= 1.0/all_frac_values[x.second[i]];
 						printf("MonoTime: %f, RealTime: %f, In new soln, Fraction for node %s is %f \n", get_monotime_now(), get_realtime_now(), node_dag.id_name_map[x.first].c_str(), frac);
-						// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << "In new soln, Fraction for node " << node_dag.id_name_map[x.first] << " is : " << frac << std::endl;
 						period += node_dag.id_node_map[x.first].compute * frac;
 						offline_fracs [ node_dag.id_name_map[x.first] ] = frac;
+					}
+					*/
+					// With new dag_mc, all_frac_vals directly gives frac of each subchain.
+					for (int i = 0; i < exec_order.size(); i++)
+					{
+						printf("MonoTime: %f, RealTime: %f, In new soln, Fraction for node %s is %i \n", get_monotime_now(), get_realtime_now(), node_dag_mc.id_name_map[ exec_order[i][0] ].c_str(), all_frac_values[i]);
+						offline_fracs[ node_dag_mc.id_name_map[ exec_order[i][0] ] ] = 1.0/all_frac_values[i];
+						
+						for (int ei = 0; ei < exec_order[i].size(); ei++)
+							period += node_dag_mc.id_node_map[exec_order[i][ei]].compute / (double)all_frac_values[i];
 					}
 					curr_cc_period = period;
 					offline_fracs_mtx.unlock();
 
 					printf("MonoTime: %f, RealTime: %f, In new soln, CC period is %f \n", get_monotime_now() , get_realtime_now(), period);
-					// std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << "In new soln, CC period is " << period << std::endl;
-					// std::string cmd = "rosrun dynamic_reconfigure dynparam set /shim_freq_node cc_freq " + std::to_string(1000.0/(period) ); // since period is in millisec.
-					// system(cmd.c_str());
-
-
+					sleep_time = 5000;
+				
+					// For DFracV2 expts, where we re-solve only once:
+					// dynamic_reoptimize = false;
+					// return;
 				}
+				else
+				{
+					// node_dag.scale_nc_constraints(1.5);
+					node_dag_mc.scale_nc_constraints(1.5);
+					sleep_time = 1000;
+				}
+			}
+			catch (const std::exception& e)
+			{
+				printf("MonoTime: %f, RealTime: %f, EXCEPTION in trying to solve GP ", get_monotime_now() , get_realtime_now() );
+				std::cout << e.what() << std::endl;
 			}
 			catch (int e)
 			{
@@ -661,7 +684,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	{
 		double tot = 0.0;
                 for (int i = 0; i < sci.size(); i++)
-                        tot += node_dag.id_node_map[ sci[i] ].compute;
+                        tot += node_dag_mc.id_node_map[ sci[i] ].compute;
                 return tot;
 	}
 
@@ -680,12 +703,11 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		double tot = get_sum_ci_ith(sci);
 		double max = get_max_ci_ith(sci);
 		// Assuming that f is set to 1 for an alone subchain.
-		tot *= offline_fracs[node_dag.id_name_map[ sci[0] ] ];
+		tot *= offline_fracs[node_dag_mc.id_name_map[ sci[0] ] ];
 	
 		double ans = tot;
 		if (cores.size()>1)	
 			ans = std::max( max, ( tot/cores.size() ) );
-                ans = std::max(ans, 1.0); // to keep low overhead, can make ci*fi atleast 1ms. Might not be needed since linux sched_min_gran is 3ms.
 		return ans;
 	}
 

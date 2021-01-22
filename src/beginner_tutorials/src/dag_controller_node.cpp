@@ -132,7 +132,7 @@ public:
 		memset(&saddr, 0, sizeof(saddr));
 		saddr.sin_family = AF_INET;
 		saddr.sin_addr.s_addr = INADDR_ANY;
-		port_no = 6327;
+		port_no = 5327;
 		saddr.sin_port = htons(port_no);
 
 		if (bind(srv_fd, (struct sockaddr *) &saddr, sizeof(saddr)) < 0) ROS_ERROR("Socket:: bind FAILED!!");
@@ -193,7 +193,7 @@ public:
 				}
 			}
 
-			ROS_INFO("DAGC: Socket:: Done with socket connection Accept. !!!!!!");
+			ROS_INFO("DAGC: Socket:: Done with socket connection Accepts. !!!!!!");
 		}
 		controller->start();
 	}
@@ -376,7 +376,7 @@ public:
                         {
 				char msg[1+hdr.frame_id.length()];
                                 strcpy(msg, hdr.frame_id.c_str());
-                                send(trigger_socks[name], msg, strlen(msg), 0);
+				send(trigger_socks[name], msg, strlen(msg), 0);
 			}
 			else
 				ROS_ERROR("trigger_socks_conn SOCKET NOT connected for %s IS false!!! Nav-DAGController SOCKET NOT connected!!", name.c_str());

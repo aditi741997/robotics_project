@@ -349,6 +349,15 @@ bool DAG::order_chains_criticality(std::vector<std::tuple<float, std::vector<int
 
 	for (int i = 0; i < all_chains.size(); i++)
 		print_vec(std::get<1>(all_chains[i]), "Chain : ");
+
+	double cons0 = std::get<0>(all_chains[0]);
+	
+	if (name_id_map.find("s") != name_id_map.end() ) // hard-coding for nav2d based on 90p LMap ci.
+		all_chains_rel_weights = std::vector<double> {1.0, 0.0064, 0.006, 0.0046};
+	// for (int i = 0; i < all_chains.size(); i++)
+		// all_chains_rel_weights.push_back( cons0/ (std::get<0>(all_chains[i])) );
+	print_dvec(all_chains_rel_weights, "All Chains Rel Weights:");
+
 	return ret;	
 }
 
@@ -1046,7 +1055,7 @@ void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> >& nod
 				cis.push_back(y);
 			std::sort(cis.begin(), cis.end());
 			std::cout << "UPDATED Compute time of node " << x.first << " from " << id_node_map [ name_id_map [ x.first ] ].compute << " TO " << cis[(75*cis.size())/100]*1000.0 << std::endl;
-			id_node_map [ name_id_map [ x.first ] ].compute = cis[(75*cis.size())/100]*1000.0; // Nodes publish time, DAG operates in ms.
+			id_node_map [ name_id_map [ x.first ] ].compute = cis[(75*cis.size())/100]*1000.0; // Nodes publish time in sec, DAG operates in ms.
 		}
 	}
 }
@@ -1282,19 +1291,20 @@ std::vector<int> DAG::compute_rt_solve()
 	{
 		std::cerr << "DAG::compute_rt_solve: Unexpected error: " << e.what() << "\n";
 	}
-	if (all_frac_vals[0] == 0)
-	{
-		for (int i = 1; i < all_chains.size(); i++)
-		{
-			std::get<0>(all_chains[i]) = 1.5*(std::get<0>(all_chains[i]));
-			printf("New constraint for chain %i is : %f", i, std::get<0>(all_chains[i])); 
-		}
-		printf("Solver unable to satisfy constraints!! Loosening all non-CC constraints by 1.5x. \n");
-	}
-		// std::cout << (int) round(2.3) << ", " << (int) round(2.7) << ", " << (int) round(1.11) << ", " << std::endl;
+	// std::cout << (int) round(2.3) << ", " << (int) round(2.7) << ", " << (int) round(1.11) << ", " << std::endl;
 	double total_time_ci = (double)(clock() - ci_start_rt)/CLOCKS_PER_SEC;
 	double solve_time = (double)(clock() - solve_start_rt)/CLOCKS_PER_SEC;	
 	std::cout << "TOTAL time including stuff that uses ci : " << total_time_ci << ", solve time : " << solve_time << ", CPUTime to solve: " << ( (solve_end.tv_sec + solve_end.tv_nsec*1e-9) - (solve_start.tv_sec + 1e-9*solve_start.tv_nsec) ) << std::endl;
 	mosek_model->dispose();
 	return all_frac_vals;
-} 
+}
+
+void DAG::scale_nc_constraints(double f)
+{
+	for (int i = 1; i < all_chains.size(); i++)
+	{
+		std::get<0>(all_chains[i]) = f*(std::get<0>(all_chains[i]));
+		printf("New constraint for chain %i is : %f", i, std::get<0>(all_chains[i]));
+	}
+	printf("Loosened all non-CC constraints by %fx.", f);
+}
