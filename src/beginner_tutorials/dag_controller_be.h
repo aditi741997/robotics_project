@@ -174,7 +174,8 @@ private:
 	bool dynamic_reoptimize;
 	void dynamic_reoptimize_func(); // update the fraction of all nodes.
 	bool dynamic_reoptimize_mc(); // re-solve for core assgt, multi threaded bin sz.
-	void update_per_core_threads(); // called after each re-solve.
+	void update_per_core_threads(); // called after each re-solve: re-spawn threads
+	void update_per_core_period_map();
 	int frac_var_count; // #vars make during fill_trigger, assign_publishing, assign_src.
 	int reoptimize_thread_id;
 	pthread_t reoptimize_thread_p;	
