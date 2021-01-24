@@ -155,9 +155,10 @@ private:
 	boost::condition_variable cv_sched_thread; // this is just for the core with CC in it.
 
 	// For multi-core scheduling:
+	std::vector< std::vector<int> > curr_sc_core_assgt;
 	std::map<int, boost::thread> per_core_sched_threads;
 	std::map<int, long int> per_core_period_counts;
-	std::map<int, double> per_core_period; // HP of each core sched.
+	std::map<int, double> per_core_period_map; // HP of each core sched.
 	// std::map<int, boost::condition_variable> cv_;
 	// pass core # to each function to easily access period ct etc.
 
@@ -172,9 +173,13 @@ private:
 	boost::thread reoptimize_thread;
 	bool dynamic_reoptimize;
 	void dynamic_reoptimize_func(); // update the fraction of all nodes.
-	void update_per_core_periods(); // called after each re-solve.
+	bool dynamic_reoptimize_mc(); // re-solve for core assgt, multi threaded bin sz.
+	void update_per_core_threads(); // called after each re-solve: re-spawn threads
+	void update_per_core_period_map();
 	int frac_var_count; // #vars make during fill_trigger, assign_publishing, assign_src.
 	int reoptimize_thread_id;
 	pthread_t reoptimize_thread_p;	
+
+	double last_mc_reopt_ts = 0.0;
 };
 
