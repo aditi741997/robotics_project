@@ -206,7 +206,6 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 			// node_dag->print_dvec(zij_sum_c, "\n ADDING constr that sum zij>sum_ci for i"+i_str);
 			mosek_model->constraint("pi_cs_k"+i_str, Expr::dot(zij,zij_sum_c1 ), Domain::greaterThan(sum_ci-0.005) );
 
-
 		// pi >= sum ci * [no of subchains sharing same core]
 			std::vector<double> wijl_sum_c (num_cores*num_subchains*num_subchains, 0.0);
 			for (int l = 0; l < num_subchains; l++)
@@ -264,7 +263,7 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 			
 			printf("\n For chain %i, constraint on RT: %f", ch, cons);
 			// ch0: sum_ci + pi
-			if (ch == 0)
+			/* if (ch == 0)
 			{
 				std::vector<double> p0 (num_subchains, 0.0);
 				p0[0] = 1.0;
@@ -272,12 +271,11 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 				auto p0_c = new_array_ptr<double>(p0);
 				mosek_model->constraint("ch0_rt", Expr::dot(pi, p0_c), Domain::lessThan(cons - subchain_sum_cis[0]) );
 				
-				// mosek_model->objective("Min_CC_RT", ObjectiveSense::Minimize, Expr::dot(pi, p0_c) );
 				// Objective func: Add p0
 				sum_rts_ps[0] += 1.0;
-			}
+			} */
 			// other chains: formula above.
-			else
+			// else
 			{
 				std::vector<double> ith_chain_per (num_chains, 0.0);
 				ith_chain_per[ch] = 1.0;
@@ -290,6 +288,7 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 				for (int n = 0; n < ith_chain.size(); n++)
 				{
 					// need index of a node in the exec_order [cuz thats the order of pi variables.]
+					//Note that node_id_exec_order_id is same as node_id_sc_id in node_dag_mc.
 					if (node_id_exec_order_id.find(ith_chain[n]) == node_id_exec_order_id.end())
 					{
 						for (int eo = 0; eo < list_subchains.size(); eo++)
@@ -300,9 +299,12 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 					int pid = node_id_exec_order_id[ith_chain[n]];
 					if (n == 0)
 						ps[pid] += 1.0;
-					else
+					// note that if n, n-1 are same subchain, 
+					// then we've already added P (max wait) +P (exec time for the whole subchain) when we were processing node n-1.
+					else if (pid != node_id_exec_order_id[ith_chain[n-1]])
 						ps[pid] += 2.0; // TODO: Use sumci if a subchain is alone on >1cores, i.e. xi=1.
 					
+
 					std::vector<double> chain_per_const (num_subchains, 0.0);
 					chain_per_const[pid] = -1.0;
 					node_dag->print_dvec(chain_per_const, "\n Adding constr ith_chain_per > subchain_period.");
@@ -327,8 +329,7 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 		}
 
 		// Done: Objective is CC RT + 0.001*(sum of other three RTs)
-		// rt_sum_ps DOT pi + chains1_X approx_period : objective func. [we dont need to add S0]
-		chain_pers_sum[0] = 0.0;
+		// rt_sum_ps DOT pi + chains approx_period : objective func.
 		auto chain_pers_sum1 = new_array_ptr<double>(chain_pers_sum);
 
 		node_dag->print_dvec(chain_pers_sum, "ADDING chains approx Per to ObjFunc!");
