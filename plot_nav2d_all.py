@@ -218,7 +218,6 @@ def get_robot_edges(px,py,oz,ow):
 	return [ Segment2D(verts[0], verts[1]), Segment2D(verts[1], verts[2]), Segment2D(verts[2], verts[3]), Segment2D(verts[3], verts[0]) ]
 
 def get_obstacle_no_stage(x,y):
-        '''
         if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
 		return 1 # robot1 is line_no+1
 	elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
@@ -235,8 +234,10 @@ def get_obstacle_no_stage(x,y):
 		return 7
 	elif (x >= 0) and (x <= 4.5) and (y >= -13) and (y <= -8):
 		return 8
-	This is for normal map
+        else:
+		return -1
         '''
+	This is for normal map
         if (x >= -27) and (x <= -18) and (y >= -11) and (y <= -5):
                 return 1
         elif (x >= 5.5) and (x <= 11.5) and (y >= -14) and (y <= -5):
@@ -251,8 +252,7 @@ def get_obstacle_no_stage(x,y):
                 return 6
         elif (x >= -18) and (x <= -10) and (y >= -3) and (y <= 3):
                 return 7
-        else:
-		return -1
+        '''
 
 def get_dist(x1,y1,x2,y2):
 	return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
@@ -356,11 +356,14 @@ runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 exptn = "OfflineMCB_H"
 #expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #expts.append(exptn + "7_5c")
-expts = ["DFracV2_1c"] #"DFracV11_1c", "DFracV2_1c", "FracV11_1c"]
-runs = [1,2,3,4,11,6,7,8,9,10] #14,15,16,17,18]
+expts = ["DF_V2_1c"] #"DFracV11_1c", "DFracV2_1c", "FracV11_1c"]
+runs = [31,32,33,34,35,36,37,38,39,41] #14,15,16,17,18]
+
+runs = range(21,71)
+
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 #for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
-run_rts_percentile = 50
+run_rts_percentile = 75 #50
 for i in expts:
         run_totalareas = []
 	run_tputs = {} # name -> list
@@ -387,7 +390,8 @@ for i in expts:
 
         for run in runs: #1,2]:
 		run_collision_hua = False
-                stall_ct = 0
+                
+		stall_ct = 0
                 sto_ct = 0
                 run_expl_finished = False
 		run_path_plan_fail = False
@@ -618,8 +622,8 @@ for i in expts:
 					robo_odom_arr.append( math.sqrt( vx*vx + vy*vy ) )
 					try:
 						vang = float( obfl[o*numl + num_obst + 2].split(' ')[4] )
-						if o%2000 == 77:
-							print("VELS for o=", o,vx,vy,vang)
+						#if o%2000 == 77:
+							#print("VELS for o=", o,vx,vy,vang)
 							#print "Dist from closest wall:", rob_x, rob_y, wall_id, closest_wall_dist 			
 						av = math.sqrt( vx*vx + vy*vy + vang*vang)
 						robo_ang_odom_arr.append( av )
@@ -638,7 +642,8 @@ for i in expts:
                                             rob_stalled = rob_stalled[:-1]
 					if ( (pos_rt_ts > start_i) and (pos_rt_ts < end_i) and (int( rob_stalled ) == 1) ):
 						run_collision_hua = True
-                                        
+						stall_ct += 1                                       
+ 
                                         #if "St_O" in obfl[o*numl + num_obst + 2].split(' '):
                                             #print(obst_ind, obfl[o*numl + num_obst + 2], "St_O!!!!")
 					
@@ -650,10 +655,11 @@ for i in expts:
 						obst_ts_arr.append(pos_rt_ts)
 	                                        obst_dist_arr.append(dist)
                                                 if "St_O" in obfl[o*numl + num_obst + 2]:
-                                                    print("St_O!!!!!! obst ind %i, line %s, dist %f, rt TS: %f"%(obst_ind, obfl[o*numl + num_obst + 2], dist, pos_rt_ts) )
+                                                    #print("St_O!!!!!! obst ind %i, line %s, dist %f, rt TS: %f"%(obst_ind, obfl[o*numl + num_obst + 2], dist, pos_rt_ts) )
                                                     if (dist < 1.5) and ((pos_rt_ts > start_i) and (pos_rt_ts < end_i)) :
 						    # collision! check pos of robot and this obst
 						        run_collision_hua = True
+							sto_ct += 1
 
 					'''
 					if ( pos_rt_ts > (end_i - (end_i - start_i)/10 ) ) and (pos_rt_ts < (end_i + 1.0) ):
@@ -721,7 +727,7 @@ for i in expts:
 				ccall_agg_i[k] = cc_ct/len(obst_agg_i[k]) #/float(ct2)
 			obst_colln_agg.append(colln_agg_i)
 			obst_ccall_agg.append(ccall_agg_i)
-			print("For %s : obstacle colln count: %i"%(exp_id, len(colln_agg_i) )) 
+			#print("For %s : obstacle colln count: %i"%(exp_id, len(colln_agg_i) )) 
 	# 3. Area covered per 10s:
 		new_area_covered = []
 		new_area_covered_ts = []
@@ -749,11 +755,13 @@ for i in expts:
 			sum_new_area_cov_agg[k] = sum( new_area_cov_Agg[k] )
 		#print("Sum nEW Area covered Agg: ", sum_new_area_cov_agg) # Do this only for first slot.
 		new_area_agg.append(sum_new_area_cov_agg)
-		colln_count += run_collision_hua
-                path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))
+		if (stall_ct > 3) or (sto_ct > 3):
+			colln_count += run_collision_hua
+      
+		path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))
                 if run_collision_hua:
                     run_ttc.append(end_i - start_i - 0.1)
-                    print("For expt %s, collision happened!!"%(exp_id) )
+                print("For expt %s, collision hua? %i !! STALL COUNT: %i, ST_O CT: %i"%(exp_id, run_collision_hua, stall_ct, sto_ct) )
                 
                 #if ( (last_known_area > (0.9*opt_total_Area)) ): #run_expl_finished and : for now, only checking 90%area time.
                     #fullExplTimes.append(end_i - start_i - 0.1)
@@ -790,7 +798,8 @@ for i in expts:
                     runs_75p_tputs[sc] = []
                     runs_mean_tputs[sc] = []
                 runs_mean_tputs[sc].append( irun_mean_tput[sc] )
-                print("FOR EXPT %s, MEAN tput for  %s is %s, median[over runs] Mean tput: %f"%( i, sc, str( irun_mean_tput[sc] ), np.median(irun_mean_tput[sc]) ) )
+                print("FOR EXPT %s, 75P tput for  %s is %s, median[over runs] 75P tput: %f"%( i, sc, str( irun_75p_tput[sc] ), np.median(irun_75p_tput[sc]) ) )
+		#print("FOR EXPT %s, MEAN tput for  %s is %s, median[over runs] Mean tput: %f"%( i, sc, str( irun_mean_tput[sc] ), np.median(irun_mean_tput[sc]) ) )
                 runs_med_tputs[sc].append(run_tputs[sc]) #median of run tput
                 runs_75p_tputs[sc].append(irun_75p_tput[sc]) # 75%ile of run tput
         for ch in all_CHAINS: #["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]: #
@@ -800,7 +809,7 @@ for i in expts:
         runlevel_agg_lowlevelmetrics.append( [-1.0*x for x in ith_lowlevel_arr] )
        
         # Fraction of time v=0.
-        print("For expt %s, vel0_frac_arr: %s"%(exp_id, str(vel0_frac_arr) ) )
+        #print("For expt %s, vel0_frac_arr: %s"%(exp_id, str(vel0_frac_arr) ) )
         runlevel_med_0veltime.append( sorted(vel0_frac_arr)[len(runs)/2] )
         runlevel_mean_0veltime.append( sum(vel0_frac_arr)/len(runs) )
         runlevel_tail_0veltime.append( sorted(vel0_frac_arr)[(8*len(runs))/10] )
@@ -845,7 +854,7 @@ for i in expts:
         runlevel_mean_pathlen.append( np.mean(run_pathlens) ) #sum(run_pathlens)/len(run_pathlens) )
 
         # Area covered / Path Length:
-        print("For expt %s, Area/pathLen: %s"%(i, str(run_areabypaths) ) )
+        #print("For expt %s, Area/pathLen: %s"%(i, str(run_areabypaths) ) )
         runlevel_med_areabypath.append( np.median(run_areabypaths) ) #sorted(run_areabypaths)[len(run_areabypaths)/2] )
         runlevel_tail_areabypath.append( np.percentile(run_areabypaths, 80,interpolation='nearest') ) #sorted(run_areabypaths)[(8*len(run_areabypaths))/10] )
         runlevel_mean_areabypath.append( np.mean(run_areabypaths) ) #sum(run_areabypaths)/len(run_areabypaths) )
