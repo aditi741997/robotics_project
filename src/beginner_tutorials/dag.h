@@ -53,7 +53,8 @@ public:
 	// constraints on period of this node.
 	// if fixed_period > 0, use that in RT formula.
 	double fixed_period = 0.0;
-	double max_period = 0.0; 
+	double max_period = 0.0; // Upper bounding node's rate
+	double min_period = 0.0; // Lower bounding node's rate
 };
 
 class Monomial

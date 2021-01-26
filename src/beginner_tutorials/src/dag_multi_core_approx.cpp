@@ -154,6 +154,23 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 		Variable::t zij = mosek_model->variable("zij", (num_cores*num_subchains), Domain::greaterThan(0.0));
 		Variable::t wijl = mosek_model->variable("Wijl", (num_cores*num_subchains*num_subchains), Domain::binary() );
 
+		// Put min_period constraint from nodes:
+		for (int i = 0; i < num_subchains; i++)
+		{
+			for (int j = 0; j < list_subchains[i].size(); j++)
+			{
+				double min_per = node_dag->id_node_map[ list_subchains[i][j] ].min_period;
+				if (min_per > 0 )
+				{
+					std::vector<double> pi_cm (num_subchains, 0.0);
+					pi_cm[i] = 1.0;
+					auto pi_cm1 = new_array_ptr<double> (pi_cm);
+					printf("ADDING Constraint for period of subchain %i, with min period %f of node %i \n", i, min_per, list_subchains[i][j] );
+					mosek_model->constraint("pi_minper_"+std::to_string(j), Expr::dot(pi, pi_cm1), Domain::greaterThan(min_per) );
+				}
+			}
+		}
+
 		std::vector<double> subchain_sum_cis (num_subchains, 0.0);
 		for (int i = 0; i < num_subchains; i++)
 		{

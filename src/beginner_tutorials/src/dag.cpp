@@ -233,15 +233,16 @@ DAG::DAG(std::string fname)
 				//its a node!!
 				DAGNode n;
 				std::string name;
-				float ci, fixed_per;
-				ss >> name >> ci >> fixed_per;
+				float ci, fixed_per, min_per;
+				ss >> name >> ci >> fixed_per >> min_per;
 
 				n.name = name;
 				n.id = node_count;
 				n.compute = ci;
 				n.fixed_period = fixed_per;
+				n.min_period = min_per;
 
-				std::cout << "Adding node, name : " << name << ", id : " << n.id << ", ci :" << ci << ", fixed_period: " << fixed_per << std::endl;
+				std::cout << "Adding node, name : " << name << ", id : " << n.id << ", ci :" << ci << ", fixed_period: " << fixed_per << ", min per: " << min_per << std::endl;
 
 				id_name_map[node_count] = name;
 				id_node_map[node_count] = n;

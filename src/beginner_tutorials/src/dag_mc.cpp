@@ -162,12 +162,21 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	std::cout << "IN DAGMultiCore: ##### STARTING Step5 : computing RT for each chain" << std::endl;
 	struct timespec solve_start, solve_end;
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_start);
-	
-	// RT for each chain:
+
+	std::vector<std::vector<int> > exec_order = get_exec_order();
 	int frac_var_ct = global_var_count;
+	// Period of each subchain:
+	for (int i = 0; i < exec_order.size(); i++)
+	{
+		printf("For subchain id %i, period varid: %i", i, global_var_count);
+		global_var_count += 1;
+		global_var_desc.push_back( std::make_tuple("period_subchain", i, "", 0) );
+	}
+
+	int frac_sc_var_ct = global_var_count;	
+	// Approx period for each chain:
 	for (int j = 0; j < all_chains.size(); j++)
 	{
-		// compute_rt_chain_wc_mc(j); // mc: multi core, wc: worst case
 		printf("For chain id %i, approx_period varid %i \n", j, global_var_count);
 		global_var_count += 1;
 		global_var_desc.push_back(std::make_tuple("approx_period_chain",j,"",0));
@@ -192,7 +201,6 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		std::cout << "ADDED vi < 0 constraint for var " << i << std::endl;
 	}
 	
-	std::vector<std::vector<int> > exec_order = get_exec_order();
 	
 	// ci*fi > 1 for all. ci: sum of ith subchain compute.
 	// To minimize overhead and keep sleep time error < 10%.
@@ -226,16 +234,24 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		{
 			DAGNode& jnode = id_node_map[ ith_chain[j] ];
 			double fixed_per = get_fixed_period_node(jnode.id); 
-			
 			printf("Traversing chain %i, %ith node id: %i, fixed_period: %f, fixed_per: %f \n", i, j, jnode.id, jnode.fixed_period, fixed_per);
 			
+			// period of SC containing jnode >= fixed_per / period_map_node AND >= min_period.
+			if (jnode.min_period > 0)
+			{
+				std::vector<double> a (total_vars, 0.0);
+				a[frac_var_ct + node_id_sc_id[jnode.id] ] = -1.0;
+				printf("ADDED constraint on per of SC id %i, >= min_per: %f ", node_id_sc_id[jnode.id], jnode.min_period);
+				print_dvec(a, "");
+				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(1.0/jnode.min_period) ) );
+			}
 			if ( fixed_per > 0 )
 			{
 				// ch_i_period >= this fixed period
 				// 1/ch_i_period <= 1/fixed_period
 				
 				std::vector<double> a (total_vars, 0.0);
-				a[frac_var_ct + i] = -1.0;
+				a[frac_var_ct + node_id_sc_id[jnode.id] ] = -1.0;
 				// log (approx_per) >= log(fixed_per)
 				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(1.0/fixed_per) ) ); 
 			}
@@ -249,13 +265,13 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 				std::vector<std::vector<double>> ap (a_p_c.first.begin(), a_p_c.first.end());
 				std::vector<double> ac (a_p_c.second.begin(), a_p_c.second.end() );
 
-				printf("ABOUT to put constraint on approx_period of chain %i, var id %i using period of subchain %i, its on core %i, #monos in this core's period: %lu %lu \n", i, frac_var_ct + i, node_id_sc_id[jnode.id], sc_core_assgt[node_id_sc_id[jnode.id]][0], ap.size(), ac.size() );
+				printf("ABOUT to put constraint on period of subchain %i, var id %i using period sum_mono, its on core %i, #monos in this core's period: %lu %lu \n", node_id_sc_id[jnode.id], frac_var_ct+node_id_sc_id[jnode.id] , sc_core_assgt[node_id_sc_id[jnode.id]][0], ap.size(), ac.size() );
 
 				// Divide all terms by sc_frac and by ch_i_period. <= 1.
 				for (int api = 0; api < ap.size(); api++)
 				{
-					ap[api][ frac_var_ct + i ] -= 1.0;
-					print_dvec(ap[api], "In period_posynomial for sc"+std::to_string(i)+std::to_string(api)+"ith term, const: " + std::to_string(ac[api]) );
+					ap[api][ frac_var_ct + node_id_sc_id[jnode.id] ] -= 1.0;
+					print_dvec(ap[api], "In period_posynomial for sc"+std::to_string(node_id_sc_id[jnode.id])+std::to_string(api)+"ith term, const: " + std::to_string(ac[api]) );
 				}
 
 				logsumexp(mosek_model,
@@ -263,6 +279,13 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 						all_l_vars,
 						new_array_ptr<double>( ac ));
 			}
+
+			// NOW, approx_period of chain i >= period of subchain node_id_sc_id[jnode.id].
+			std::vector<double> a (total_vars, 0.0);
+			a[frac_var_ct + node_id_sc_id[jnode.id] ] = 1.0;
+			a[ frac_sc_var_ct + i ] = -1.0;
+			print_dvec(a, "Putting constraint Period of chain " + std::to_string(i)+" to be less than period of SC"+std::to_string(node_id_sc_id[jnode.id]));
+			mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan(0.0) );
 		}
 	}
 
@@ -291,10 +314,17 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		}
 		else
 		{
-			std::pair< std::vector<std::vector<double> >, std::vector<double> > n0_period = get_period_node(ith_chain[0]);
+			/*std::pair< std::vector<std::vector<double> >, std::vector<double> > n0_period = get_period_node(ith_chain[0]);
 			ith_ap.insert(ith_ap.end(), n0_period.first.begin(), n0_period.first.end());
-			ith_ac.insert(ith_ac.end(), n0_period.second.begin(), n0_period.second.end());
+			ith_ac.insert(ith_ac.end(), n0_period.second.begin(), n0_period.second.end());*/
+			// Using period of the corresponding subchain, in the new formulation [Jan26]
+			std::vector<double> a (total_vars, 0.0);
+			a[frac_var_ct +  node_id_sc_id[ ith_chain[0] ] ] = 1.0;
+			ith_ap.push_back(a);
+			ith_ac.push_back(0.0);
+			print_dvec(a, "ADDING period of SC"+std::to_string(node_id_sc_id[ ith_chain[0] ])+" for RT of chain"+std::to_string(i) );
 		}
+
 		
 		// Iterate over nodes in chain
 		for (int j = 0; j < (ith_chain.size()-1); j++)
@@ -302,7 +332,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			DAGNode& nj = id_node_map[ith_chain[j]];
 			DAGNode& nj1 = id_node_map[ith_chain[j+1]];
 
-			// TODO: Differentiate bw cases where Add subchain's sum ci vs node's ci
+			// TODO: Differentiate bw cases where Add subchain's sum ci vs node's ci [for illixr]
 
 			bool add_ci = false;
 			double p_mult_factor = -1.0; // -1: dont add period, o.w. multiply period by this.
@@ -384,7 +414,14 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			if (p_mult_factor > 0.0)
 			{
 				std::cout << "ADDING Period with factor=" << p_mult_factor << std::endl;
+				// Directly using node's SC's period variable in Jan26 formulation.
+				std::vector<double> a (total_vars, 0.0);
+				a[frac_var_ct + node_id_sc_id[nj1.id] ] = 1.0;
+				print_dvec(a, "Adding period of subchain "+std::to_string(node_id_sc_id[nj1.id]) );
+				ith_ap.push_back(a);
+				ith_ac.push_back( log(p_mult_factor) );
 
+				/*
 				if (nj1_fixed_per > 0)
 				{
 					ith_ap.push_back( std::vector<double>(total_vars, 0.0) );
@@ -400,7 +437,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 
 					ith_ap.insert(ith_ap.end(), nj1_period.first.begin(), nj1_period.first.end() );
 					ith_ac.insert(ith_ac.end(), nj1_period.second.begin(), nj1_period.second.end() );
-				}
+				} */
 			}
 
 			
@@ -408,7 +445,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 
 		// Add approx tput of this chain.
 		std::vector<double> app_per_ap = std::vector<double>(total_vars, 0.0);
-		app_per_ap[frac_var_ct+i] = 1.0;
+		app_per_ap[frac_sc_var_ct+i] = 1.0;
 		print_dvec(app_per_ap, "ADDING approx period for chain");
 
 		ith_ap.push_back(app_per_ap);
