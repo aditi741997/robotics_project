@@ -36,7 +36,7 @@ for r in runs:
 						maxVel = float( l.split(' ')[-3][:-1] )
 					else:
 						maxVel = float( l.split(' ')[-1][:5] )
-					if (maxVel != 0.3):
+					if (maxVel != 0.25):
 						print("Ename: %s, run: %i, has WRONG maxVel: %f"% (ename, r, maxVel) )
 						bad_runs.add(r)
 				except:
@@ -68,14 +68,25 @@ for r in runs:
 
 # check nan transform
 for r in runs:
-	with open("nav2d_robot_logs_" + ename + "_run" + str(r) + ".err", 'r') as f:
+        start_rt = 0.0
+        start_st = 0.0
+        end_rt = 0.0
+        end_st = 0.0
+        with open("nav2d_robot_logs_" + ename + "_run" + str(r) + ".err", 'r') as f:
 		nane = False
 		for l in f.readlines():
 			if "nan" in l:
 				nane = True
-		if (nane):
+		        if "StartExpl" in l:
+                                start_rt = float( l.split(' ')[1][1:-1] )
+                                start_st = float( l.split(' ')[2][:-2] )
+                        if ("Exploration failed" in l) or ("Exploration has fail" in l) or ("Exploration has fin" in l):
+                                end_rt = float( l.split(' ')[1][1:-1] )
+                                end_st = float( l.split(' ')[2][:-2] )
+                if (nane):
 			print("Ename: %s, run: %i, HAS nan transforms!"% (ename, r) )	
 			bad_runs.add(r)
+        print("ST:RT ratio for ename %s, run %i is %f"%(ename, r, (end_st-start_st)/(end_rt-start_rt) ) )
 
 # get #tf errors.
 for r in runs:
