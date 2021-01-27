@@ -153,6 +153,7 @@ private:
 	boost::mutex sched_thread_mutex;
 	std::atomic<bool> cc_end, ready_sched;
 	boost::condition_variable cv_sched_thread; // this is just for the core with CC in it.
+	void thread_custom_sleep_for(int microsec); // to be used if need quick exit at shutdown.
 
 	// For multi-core scheduling:
 	std::vector< std::vector<int> > curr_sc_core_assgt;

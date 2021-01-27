@@ -204,6 +204,24 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		startup_thread = new boost::thread(&DAGControllerBE::startup_trigger_func, this);
 	}
 
+	void DAGControllerBE::thread_custom_sleep_for(int microsec)
+	{
+		// sleep for upto 5ms each time to allow quick exit at shutdown.
+		if ( (num_cores > 1) && (dynamic_reoptimize) )
+		{
+			int slept_for = 0;
+			while ( (slept_for < microsec) && (!shutdown_scheduler) )
+			{
+				int sleep_for = std::min(5000, (microsec-slept_for) );
+				std::this_thread::sleep_for( std::chrono::microseconds(sleep_for) );
+				slept_for += sleep_for;
+			}
+		}
+		else
+			std::this_thread::sleep_for( std::chrono::microseconds(microsec) );
+		
+	}
+
 	DAGControllerBE::~DAGControllerBE()
 	{
 		shutdown_scheduler = true;
@@ -368,7 +386,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		cc_completion_log << trig_cc << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
 				}
 				else
-					std::this_thread::sleep_for( std::chrono::microseconds( i_to ) );
+				{
+					// std::this_thread::sleep_for( std::chrono::microseconds( i_to ) );
+					thread_custom_sleep_for(i_to);
+				}
 			
 			}
 
@@ -376,7 +397,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			per_core_period_counts[core_ids[0]] += 1;
 			// inc prio of our dynamic_resolve thread for sometime.	
 			int one_in_k_per = ceil(2000/(float)(40* per_core_period_map[ core_ids[0] ] ));
-			if (total_period_count%( one_in_k_per ) == 0 && (dynamic_reoptimize))
+			if (total_period_count%( one_in_k_per ) == 0 && (dynamic_reoptimize) && (!shutdown_scheduler) )
 			{
 				printf("WANNA run dyn_reopt-2ms now!! 1in?Per: %i \n", one_in_k_per);
 				changePriority(core_exec_order, -1, core_ids[0]);
@@ -387,7 +408,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			}
 			else
 				// Just some slack time in each period. 5% of this core's period.
-				std::this_thread::sleep_for( std::chrono::microseconds( (int) round(1000*0.05*per_core_period_map[ core_ids[0] ]) ) );
+				thread_custom_sleep_for( (int) round(1000*0.05*per_core_period_map[ core_ids[0] ]) );
+				// std::this_thread::sleep_for( std::chrono::microseconds( (int) round(1000*0.05*per_core_period_map[ core_ids[0] ]) ) );
 		}
 		printf("Monotime %f, realtime %f,  shutdown_scheduler is %i, handle_Sched_main is EXITING!!! core id0: %i \n", get_monotime_now(), get_realtime_now(), shutdown_scheduler.load(), core_ids[0]);
 	}
@@ -610,7 +632,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 			if (need_to_update)
 			{
+				set_high_priority("dyn_reopt - NEW SCHED THR", 4, ::gettid() );
+				
 				printf("Monotime %f, Realtime %f :  NEED TO UPDATE was true!!! Starting to join old threads!!", get_monotime_now(), get_realtime_now());
+			// overloading shutdown variable to delete old threads and make new ones.
 				shutdown_scheduler = true;
 				for (auto & x : per_core_sched_threads)
 					x.second.join();
@@ -629,6 +654,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 							per_core_sched_threads[is_c] = boost::thread(&DAGControllerBE::handle_sched_main, this, node_dag_mc.sc_core_assgt[is] );
 						}
 				curr_sc_core_assgt = node_dag_mc.sc_core_assgt;
+				
+				set_other_policy_pthr(reoptimize_thread_p); // same as reoptimize_thread_.
 			}
 		}
 	}
