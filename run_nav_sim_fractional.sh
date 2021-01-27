@@ -15,19 +15,17 @@ do
 			do
 				for ccF in 30.23 #54.0 #23.25 #20.0 #10.0 5.0 2.5 1.0 
 				do
-					#check machine id, run this only if ct%mccount == mcid
-					#div=$((ct%mccount))
-					#echo "CHECKING division, ct: ", $ct, " mcid: ", $mcid, " ct%mccount: ", $div 
 					div=0
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in 4 # 3 4 5 ##4 #8 9 10 
+						for run in 90 #66 67 68 69 #44 45 43 44 #19 20 21 22 23 24 25 26 27 28 29 30 #8 9 10 11 12 13 14 15 16 17 18 #1 2 3 4 5 6 7 #50 #45 46 47 48 49 # # 31 # 1  
 						do
+							rosclean purge -y
 							rm ../robot_nav2d_obstacleDist_logs_.txt
-							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage.launch &
-							sleep 7s
-							ename="DFracNewMap_1c_run$run"
+							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage_largemap.launch &
+							sleep 27s
+							ename="DFrac_1c_run$run"
 							
 							echo "DELETING OLD LOGFILES For this expt:"
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
@@ -44,21 +42,23 @@ do
 							rosparam set /use_td $td	
 							sleep 4s
 
-							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
-							sleep 2s
-							taskset -a -c 6 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d" $td "no" 3 24 1 24 1 1 1 1 &
+							opeMapFname="nav2d_robot_logs_OpeMap_${ename}.err"
+							robofname="nav2d_robot_logs_${ename}.err"
+							dagcontEname="dag_contBE_${ename}.err"
+							dagcontOname="dag_contBE_${ename}.out"
+							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "dummy_nav2d" $td "no" 1 1 1 1 1 1 1 1 > $dagcontOname 2> $dagcontEname &
+							sleep 4s
+							taskset -a -c 1 chrt -f 1 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
 							
 							# Start evt with prio=1, in any core.
 							sleep 2s
-							opeMapFname="nav2d_robot_logs_OpeMap_${ename}.err"
-							robofname="nav2d_robot_logs_${ename}.err"
-							taskset -a -c 0 chrt -f 3 roslaunch nav2d_tutorials tutorial4_robot.launch 2> $opeMapFname &
-							sleep 4s
+							taskset -a -c 0 chrt -f 1 roslaunch nav2d_tutorials tutorial4_robot.launch 2> $opeMapFname &
+							sleep 3s
 							taskset -a -c 0 chrt -f 1 roslaunch nav2d_tutorials tutorial4_robot2.launch 2> $robofname &
 							sleep 12s
 							rosservice call /robot_0/StartMapping
 							
-							#taskset -a -c 6-7 python src/rbx/src/move_dynamic_obstacles_nav2d.py 200 0.15 0.9 > "nav2d_moveObst_logs_${ename}.txt" &
+							taskset -a -c 6-7 python src/rbx/src/move_dynamic_obstacles_nav2d.py 200 0.15 0.9 > "nav2d_moveObst_logs_${ename}.txt" &
 							# Before startingExpl, Look for MAPPING Failed / Successful.
 							failct="0"
 							success="0"
@@ -85,7 +85,7 @@ do
 								echo $iter, $failct, $success
 							done
 
-							sleep 20s
+							sleep 10s
 							echo "StartMapping done, ABOUT TO CALL StartExploration!"
 							rosservice call /robot_0/StartExploration
 							sleep 2s
@@ -96,6 +96,7 @@ do
 							t=0
 							while [ $j -lt 2 ]
 							do
+								sleep 5s
 								j=`grep "Exploration has finished." $robofname | wc -l`
 								if [ $j -lt 2 ]; then
 									j=`grep "Exploration has failed." $robofname | wc -l`
@@ -107,9 +108,16 @@ do
 									echo "j is still<2, Checked for Exploration failed. j: ", $j
 								fi
 								t=$((t+1))
-								sleep 5s
+								# NOTHING should die during the expt!!
+								xnav=`grep "process has died" $robofname | wc -l`
+								xmap=`grep "process has died" $opeMapFname | wc -l`
+								xdag=`grep "process has died" $dagcontEname | wc -l`
+								if [ $xnav -gt 0 ] || [ $xmap -gt 0 ] || [ $xdag -gt 0 ];then
+									j=2
+									echo "Something DIED in SOME node!!", $xnav, $xmap, $xdag
+								fi
 								echo "j&t: ", $j, $t
-								timelimit=120 # divide timelimit=800s by sleeptime=5s.
+								timelimit=160 # divide timelimit=800s by sleeptime=5s.
 								if [ $t = $timelimit ]; then
 									j=2
 									echo "!!!!!~~~%%% EXPLORATION DIDNT FINISH EVEN IN ", $timelimit, "For: ", $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
@@ -126,8 +134,7 @@ do
 							    kill -15 $(ps -ef | grep $pname | grep -v grep | awk '{print $2}') #| xargs kill -15
 							done
 							kill -9 $(ps -ef | grep "move_dynamic_obstacles_nav2d" | grep -v grep | awk '{print $2}')
-							sleep 10s
-							#rosclean purge -y
+							sleep 7s
 						done					
 					fi
 					# increment global counter in the end : Remains same for runs' loop.
