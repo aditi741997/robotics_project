@@ -218,6 +218,7 @@ def get_robot_edges(px,py,oz,ow):
 	return [ Segment2D(verts[0], verts[1]), Segment2D(verts[1], verts[2]), Segment2D(verts[2], verts[3]), Segment2D(verts[3], verts[0]) ]
 
 def get_obstacle_no_stage(x,y):
+        '''
         if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
 		return 1 # robot1 is line_no+1
 	elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
@@ -234,10 +235,8 @@ def get_obstacle_no_stage(x,y):
 		return 7
 	elif (x >= 0) and (x <= 4.5) and (y >= -13) and (y <= -8):
 		return 8
-        else:
-		return -1
-        '''
 	This is for normal map
+        '''
         if (x >= -27) and (x <= -18) and (y >= -11) and (y <= -5):
                 return 1
         elif (x >= 5.5) and (x <= 11.5) and (y >= -14) and (y <= -5):
@@ -252,7 +251,8 @@ def get_obstacle_no_stage(x,y):
                 return 6
         elif (x >= -18) and (x <= -10) and (y >= -3) and (y <= 3):
                 return 7
-        '''
+        else:
+		return -1
 
 def get_dist(x1,y1,x2,y2):
 	return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
@@ -300,7 +300,7 @@ letter = 'N'
 opt_total_Area = 339142.0
 
 # LMap: 818045, 817667, 818141, 817838
-#opt_total_Area = 818045.0
+opt_total_Area = 818045.0
 
 runlevel_agg_lowlevelmetrics = [] # list of lists. 
 runlevel_agg_lowlevelmetrics_dict = {} # metric name -> value. [median in runs, then ?]
@@ -356,13 +356,19 @@ runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 exptn = "OfflineMCB_H"
 #expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #expts.append(exptn + "7_5c")
-expts = ["DF_V2_1c"] #"DFracV11_1c", "DFracV2_1c", "FracV11_1c"]
+expts = ["DFrac_1c"] #"DFracV11_1c", "DFracV2_1c", "FracV11_1c"]
 runs = [31,32,33,34,35,36,37,38,39,41] #14,15,16,17,18]
 
-runs = range(21,71)
+runs = range(41,89)
+runs.remove(49)
+runs.remove(44)
+runs.remove(45)
+runs.remove(48)
+runs.remove(51)
+runs.remove(55)
+print(runs)
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
-#for i in ["Offline1_5c", "Offline3320_5c"]: # "Default"
 run_rts_percentile = 75 #50
 for i in expts:
         run_totalareas = []
@@ -401,6 +407,7 @@ for i in expts:
 		collision[exp_id] = {}
 		# get start, end times
 		start_i = 0.0
+                start_rt_i = 0.0
 		end_i = 0.0
 		#run = 2 if (i > 1) else 1
 		#run = 2
@@ -409,14 +416,16 @@ for i in expts:
 			for fl in f.readlines():
 				if "received StartExploration service action" in fl:
 					start_i = float( fl.split(' ')[11][:-1] )
-				if ( ("Exploration has failed" in fl) or ("Exploration has finished" in fl) ) and "Time of finish" in fl:
+				        start_rt_i = float( fl.split(' ')[1][1:-1] )
+                                if ( ("Exploration has failed" in fl) or ("Exploration has finished" in fl) ) and "Time of finish" in fl:
 					end_i = float( fl.split(' ')[-2] )
 		                if ("Exploration has finished" in fl):
                                     run_expl_finished = True
                                 if ("No way between robot and goal!" in fl):
                                     run_path_plan_fail = True
                 		if ("Exploration failed." in fl):
-				    	end_i = float( fl.split(' ')[-2] )
+                                        end_rt_i = float( fl.split(' ')[1][1:-1] )
+				    	end_i = start_i + (end_rt_i - start_rt_i)
 		end_i += 0.1 # expl should fail after the collision for the collision to count.
 		# JUST to plot area covered in 1st 60sec: 
 		# end_i = start_i + slot + 1.0
