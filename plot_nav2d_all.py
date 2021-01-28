@@ -251,6 +251,8 @@ def get_obstacle_no_stage(x,y):
                 return 6
         elif (x >= -18) and (x <= -10) and (y >= -3) and (y <= 3):
                 return 7
+        elif (x >= -18.5) and  (x <= -9) and (y >= 5.0) and (y <= 10.0):
+                return 8
         else:
 		return -1
 
@@ -356,17 +358,11 @@ runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 exptn = "OfflineMCB_H"
 #expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #expts.append(exptn + "7_5c")
-expts = ["DFrac_1c"] #"DFracV11_1c", "DFracV2_1c", "FracV11_1c"]
+expts = ["DFrac1S_1c"] #"DFracV11_1c", "DFracV2_1c", "FracV11_1c"]
 runs = [31,32,33,34,35,36,37,38,39,41] #14,15,16,17,18]
 
-runs = range(41,89)
-runs.remove(49)
-runs.remove(44)
-runs.remove(45)
-runs.remove(48)
-runs.remove(51)
-runs.remove(55)
-print(runs)
+runs = range(36,78)
+print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 run_rts_percentile = 75 #50
@@ -390,6 +386,7 @@ for i in expts:
 
         time_80area = [] # for each run, time to cover 80% of area. [in terms of known_area]
         time_60area = [] # for each run, time to cover 60% of area. [in terms of known_area]
+        time_areas = { 20: [], 30: [], 40: [], 50: [], 60: [], 70: [], 80: [], 90: []} 
 
         run_pathlens = [] # Distance travelled by robot
         run_areabypaths = [] # ratio of area covered to path length.
@@ -762,6 +759,10 @@ for i in expts:
                                             time_60area.append( float(l.split(' ')[4]) - start_i )
 		                        if ( (known >= 0.9*opt_total_Area) and (last_known_area < 0.9*opt_total_Area) ):
                                             fullExplTimes.append( float(l.split(' ')[4]) - start_i )
+                                        for k in time_areas.keys():
+                                            ratio = float(k)/100.0
+                                            if ( ( known >= ratio*opt_total_Area) and (last_known_area < ratio*opt_total_Area) ):
+                                                time_areas[k].append( float(l.split(' ')[4]) - start_i )
                                         last_known_area = known
                 runlevel_total_area_expl[exp_id] = last_known_area
 		run_totalareas.append(last_known_area)
@@ -851,6 +852,7 @@ for i in expts:
         # Time to cover 80/60% of totalArea.
         print("FOR expt %s, Time taken to cover 80p area arr: %s"%(i, str(time_80area)) )
         print("FOR expt %s, Time taken to cover 60p area arr: %s"%(i, str(time_60area)) )
+        print("FOR expt %s, Time taken to cover Area arr: %s"%( i, str(time_areas) ))
         runlevel_med_time80area.append( np.median(time_80area) ) #sorted(time_80area)[ len(time_80area)/2 ] )
         runlevel_tail_time80area.append( np.percentile(time_80area, 80, interpolation='nearest') ) #[ (8*len(time_80area))/10 ] )
         runlevel_mean_time80area.append( np.mean(time_80area) ) #sum(time_80area)/len(time_80area) )
