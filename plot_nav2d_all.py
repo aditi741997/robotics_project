@@ -450,7 +450,18 @@ for i in expts:
                                                     tput_arr += [ float(x) for x in fl.split(" ")[2:-1] ]		
                                             elif "ts:" in fl:
                                                     ts_arr += [ float(x) for x in fl.split(" ")[2:-1] ]
-                            tput_agg_i = aggregate_over_time(tput_arr, ts_arr[1:], start_i, slot, end_i) 
+                            
+			    if fname not in run_tputs:
+                                    run_tputs[fname] = []
+                                    irun_75p_tput[fname] = []
+                                    irun_mean_tput[fname] = []
+
+                            if (len(ts_arr) < 1):
+                                run_tputs[fname].append( np.median(tput_arr) ) #sorted(tput_arr)[ len(tput_arr)/2 ] )
+                                irun_75p_tput[fname].append( sorted(tput_arr)[ (75*len(tput_arr))/100 ] )
+                                irun_mean_tput[fname].append( np.mean(tput_arr) )
+
+			    tput_agg_i = aggregate_over_time(tput_arr, ts_arr[1:], start_i, slot, end_i) 
                             #if "mapU" in fname:
                                 #print(tput_agg_i, tput_arr, ts_arr, ":::: HERE'S the tput_agg_i")
                             meantput_agg_i = {}
@@ -476,10 +487,6 @@ for i in expts:
                                 tput_agg[fname] = []
                             tput_agg[fname].append(meantput_agg_i)
                             runlevel_meantputs[exp_id].append( np.mean(new_tput_arr) ) #sum(tput_arr)/len(tput_arr) ) #Saving tput means
-                            if fname not in run_tputs:
-                                    run_tputs[fname] = []
-                                    irun_75p_tput[fname] = []
-                                    irun_mean_tput[fname] = []
                             #run_tputs[fname].append( sum(tput_arr)/len(tput_arr) ) : Mean over each run.
                             run_tputs[fname].append( np.median(new_tput_arr) ) #sorted(tput_arr)[ len(tput_arr)/2 ] )
                             irun_75p_tput[fname].append( sorted(new_tput_arr)[ (75*len(new_tput_arr))/100 ] )
