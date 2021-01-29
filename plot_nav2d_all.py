@@ -218,6 +218,7 @@ def get_robot_edges(px,py,oz,ow):
 	return [ Segment2D(verts[0], verts[1]), Segment2D(verts[1], verts[2]), Segment2D(verts[2], verts[3]), Segment2D(verts[3], verts[0]) ]
 
 def get_obstacle_no_stage(x,y):
+        '''
         if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
 		return 1 # robot1 is line_no+1
 	elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
@@ -237,8 +238,7 @@ def get_obstacle_no_stage(x,y):
         else:
 		return -1
         '''
-	This is for normal map
-        if (x >= -27) and (x <= -18) and (y >= -11) and (y <= -5):
+        if (x >= -27) and (x <= -17) and (y >= -11) and (y <= -5):
                 return 1
         elif (x >= 5.5) and (x <= 11.5) and (y >= -14) and (y <= -5):
                 return 2
@@ -246,15 +246,16 @@ def get_obstacle_no_stage(x,y):
                 return 3
         elif (x >= 7) and (x <= 15) and (y >= 7) and (y <= 13):
                 return 4
-        elif (x >= 13) and (x <= 21) and (y >= -11) and (y <= -5):
+        elif (x >= 13) and (x <= 22) and (y >= -11) and (y <= -5):
                 return 5
         elif (x >= -28) and (x <= -19) and (y >= 9.5) and (y <= 15.5):
                 return 6
         elif (x >= -18) and (x <= -10) and (y >= -3) and (y <= 3):
                 return 7
-        elif (x >= -18.5) and  (x <= -9) and (y >= 5.0) and (y <= 10.0):
+        elif (x >= -18.5) and (x <= -9) and (y >= 5.0) and (y <= 10.0):
                 return 8
-        '''
+        else:
+		return -1
 
 def get_dist(x1,y1,x2,y2):
 	return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
@@ -302,7 +303,7 @@ letter = 'N'
 opt_total_Area = 339142.0
 
 # LMap: 818045, 817667, 818141, 817838
-#opt_total_Area = 818045.0
+opt_total_Area = 818045.0
 
 runlevel_agg_lowlevelmetrics = [] # list of lists. 
 runlevel_agg_lowlevelmetrics_dict = {} # metric name -> value. [median in runs, then ?]
@@ -358,7 +359,7 @@ runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 exptn = "OfflineMCB_H"
 #expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #expts.append(exptn + "7_5c")
-expts = ["Def_DFracV2_1c"] #"DFracV11_1c" ]
+expts = ["FO_DFracV2_1c"] #"DFracV11_1c" ]
 runs = [31,32,33,34,35,36,37,38,39,41] #14,15,16,17,18]
 
 runs = range(41, 89)
@@ -371,7 +372,7 @@ runs.remove(55)
 runs = runs[:25]
 
 runs = range(61,86)
-runs = range(1,26)
+runs = range(1,11)
 print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
