@@ -4,9 +4,9 @@ import sys
 
 # Nav : gzserver, move_base, amcl, robo state pub, rosout, mapsrv
 # ObjTrack : gzserver, subscribr, objdetector, objtracker, controller
-# Nav2D : stage, navigator, operator, mapper, rviz, joy
-cpu_util = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
-mem_util = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+# Nav2D : stage, navigator, operator, mapper, rviz, joy, controller
+cpu_util = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
+mem_util = [0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
 
 print(sys.argv)
 
@@ -23,18 +23,21 @@ print "File for exploration LOGS : ", sys.argv[5]
 
 count = 0
 def check_done():
-    with open(sys.argv[5], 'r') as f:
-        a = f.read()
-        # if a.count('REACHED') == int(sys.argv[6]) or count > int(sys.argv[7]):
-        # TODO: Check for Exploration has failed or 'NO way...'
-        if (a.count('Exploration has finished.') == 2) or (a.count('Exploration has failed.') == 2):
-            return True
-        elif (a.count('Is the robot out of the map') > 0):
-            return True
-        elif (a.count('Navigator is busy') > 0):
-            return True
-    return False
-
+    try:
+    	with open(sys.argv[5], 'r') as f:
+	    a = f.read()
+		# if a.count('REACHED') == int(sys.argv[6]) or count > int(sys.argv[7]):
+		# TODO: Check for Exploration has failed or 'NO way...'
+	    if (a.count('Exploration has finished.') == 2) or (a.count('Exploration has failed.') == 2):
+		return True
+	    elif (a.count('Is the robot out of the map') > 0):
+		return True
+	    elif (a.count('Navigator is busy') > 0):
+		return True
+	    return False
+    except:
+	return False
+	
 def get_cpu_mem_nav2d():
     for proc in psutil.process_iter():
         pname = proc.name()
@@ -51,6 +54,8 @@ def get_cpu_mem_nav2d():
             cpu_util[4] += proc.cpu_percent()
         if ('joy_node' in pname) or ('remote_joy' in pname):
             cpu_util[5] += proc.cpu_percent()
+        if 'controller' in pname:
+            cpu_util[6] += proc.cpu_percent()
 
 def get_cpu_mem():
     for proc in psutil.process_iter():
@@ -97,9 +102,17 @@ for i in range(int(n_o)):
 
 print "TAKEN ", n_o, " obsrvations, Now looping till epxloration is complete."
 
+ts_arr = []
 while not (check_done()):
     get_cpu_mem_nav2d()
     count += 1
+    # print once every 10s i.e. 25*0.4s.
+    if (count % 25 == 15):
+	cpu = [x/count for x in cpu_util]
+	mem = [x/count for x in mem_util]
+        cms = "###Count: " + str(count) + "Avg CPU: " + str(cpu) + ", Mem: " + str(mem)
+        print(cms)
+        ts_arr.append(cms)
     time.sleep(sleep_time)
 
 print "ADDED all observations", count, n_o
@@ -113,10 +126,14 @@ for i in range(len(cpu_util)):
     mem_txt += str(mem_util[i]) + ", "
 
 fname = "%s_cpu_mem.txt"% (sys.argv[4])
-f = open(fname, "a")
+f = open(fname, "w")
 
 for i in sys.argv:
     f.write(i + ", ")
+
+for j in ts_arr:
+    f.write(j)
+    f.write("\n")
 
 f.write(str(count) + ", ")
 f.write(cpu_txt)
