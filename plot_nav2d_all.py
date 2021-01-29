@@ -218,7 +218,6 @@ def get_robot_edges(px,py,oz,ow):
 	return [ Segment2D(verts[0], verts[1]), Segment2D(verts[1], verts[2]), Segment2D(verts[2], verts[3]), Segment2D(verts[3], verts[0]) ]
 
 def get_obstacle_no_stage(x,y):
-        '''
         if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
 		return 1 # robot1 is line_no+1
 	elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
@@ -235,8 +234,10 @@ def get_obstacle_no_stage(x,y):
 		return 7
 	elif (x >= 0) and (x <= 4.5) and (y >= -13) and (y <= -8):
 		return 8
-	This is for normal map
+        else:
+		return -1
         '''
+	This is for normal map
         if (x >= -27) and (x <= -18) and (y >= -11) and (y <= -5):
                 return 1
         elif (x >= 5.5) and (x <= 11.5) and (y >= -14) and (y <= -5):
@@ -253,8 +254,7 @@ def get_obstacle_no_stage(x,y):
                 return 7
         elif (x >= -18.5) and  (x <= -9) and (y >= 5.0) and (y <= 10.0):
                 return 8
-        else:
-		return -1
+        '''
 
 def get_dist(x1,y1,x2,y2):
 	return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
@@ -302,7 +302,7 @@ letter = 'N'
 opt_total_Area = 339142.0
 
 # LMap: 818045, 817667, 818141, 817838
-opt_total_Area = 818045.0
+#opt_total_Area = 818045.0
 
 runlevel_agg_lowlevelmetrics = [] # list of lists. 
 runlevel_agg_lowlevelmetrics_dict = {} # metric name -> value. [median in runs, then ?]
@@ -358,10 +358,20 @@ runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 exptn = "OfflineMCB_H"
 #expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #expts.append(exptn + "7_5c")
-expts = ["DFrac1S_1c"] #"DFracV11_1c", "DFracV2_1c", "FracV11_1c"]
+expts = ["Def_DFracV2_1c"] #"DFracV11_1c" ]
 runs = [31,32,33,34,35,36,37,38,39,41] #14,15,16,17,18]
 
-runs = range(36,78)
+runs = range(41, 89)
+runs.remove(44)
+runs.remove(45)
+runs.remove(48)
+runs.remove(49)
+runs.remove(51)
+runs.remove(55)
+runs = runs[:25]
+
+runs = range(61,86)
+runs = range(1,26)
 print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
@@ -745,6 +755,7 @@ for i in expts:
 		new_area_covered = []
 		new_area_covered_ts = []
 		last_known_area = 0.0
+		added_to_area_times = {}
 		with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
 			for l in f.readlines():
 				if 'ratio of unknown/total area' in l:
@@ -763,7 +774,13 @@ for i in expts:
                                             ratio = float(k)/100.0
                                             if ( ( known >= ratio*opt_total_Area) and (last_known_area < ratio*opt_total_Area) ):
                                                 time_areas[k].append( float(l.split(' ')[4]) - start_i )
-                                        last_known_area = known
+                                        	added_to_area_times[ratio] = True
+						if ratio > 0.6:
+							print("Adding line %s to ratio %f"%(l, ratio) )
+					last_known_area = known
+		for rx in added_to_area_times.keys():
+			if (last_known_area < (rx*opt_total_Area)):
+				print("WEIRDDD!!! Final area %f < %f * opt!!!"%(last_known_area, rx) )
                 runlevel_total_area_expl[exp_id] = last_known_area
 		run_totalareas.append(last_known_area)
 		new_area_cov_Agg = aggregate_over_time(new_area_covered, new_area_covered_ts, start_i, slot, end_i)
