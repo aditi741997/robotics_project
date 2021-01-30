@@ -189,7 +189,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		// Initialize arrays for ci of all nodes:
 		for (auto const& x : node_dag.id_name_map)
 		{
-			node_ci_arr[x.second] = boost::circular_buffer<double> (50);
+			// node_ci_arr[x.second] = boost::circular_buffer<double> (50); using vector now
 			// node_extra_tids[x.second] = std::vector<int> ();
 			last_trig_ts[x.second] = 0.0;
 		}
@@ -689,6 +689,25 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		per_core_period_map = new_per_core_period_map;	
 	}
 
+	// iterate over all collected ci and remove those older than 10s
+	void DAGControllerBE::purge_old_ci(std::string nname)
+	{
+		auto it_ts = node_ci_ts_arr[nname].begin();
+		auto it = node_ci_arr[nname].begin();
+		double now = get_monotime_now();
+		int del_items = 0;
+		double latest_del_ts = 0.0;
+		while ( (it_ts != node_ci_ts_arr[nname].end()) && ( *it_ts < (now - 10.0) ) )
+		{
+			node_ci_arr[nname].pop_front();
+			latest_del_ts = *it_ts;
+			it_ts = node_ci_ts_arr[nname].erase(it_ts);
+			del_items++;
+		}
+		if (del_items > 3)
+			printf("Deleted %i items [latest TS del: %f] from ci arr of %s \n", del_items, latest_del_ts, nname.c_str() );
+	}
+
 	void DAGControllerBE::dynamic_reoptimize_func()
 	{
 		std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " STARTING Dynamic Reoptimize thread!" << std::endl;
@@ -717,8 +736,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			try
 			{
 			// update compute times to be 75ile of recent data.
-			node_dag_mc.update_cis(node_ci_arr);
-			printf("DONE Updating all cis! Will start solving now: ");
+				node_dag_mc.update_cis(node_ci_arr);
+				printf("DONE Updating all cis! Will start solving now: ");
 				
 				// Done: Re-solve for core assgt every 10s or 20s.
 				if ( (get_monotime_now() - last_mc_reopt_ts) > 20.0)
@@ -774,6 +793,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		// Done: Add some extra time based on #Extra threads.
 		double e_ci = 0.001*0.5*(node_extra_tids[node_name].size()); // in seconds.
 		node_ci_arr[node_name].push_back(ci + e_ci );
+		node_ci_ts_arr[node_name].push_back( get_monotime_now() );
+		purge_old_ci(node_name);
 	}
 
 	// Returns sum ci of subchain ind, for current ci vals.
