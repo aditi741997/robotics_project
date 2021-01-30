@@ -182,5 +182,6 @@ private:
 	pthread_t reoptimize_thread_p;	
 
 	double last_mc_reopt_ts = 0.0;
+	struct timespec controller_start_ts;
 };
 
