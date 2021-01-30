@@ -208,7 +208,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::thread_custom_sleep_for(int microsec)
         {
                // sleep for upto 5ms each time to allow quick exit at shutdown.
-                if ( (microsec > 100) || (total_period_count%100 == 7) )
+                if ( (microsec > 10000) || (total_period_count%100 == 7) )
 			printf("Mt: %f, RT: %f, custom_sleep_for was called!! with sleeptime: %i, #cores: %i, dyn_reopt: %i \n", get_monotime_now(), get_realtime_now(), microsec, num_cores, dynamic_reoptimize);
 		if ( (num_cores > 1) && (dynamic_reoptimize) )
                 {
@@ -320,9 +320,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::handle_sched_main(std::vector<int> core_ids)
 	{
+		changeAffinityThread("handle_Sched_main for core="+std::to_string(core_ids[0]), 0, core_ids );
 		set_high_priority("MAIN sched Thread", 4, 0);
 		for (auto &i : node_dag.name_id_map)
-			printf("#EXTRA THREADS for node %s : %lu", i.first.c_str(), node_extra_tids[i.first].size() );
+			printf("MT: %f #EXTRA THREADS for node %s : %lu | ", get_monotime_now(), i.first.c_str(), node_extra_tids[i.first].size() );
 		
 		per_core_period_counts[core_ids[0] ] = 1;
 		total_period_count = 1;
@@ -346,7 +347,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 			core_exec_order.push_back( a );
 		}
-		changeAffinityThread("handle_Sched_main for core="+std::to_string(core_ids[0]), 0, core_ids );
 		
 		printf("STARTING MAinSched thread!! tid: %li Len of exec_order: %zu, curr_cc_period: %f, #cores: %zu, core0: %i \n", ::gettid(), core_exec_order.size(), per_core_period_map[ core_ids[0] ], core_ids.size(), core_ids[0] );
 		
