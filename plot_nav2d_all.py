@@ -359,7 +359,7 @@ runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 exptn = "OfflineMCB_H"
 #expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
 #expts.append(exptn + "7_5c")
-expts = ["FO_DFracV2_1c"] #"DFracV11_1c" ]
+expts = ["FO_DFracV2_2c"] #"DFracV11_1c" ]
 runs = [31,32,33,34,35,36,37,38,39,41] #14,15,16,17,18]
 
 runs = range(41, 89)
@@ -372,7 +372,7 @@ runs.remove(55)
 runs = runs[:25]
 
 runs = range(61,86)
-runs = range(1,11)
+runs = range(1,21)
 print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
@@ -398,6 +398,7 @@ for i in expts:
         time_80area = [] # for each run, time to cover 80% of area. [in terms of known_area]
         time_60area = [] # for each run, time to cover 60% of area. [in terms of known_area]
         time_areas = { 20: [], 30: [], 40: [], 50: [], 60: [], 70: [], 80: [], 90: []} 
+	time_st_areas = { 20: [], 30: [], 40: [], 50: [], 60: [], 70: [], 80: [], 90: []}
 
         run_pathlens = [] # Distance travelled by robot
         run_areabypaths = [] # ratio of area covered to path length.
@@ -416,6 +417,7 @@ for i in expts:
 		# get start, end times
 		start_i = 0.0
                 start_rt_i = 0.0
+		start_st_i = 0.0
 		end_i = 0.0
 		#run = 2 if (i > 1) else 1
 		#run = 2
@@ -425,7 +427,8 @@ for i in expts:
 				if "received StartExploration service action" in fl:
 					start_i = float( fl.split(' ')[11][:-1] )
 				        start_rt_i = float( fl.split(' ')[1][1:-1] )
-                                if ( ("Exploration has failed" in fl) or ("Exploration has finished" in fl) ) and "Time of finish" in fl:
+                                	start_st_i = float( fl.split(' ')[2][:-2] )
+				if ( ("Exploration has failed" in fl) or ("Exploration has finished" in fl) ) and "Time of finish" in fl:
 					end_i = float( fl.split(' ')[-2] )
 		                if ("Exploration has finished" in fl):
                                     run_expl_finished = True
@@ -760,12 +763,15 @@ for i in expts:
 		with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
 			for l in f.readlines():
 				if 'ratio of unknown/total area' in l:
-					mpsz = int(l.split(' ')[-2])
-					unk = float(l.split(' ')[-3])
-					known = mpsz - unk
-					new_area_covered.append(known - last_known_area)
-					new_area_covered_ts.append( float(l.split(' ')[4] ) )
-                                        if ( (known >= 0.8*opt_total_Area) and (last_known_area < 0.8*opt_total_Area) ):
+					try:
+						mpsz = int(l.split(' ')[-2])
+						unk = float(l.split(' ')[-3])
+						known = mpsz - unk
+						new_area_covered.append(known - last_known_area)
+						new_area_covered_ts.append( float(l.split(' ')[4] ) )
+                                        except:
+						print("ERROR in line %s in getting area stuff!!"%(l) )
+					if ( (known >= 0.8*opt_total_Area) and (last_known_area < 0.8*opt_total_Area) ):
                                             time_80area.append( float(l.split(' ')[4]) - start_i )
                                         if ( (known >= 0.6*opt_total_Area) and (last_known_area < 0.6*opt_total_Area) ):
                                             time_60area.append( float(l.split(' ')[4]) - start_i )
@@ -775,7 +781,8 @@ for i in expts:
                                             ratio = float(k)/100.0
                                             if ( ( known >= ratio*opt_total_Area) and (last_known_area < ratio*opt_total_Area) ):
                                                 time_areas[k].append( float(l.split(' ')[4]) - start_i )
-                                        	added_to_area_times[ratio] = True
+						time_st_areas[k].append( float(l.split(' ')[2][:-2]) - start_st_i )
+						added_to_area_times[ratio] = True
 						if ratio > 0.6:
 							print("Adding line %s to ratio %f"%(l, ratio) )
 					last_known_area = known
@@ -871,7 +878,8 @@ for i in expts:
         print("FOR expt %s, Time taken to cover 80p area arr: %s"%(i, str(time_80area)) )
         print("FOR expt %s, Time taken to cover 60p area arr: %s"%(i, str(time_60area)) )
         print("FOR expt %s, Time taken to cover Area arr: %s"%( i, str(time_areas) ))
-        runlevel_med_time80area.append( np.median(time_80area) ) #sorted(time_80area)[ len(time_80area)/2 ] )
+        print("FOR expt %s, ST Time taken to cover Area arr: %s"%(i, str(time_st_areas) ) )
+	runlevel_med_time80area.append( np.median(time_80area) ) #sorted(time_80area)[ len(time_80area)/2 ] )
         runlevel_tail_time80area.append( np.percentile(time_80area, 80, interpolation='nearest') ) #[ (8*len(time_80area))/10 ] )
         runlevel_mean_time80area.append( np.mean(time_80area) ) #sum(time_80area)/len(time_80area) )
 
