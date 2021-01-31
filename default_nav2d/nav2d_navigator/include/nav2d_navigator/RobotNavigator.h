@@ -110,6 +110,12 @@ private:
 	double mMinReplanningPeriod;
 	double mMaxReplanningPeriod;
 
+	std::vector<double> explore_cb_plan_times;
+        std::vector<double> explore_cb_plan_ts;
+
+        std::vector<double> explore_cb_cmd_times;
+        std::vector<double> explore_cb_cmd_ts;
+
 	// For measuring RT:
         double current_plan_last_scan_mapCB_mapUpd_used_ts;
         double current_mapCB_tf_navCmd_scan_ts; // current Cmd - Transform's TS wrt latest scan used by mapper.

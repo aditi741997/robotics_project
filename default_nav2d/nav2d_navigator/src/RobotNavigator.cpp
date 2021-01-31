@@ -56,6 +56,25 @@ void write_arr_to_file(std::vector<double>& tput, std::string s)
         }
 }
 
+void write_arrs_to_file(std::vector<double>& times, std::vector<double>& ts, std::string s)
+{
+        std::ofstream of;
+        std::string ename;
+        NodeHandle nh;
+        nh.param<std::string>("/expt_name", ename, "");
+        of.open("/home/ubuntu/robot_" + s + "_stats_" + ename + ".txt", std::ios_base::app);
+        of << "\n" << s << " times: ";
+        int sz = times.size();
+        for (int i = 0; i < sz; i++)
+                of << times[i] << " ";
+        of << "\n" << s << " ts: ";
+        for (int i = 0; i < sz; i++)
+                of << std::to_string(ts[i]) << " ";
+
+        times.clear();
+        ts.clear();
+}
+
 RobotNavigator::RobotNavigator()
 {	
 	NodeHandle robotNode;
@@ -559,7 +578,10 @@ bool RobotNavigator::generateCommand()
 		tput_navcmd.push_back(time_now - last_navc_ts);
 	last_navc_ts = time_now;
 	if (tput_navcmd.size() % 200 == 57)
+	{
 		write_arr_to_file(tput_navcmd, "nav2d_navigator_cmd");
+		write_arrs_to_file(explore_cb_cmd_times, explore_cb_cmd_ts, "nav2d_navigator_cmd");
+	}
 
 	return true;
 }
@@ -901,6 +923,9 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 	WallRate loopRate(FREQUENCY);
 	while(true)
 	{
+		struct timespec cb_start, cb_end;
+                clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
+
 		// Check if we are asked to preempt
 		if(!ok() || mExploreActionServer->isPreemptRequested() || mIsStopped)
 		{
@@ -984,6 +1009,14 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 					if (total_nav_plan_ct > 1)
 						tput_nav_plan.push_back(time_now - last_nav_plan_out);
 					last_nav_plan_out = time_now;
+					
+					clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
+					double plan_t = get_time_diff(cb_start, cb_end);
+
+                        		double exec_rt_end = get_time_now();
+
+                        		explore_cb_plan_times.push_back(plan_t);
+                        		explore_cb_plan_ts.push_back(exec_rt_end);
 
 					WallTime endTime = WallTime::now();
 					WallDuration d = endTime - startTime;
@@ -1015,12 +1048,28 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 				mExploreActionServer->publishFeedback(fb);
 			}
 
+			struct timespec cb_start2, cb_end2;
+                	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start2);
 			// Create a new command and send it to Operator
 			generateCommand();
+
+			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end2);
+                        double cmd_t = get_time_diff(cb_start2, cb_end2);
+
+			double exec_rt_end = get_time_now();
+
+                        explore_cb_cmd_times.push_back(cmd_t);
+                        explore_cb_cmd_ts.push_back(exec_rt_end);
+
+
+			
 		}
 		
 		if (total_nav_plan_ct % 50 == 17)
+		{
 			write_arr_to_file(tput_nav_plan, "nav2d_navigator_plan");
+			write_arrs_to_file(explore_cb_plan_times, explore_cb_plan_ts, "nav2d_navigator_plan");
+		}
 
 		// Sleep remaining time
 		spinOnce();

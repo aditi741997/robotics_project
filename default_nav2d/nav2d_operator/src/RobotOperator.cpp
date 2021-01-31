@@ -100,12 +100,14 @@ RobotOperator::RobotOperator()
 	operatorNode.param("conformance_weight", mConformanceWeight, 1);
 	operatorNode.param("continue_weight", mContinueWeight, 1);
 	operatorNode.param("max_velocity", mMaxVelocity, 1.0);
+	// trying ros melodic param, evaluateAction code:
+        operatorNode.param("escape_weight", mEscapeWeight, 1);
 
 	// Apply tf_prefix to all used frame-id's
 	mRobotFrame = mTfListener.resolve(mRobotFrame);
 	mOdometryFrame = mTfListener.resolve(mOdometryFrame);
 
-	ROS_ERROR("Resolved tfNames. In RobotOperator");
+	ROS_ERROR("Resolved tfNames. In RobotOperator mMaxVel: %f", mMaxVelocity);
 
 	// Initialize the lookup table for the driving directions
 	ROS_INFO("Initializing LUT...");
@@ -672,6 +674,7 @@ int RobotOperator::calculateFreeSpace(sensor_msgs::PointCloud* cloud)
 
 double RobotOperator::evaluateAction(double direction, double velocity, bool debug)
 {
+	/*
 	sensor_msgs::PointCloud* originalCloud = getPointCloud(direction, velocity);
 	sensor_msgs::PointCloud transformedCloud;
 	try
@@ -766,6 +769,98 @@ double RobotOperator::evaluateAction(double direction, double velocity, bool deb
 	}
 	
 	return action_value;
+	*/
+
+	// TRYING ros_melodic branch code:
+        sensor_msgs::PointCloud* originalCloud = getPointCloud(direction, velocity);
+        sensor_msgs::PointCloud transformedCloud;
+        try
+        {
+                mTfListener.transformPointCloud(mOdometryFrame, *originalCloud,transformedCloud);
+        }
+        catch(tf::TransformException ex)
+        {
+                ROS_ERROR("%s", ex.what());
+                return 1;
+        }
+
+	double valueSafety = 0.0;      // How safe is it to move in that direction?
+        double valueEscape = 0.0;      // How much does the safety improve?
+        double valueConformance = 0.0; // How conform is it with the desired direction?
+        double valueContinue = 0.0;    // How conform is it with the previous command?
+
+        double decay = 1.0;
+        double safe_max = 0.0;
+        double cost_max = 0.0;
+        double cost_start = 1.0;
+
+	// Calculate safety and escape value
+        int length = transformedCloud.points.size();
+        for(int i = 0; i < length; i++)
+        {
+                unsigned int mx, my;
+                double cell_cost;
+                if(mCostmap->worldToMap(transformedCloud.points[i].x, transformedCloud.points[i].y, mx, my))
+                {
+                        cell_cost = (double)mCostmap->getCost(mx,my) / costmap_2d::INSCRIBED_INFLATED_OBSTACLE;
+                        if(cell_cost >= 1.0)
+                        {
+                                // Trajectory hit an obstacle
+                                break;
+                        }
+                }
+                if(i == 0)
+                        cost_start = cell_cost;
+                double cost = cell_cost * decay;
+                double safe = (cost_start - cell_cost) * decay * 2.0;
+
+                if(cost > cost_max) cost_max = cost;
+                if(safe > safe_max) safe_max = safe;
+
+                decay *= mSafetyDecay;
+        }
+
+	double action_value = 0.0;
+        double normFactor = 0.0;
+
+        // Add safety value
+        valueSafety = 1.0 - cost_max;
+        action_value += valueSafety * mSafetyWeight;
+        normFactor += mSafetyWeight;
+
+        // Add escape value
+        valueEscape = safe_max;
+        action_value += valueEscape * mEscapeWeight;
+        normFactor += mEscapeWeight;
+
+	if(mRecoverySteps == 0)
+        {
+                // Calculate continuety value
+                valueContinue = (mCurrentDirection - direction) * 0.5;
+                valueContinue = 1.0 - (valueContinue * valueContinue);
+
+                // Calculate conformance value
+                double corr = (mDesiredDirection - direction) * PI;
+                valueConformance = 0.5 * cos(corr) + 0.5;
+
+                // Add both to action value
+                action_value += valueConformance * mConformanceWeight;
+                action_value += valueContinue * mContinueWeight;
+                normFactor += mConformanceWeight + mContinueWeight;
+        }
+
+        action_value /= normFactor;
+
+	if(debug)
+        {
+                geometry_msgs::Vector3 cost_msg;
+                cost_msg.x = valueSafety;
+                cost_msg.y = valueEscape;
+                cost_msg.z = valueConformance;
+                mCostPublisher.publish(cost_msg);
+        }
+
+        return action_value;
 }
 
 double diff(double v1, double v2)

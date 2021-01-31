@@ -122,7 +122,7 @@ MultiMapper::MultiMapper()
 	mPosePublisher = robotNode.advertise<geometry_msgs::PoseStamped>("localization_result", 1, true);
 
 	// Initialize KARTO-Mapper
-	mMapper = new karto::OpenMapper(true);
+	mMapper = new karto::OpenMapper(false);
 	
 	double param_d;
 	bool param_b;
@@ -597,11 +597,11 @@ bool MultiMapper::updateMap()
 	double using_scan_mapCB_ts = allScans[allScans.Size()-1]->getScanTimeStamp();
         ros::Time ts_rost = ros::Time(using_scan_mapCB_ts);
 
+        struct timespec map_update_start, map_update_end;
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &map_update_start);
 	karto::OccupancyGridPtr kartoGrid = karto::OccupancyGrid::CreateFromScans(allScans, mMapResolution);
 
 	// to measure updateMap time ALSO #scans.
-        struct timespec map_update_start, map_update_end;
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &map_update_start);
 	ROS_ERROR("In MultiMapper::updateMap.... Using scans with latest TS : %f, scanCount: %i", using_scan_mapCB_ts, allScans.Size());
 
 	if(!kartoGrid)
@@ -667,6 +667,7 @@ bool MultiMapper::updateMap()
         total_mapupdate_count += 1;
         map_update_times.push_back(t);
         map_update_ts.push_back(exec_rt_end);
+	map_update_scan_count.push_back(allScans.Size());
 
 	if (total_mapupdate_count > 1)
         {
@@ -681,8 +682,10 @@ bool MultiMapper::updateMap()
         {
 		std::string mus = "nav2d_mapper_mapUpdate";
                 // of.open("/home/aditi/robot_" + mus + "_stats_r1.txt",  std::ios_base::app);
-                write_arrs_to_file(map_update_times, map_update_ts, mus);
+                write_arrs_to_file(map_update_times, map_update_ts, mus, map_update_scan_count);
                 write_arr_to_file(tput_map_update, mus, "tput");
+
+		map_update_scan_count.clear();
 	}
 	// Set the header information on the map
 	mGridMap.header.stamp = ts_rost; // ros::Time::now();

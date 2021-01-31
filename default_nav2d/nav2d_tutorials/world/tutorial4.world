@@ -1,0 +1,100 @@
+include "p3at.inc"
+include "floorplan.inc"
+
+name                    "Navigation-2D Multi-Robot Tutorial"
+interval_sim            100
+interval_real           100
+quit_time                 0
+resolution                0.025
+show_clock                0
+show_clock_interval     100
+threads                 12
+speedup                 5
+
+window
+(
+show_grid               0
+)
+
+# Load an environment bitmap
+floorplan
+( 
+  name "tutorial"
+  bitmap "autolab_fill.png"
+  size [34 30 1.0]
+  pose [0 0 0 0]
+)
+
+# Put two robots into the world
+pioneer3at
+(
+  name "robot_0"
+  pose [0 -2 0 45]
+)
+
+# Put two robots into the world
+pioneer3at
+(
+  name "robot_1"
+  pose [-5.25 2 0 0]
+  color "blue"
+)
+# -5.5, 2 for speedup=1. and -5,2 for speedup=10
+
+# Put two robots into the world
+pioneer3at
+(
+  name "robot_2"
+  pose [-12 0 0 90]
+  color "blue"
+)
+# -12, -.5 for speedup=1. and -12,0 for speedup=10
+
+# Put two robots into the world
+pioneer3at
+(
+  name "robot_3"
+  pose [2.75 9 0 0]
+  color "blue"
+)
+# 2.5, 9 for speedup=1. and 3.5,9 for speedup=10.
+
+pioneer3at
+(
+  name "robot_4"
+  pose [2.8 3.1 0 0]
+  color "blue"
+)
+# room4: x: 0 to 7.9, y: 1 to 5.5
+
+pioneer3at
+(
+  name "robot_5"
+  pose [10.7 -4.9 0 0]
+  color "blue"
+)
+# room5 : x : 8 to 15.9, y : -2.5 to -7
+
+pioneer3at
+(
+  name "robot_6"
+  pose [-5.3 11 0 0]
+  color "blue"
+)
+# room6: x: -8 to 0, y: 9 to 13
+
+pioneer3at
+(
+  name "robot_7"
+  pose [-13.4 11 0 0]
+  color "blue"
+)
+# room7: x: -16 to -8, y: 9 to 13
+
+pioneer3at
+(
+  name "robot_8"
+  pose [2.25 -11.75 0 90]
+  color "blue"
+)
+# room8: x: 0 to 4.5, y: -8 to -13
