@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <math.h> 
 #include <boost/circular_buffer.hpp>
+#include <list>
 
 using namespace mosek::fusion;
 using namespace monty;
@@ -165,7 +166,7 @@ public:
 
 	// Useful for re solving the OPT with varying ci:
 	void clear_old_data(int frac_var_count);
-	void update_cis(std::map<std::string, boost::circular_buffer<double> >& node_ci_arr);
+	void update_cis(std::map<std::string, std::list<double> >& node_ci_arr);
 	void scale_nc_constraints(double f);
 
 	// Helper functions:

@@ -313,7 +313,7 @@ bool RobotNavigator::getMap()
 	}
 	
 	nav_msgs::GetMap srv;
-	// ROS_WARN("IN nav2d::RobotNavigator About to call getMap service!!");
+	ROS_ERROR("IN RoboNavigator calling getMap service!!");
 	if(!mGetMapClient.call(srv))
 	{
 		ROS_ERROR("Could not get a map.");

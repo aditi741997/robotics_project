@@ -797,7 +797,7 @@ for i in expts:
 			sum_new_area_cov_agg[k] = sum( new_area_cov_Agg[k] )
 		#print("Sum nEW Area covered Agg: ", sum_new_area_cov_agg) # Do this only for first slot.
 		new_area_agg.append(sum_new_area_cov_agg)
-		if (stall_ct > 3) or (sto_ct > 3):
+		if (stall_ct > 5) or (sto_ct > 5):
 			colln_count += run_collision_hua
       
 		path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))

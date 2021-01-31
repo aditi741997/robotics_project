@@ -264,7 +264,6 @@ void ObstacleLayer::laserScanCallback(const sensor_msgs::LaserScanConstPtr& mess
   // project the laser into a point cloud
   sensor_msgs::PointCloud2 cloud;
   cloud.header = message->header;
-  ROS_WARN("CMP Obstlayer got scan with real TS %f", message->scan_time);
   recv_scan_ts_log << message->scan_time << "," << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
   // double real_ts = 
 

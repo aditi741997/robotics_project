@@ -2382,7 +2382,15 @@ check_tdiff(process_end1, process_end7, "End1_End7 True");
 
 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end7);
 check_tdiff(process_end1, process_end7, "End1_End7 False");
-        return false;
+	 
+	/*
+	if (pScan == NULL)
+		std::cout << "DITCH:Null";
+	else
+		std::cout << "DITCH:HME:" << HasMovedEnough(pScan, pLastScan) << "GRV:" << pScan->IsGpsReadingValid();
+	std::cout << std::endl;
+	*/
+	  return false;
       }
       
       /////////////////////////////////////////////
@@ -2465,6 +2473,7 @@ check_tdiff(process_end1, process_end9, "End1_End9 AllDone!");
       return true;
     }
 
+    // std::cout << fabs(deltaHeading) << "," << squaredTravelDistance << ","; 
     return false;
   }
 
