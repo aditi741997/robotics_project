@@ -187,6 +187,8 @@ namespace ros
       return callback_queue_ ? callback_queue_ : (CallbackQueueInterface*)getGlobalCallbackQueue(); 
     }
 
+    int getInternalCBQTId();
+
     /**
      * \brief Returns the namespace associated with this NodeHandle
      */

@@ -138,6 +138,11 @@ public:
 
   void changeDropFraction(int dropf);
 
+  // For storing the internalCallbackQueueThreadFunc thread id.
+  int internalCBQTId;
+  void setInternalCBQTId(int x) { internalCBQTId = x; };
+  int getInternalCBQTId() { return internalCBQTId; };
+
 private:
   /** if it finds a pre-existing subscription to the same topic and of the
    *  same message type, it appends the Functor to the callback vector for
