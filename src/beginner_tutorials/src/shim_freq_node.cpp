@@ -72,11 +72,14 @@ public:
     // Publisher, thread that'll publish.
     ros::Publisher sensor_pub;
     void publishLatestDataMsg(const std_msgs::Header::ConstPtr& msg);
+    void publishLatestDataTimer(const ros::WallTimerEvent& event);
     void publishLatestData();
 
     ros::Publisher thread_exec_info_pub, s_exec_end_pub;
 
+    bool use_td;
     ros::Subscriber trigger_cc_sub; // publish on getting trigger from scheduler.
+    ros::WallTimer sensor_data_publish_thread;
 
     ros::NodeHandle nh;
 
@@ -94,7 +97,7 @@ public:
     void printVecStats(std::vector<double> v, std::string s);
 
     // ShimFreqNode();
-    ShimFreqNode(double f, std::string sub_topic, std::string pub_topic, std::string msg_type);
+    ShimFreqNode(double f, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string use_td_s);
 
 	std::ofstream pub_scan_ts_log;
 
@@ -113,7 +116,7 @@ protected:
 	void socket_recv();
 };
 
-ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topic, std::string msg_type)
+ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string use_td_s)
 {
 	pub_scan_ts_log.open("shq_pubScan_log.csv");
     freq = f;
@@ -137,12 +140,19 @@ ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topi
     
     // start thread for publishing :
     // Dont need this thread if Scheduler triggers CC:
-    // sensor_data_publish_thread = nh.createWallTimer(ros::WallDuration(1.0/freq), &ShimFreqNode::publishLatestData, this);
     
     // publishing based on DAGController's msgs:
     // trigger_cc_sub = nh.subscribe("/robot_0/trigger_exec_s" , 1, &ShimFreqNode::publishLatestData, this, ros::TransportHints().tcpNoDelay());
 
-    // for getting triggers via socket:
+
+    use_td = (use_td_s.find("yes") != std::string::npos );
+    ROS_ERROR("VALUE of use_td : %i, string : %s", use_td, use_td_s.c_str());
+
+    if (use_td)
+    	sensor_data_publish_thread = nh.createWallTimer(ros::WallDuration(1.0/freq), &ShimFreqNode::publishLatestDataTimer, this);
+    else
+    {
+	    // for getting triggers via socket:
 	errno = 0; // resetting before starting socket stuff.
 	client_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
 	// if (client_sock_fd < 0)
@@ -150,7 +160,7 @@ ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topi
 	
 	struct sockaddr_in serv_addr;
 	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(6327);
+	serv_addr.sin_port = htons(5327);
 
 	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
 	// if ( pton_ret <= 0 )
@@ -165,7 +175,10 @@ ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topi
 	}
 
 	sock_recv_thread = boost::thread(&ShimFreqNode::socket_recv, this);
-}
+
+    }
+
+   }
 
 void ShimFreqNode::socket_recv()
 {
@@ -345,10 +358,15 @@ void ShimFreqNode::publishLatestDataMsg(const std_msgs::Header::ConstPtr& msg ) 
 	publishLatestData();	
 }
 
+void ShimFreqNode::publishLatestDataTimer(const ros::WallTimerEvent& event)
+{
+	publishLatestData();
+}
+
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "shim_freq_node");
-    ShimFreqNode sfn( atof(argv[1]), argv[2], argv[3], argv[4] );
+    ShimFreqNode sfn( atof(argv[1]), argv[2], argv[3], argv[4], argv[5] );
     ros::spin();
     return 0;
 }
