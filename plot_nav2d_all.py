@@ -357,9 +357,7 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-#expts = [exptn + str(x) + "_5c" for x in range(1,6) ] 
-#expts.append(exptn + "7_5c")
-expts = ["FO_DFracV2_2c"] #"DFracV11_1c" ]
+expts = ["FO_DFracV2_2c"] 
 runs = [31,32,33,34,35,36,37,38,39,41] #14,15,16,17,18]
 
 runs = range(41, 89)
@@ -377,10 +375,12 @@ print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
 run_rts_percentile = 75 #50
+run_lats_percentile = 75
 for i in expts:
         run_totalareas = []
 	run_tputs = {} # name -> list
 	run_rts = {} # chain name -> list
+        run_lats = {} # chain name -> list
         run_ttc = []
 
 	if i == 2:
@@ -540,6 +540,7 @@ for i in expts:
 				rts = []
 				ts = []
 				tputs = []
+                                lats = []
 				if chain not in rt_agg:
 					rt_agg[chain] = []
                                 if chain not in runlevel_agg_lowlevelmetrics_dict:
@@ -552,21 +553,22 @@ for i in expts:
 							ts += [ float(x) for x in l.split(' ')[1:-1] ]
 						elif "Tput" in l:
 							tputs += [ float(x) for x in l.split(' ')[1:-1] ] 
-				# aggregate the RTs array, then add slot_mean_dict to rt_agg.
+				                elif "Latency" in l:
+                                                        lats += [ float(x) for x in l.split(' ')[1:-1] ]
+                                # aggregate the RTs array, then add slot_mean_dict to rt_agg.
 				runlevel_meanRTs[exp_id].append( 5.0 )
 				chainrt_agg_i = aggregate_over_time(rts, ts[1:], start_i, slot, end_i)
 				rt_agg[chain].append(mean_aggregate(chainrt_agg_i) )
 
 				if chain not in run_rts:
 					run_rts[chain] = []
-                                #if "LC_LP" in chain and "H4_5c" in exp_id:
-                                    #print("~~~~~~HERE IS THE CC RTs arr: ", rts)
+                                        run_lats[chain] = []
                                 
                                 try:
-                                    #run_rts[chain].append( sorted(rts)[ len(rts)/2 ] )
                                     run_rts[chain].append( np.percentile(rts, run_rts_percentile ) )
+                                    run_lats[chain].append( np.percentile(lats, run_lats_percentile ) )
                                 except:
-                                    print("EXCEPTION in getting rts for chain %s, exp: %s"%(chain, exp_id) )
+                                    print("EXCEPTION in getting rts/lats for chain %s, exp: %s"%(chain, exp_id) )
 
 				if "LC_LP" in chain:
 					# print "Here's CC RT: ", rt_agg[chain][-1]
@@ -780,8 +782,8 @@ for i in expts:
                                         for k in time_areas.keys():
                                             ratio = float(k)/100.0
                                             if ( ( known >= ratio*opt_total_Area) and (last_known_area < ratio*opt_total_Area) ):
-                                                time_areas[k].append( float(l.split(' ')[4]) - start_i )
-						time_st_areas[k].append( float(l.split(' ')[2][:-2]) - start_st_i )
+                                                time_areas[k].append( round(float(l.split(' ')[4]) - start_i, 3) )
+						time_st_areas[k].append( round(float(l.split(' ')[2][:-2]) - start_st_i, 3) )
 						added_to_area_times[ratio] = True
 						if ratio > 0.6:
 							print("Adding line %s to ratio %f"%(l, ratio) )
@@ -848,6 +850,7 @@ for i in expts:
 		ith_lowlevel_arr.append( np.median(run_rts[ch]) ) #sorted(run_rts[ch])[len(runs)/2] )
 	        runlevel_agg_lowlevelmetrics_dict[ch].append( np.median(run_rts[ch]) ) #sorted(run_rts[ch])[len(runs)/2] )
                 print("FOR EXPT %s, chain %s, RT: %iile :  %s, median RT ile: %f"%(i, ch, run_rts_percentile, str(run_rts[ch]), np.median(run_rts[ch]) ) )
+                print("FOR EXPT %s, chain %s, Latency  %iile :  %s, median Lat ile : %f"%(i, ch, run_lats_percentile, str(run_lats[ch]), np.median(run_lats[ch]) ) )
         runlevel_agg_lowlevelmetrics.append( [-1.0*x for x in ith_lowlevel_arr] )
        
         # Fraction of time v=0.
