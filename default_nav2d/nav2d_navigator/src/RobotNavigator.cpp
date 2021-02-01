@@ -113,9 +113,11 @@ RobotNavigator::RobotNavigator()
 	robotNode.param("getmap_action_topic", mGetMapActionTopic, std::string(NAV_GETMAP_ACTION));
 	robotNode.param("localize_action_topic", mLocalizeActionTopic, std::string(NAV_LOCALIZE_ACTION));
 
+	mTfListener = new TransformListener(ros::Duration(20.0) );
+
 	// Apply tf_prefix to all used frame-id's
-	mRobotFrame = mTfListener.resolve(mRobotFrame);
-	mMapFrame = mTfListener.resolve(mMapFrame);
+	mRobotFrame = mTfListener->resolve(mRobotFrame);
+	mMapFrame = mTfListener->resolve(mMapFrame);
 
 	try
 	{
@@ -169,6 +171,7 @@ RobotNavigator::~RobotNavigator()
 	delete mGetMapActionServer;
 	mExplorationPlanner.reset();
 	delete mPlanLoader;
+	delete mTfListener;
 }
 
 void RobotNavigator::updateMapperScanTSUsedTF(const std_msgs::Header& hdr)
@@ -1082,7 +1085,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 
 bool RobotNavigator::isLocalized()
 {
-	return mTfListener.waitForTransform(mMapFrame, mRobotFrame, Time::now(), Duration(0.1));
+	return mTfListener->waitForTransform(mMapFrame, mRobotFrame, Time::now(), Duration(0.1));
 }
 
 bool RobotNavigator::setCurrentPosition()
@@ -1092,7 +1095,7 @@ bool RobotNavigator::setCurrentPosition()
 	{
 		// Spinning here to get the latest tf's TS.
                 spinOnce();
-		mTfListener.lookupTransform(mMapFrame, mRobotFrame, Time(0), transform);
+		mTfListener->lookupTransform(mMapFrame, mRobotFrame, Time(0), transform);
 		// CHECK THE current TF TS value.
 		latest_mapper_tf_scan_used_ts = current_mapper_tf_scan_ts; // whenever this is called in receiveExplore, the output is used by genCmd, since ALL in order.
 

@@ -109,11 +109,11 @@ MultiMapper::MultiMapper()
 	mMapFrame = mTransformListener.resolve(mMapFrame);
 
 	// Initialize Publisher/Subscribers
-	mScanSubscriber = robotNode.subscribe(mScanInputTopic, 100, &MultiMapper::receiveLocalizedScan, this);
+	mScanSubscriber = robotNode.subscribe(mScanInputTopic, 100, &MultiMapper::receiveLocalizedScan, this, ros::TransportHints().tcpNoDelay());
 	mScanPublisher = robotNode.advertise<nav2d_msgs::LocalizedScan>(mScanOutputTopic, 100, true);
 	mMapServer = robotNode.advertiseService(mMapService, &MultiMapper::getMap, this);
 	mMapPublisher = robotNode.advertise<nav_msgs::OccupancyGrid>(mMapTopic, 1, true);
-	mLaserSubscriber = robotNode.subscribe(mLaserTopic, 100, &MultiMapper::receiveLaserScan, this);
+	mLaserSubscriber = robotNode.subscribe(mLaserTopic, 100, &MultiMapper::receiveLaserScan, this, ros::TransportHints().tcpNoDelay());
 	mInitialPoseSubscriber = robotNode.subscribe("initialpose", 1, &MultiMapper::receiveInitialPose, this);
 	mOtherRobotsPublisher = robotNode.advertise<nav2d_msgs::RobotPose>("others", 10, true);
 
@@ -592,13 +592,14 @@ bool MultiMapper::sendMap()
 bool MultiMapper::updateMap()
 {
 	if(!mMapChanged) return true;
+        
+	struct timespec map_update_start, map_update_end;
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &map_update_start);
 	
 	const karto::LocalizedLaserScanList allScans = mMapper->GetAllProcessedScans();
 	double using_scan_mapCB_ts = allScans[allScans.Size()-1]->getScanTimeStamp();
         ros::Time ts_rost = ros::Time(using_scan_mapCB_ts);
 
-        struct timespec map_update_start, map_update_end;
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &map_update_start);
 	karto::OccupancyGridPtr kartoGrid = karto::OccupancyGrid::CreateFromScans(allScans, mMapResolution);
 
 	// to measure updateMap time ALSO #scans.

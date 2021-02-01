@@ -53,7 +53,7 @@ private:
 	void publishPlan();
 
 	// Everything related to ROS
-	tf::TransformListener mTfListener;
+	tf::TransformListener* mTfListener; // to increase tf buffer to 20s ST.
 	ros::ServiceClient mGetMapClient;
 	ros::Subscriber mGoalSubscriber;
 	ros::Publisher mPlanPublisher;
