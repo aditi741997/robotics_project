@@ -145,7 +145,7 @@ private:
 	bool got_all_info();
 	
 	// void checkTriggerExec(int ind);
-	void checkTriggerExec(std::vector<int>& sci, int core_id = 0);
+	void checkTriggerExec(std::vector<int>& sci, int core_id = 0, double frac=1.0);
 
 	boost::thread* timer_thread;
 	void timer_thread_func(double timeout);
