@@ -78,7 +78,7 @@ RobotOperator::RobotOperator()
 	ros::NodeHandle robotNode;
 	robotNode.param("robot_frame", mRobotFrame, std::string("robot"));
 	robotNode.param("odometry_frame", mOdometryFrame, std::string("odometry_base"));
-	mCommandSubscriber = robotNode.subscribe(COMMAND_TOPIC, 1, &RobotOperator::receiveCommand, this);
+	mCommandSubscriber = robotNode.subscribe(COMMAND_TOPIC, 1, &RobotOperator::receiveCommand, this, ros::TransportHints().tcpNoDelay());
 	mControlPublisher = robotNode.advertise<geometry_msgs::Twist>(CONTROL_TOPIC, 1);
 	mCostPublisher = robotNode.advertise<geometry_msgs::Vector3>("costs", 1);
 
@@ -106,8 +106,8 @@ RobotOperator::RobotOperator()
 	// Apply tf_prefix to all used frame-id's
 	mRobotFrame = mTfListener.resolve(mRobotFrame);
 	mOdometryFrame = mTfListener.resolve(mOdometryFrame);
-
-	ROS_ERROR("Resolved tfNames. In RobotOperator mMaxVel: %f", mMaxVelocity);
+	
+	ROS_ERROR("RobotOperator mMaxFreeSpace %f, mSafetyDecay %f, mSafetyWeight %i, mConformanceWeight %i, mContinueWeight %i, mMaxVelocity %f, mEscapeWeight %i", mMaxFreeSpace, mSafetyDecay, mSafetyWeight, mConformanceWeight, mContinueWeight, mMaxVelocity, mEscapeWeight);
 
 	// Initialize the lookup table for the driving directions
 	ROS_INFO("Initializing LUT...");
