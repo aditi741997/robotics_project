@@ -1059,7 +1059,9 @@ void DAG::update_cis(std::map<std::string, std::list<double> >& node_ci_arr)
 			{
 				cis.push_back(*it);
 				ct++;
+				it++;
 			}
+			printf("Arr sz for %s, %i, last elem: %f, first elem : %f", x.first.c_str(), cis.size(),  cis[cis.size()-1], cis[0] );
 			std::sort(cis.begin(), cis.end());
 			std::cout << "UPDATED Compute time of node " << x.first << " from " << id_node_map [ name_id_map [ x.first ] ].compute << " TO " << cis[(75*cis.size())/100]*1000.0 << std::endl;
 			id_node_map [ name_id_map [ x.first ] ].compute = cis[(75*cis.size())/100]*1000.0; // Nodes publish time in sec, DAG operates in ms.
