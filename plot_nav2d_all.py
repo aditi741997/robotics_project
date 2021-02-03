@@ -55,12 +55,13 @@ def get_num_collisions_run(ts_arr, ts_colln_arr):
                     print("Cluster %i is a new cluster!"%(cid+1) )
                 newcolid_colid[ colid_newcolid[cid+1] ].append(cid+1)
         # return final #colln clusters with >= 5 true's
-        final_col_ct = 0
+        final_cols = set()
         for newid in newcolid_colid.keys():
             numvals = sum( [colln_cluster_len[x] for x in newcolid_colid[newid] ] )
-            final_col_ct += (numvals > 4)
-        print("FINAL #nEW COLS : ", len(newcolid_colid), " #COLLISIONS: ", final_col_ct)
-        return final_col_ct
+            if numvals > 4:
+                final_cols.add( ts_arr [ colln_cluster_start[ newcolid_colid[newid][0] ] ] )
+        print("FINAL #nEW COLS : ", len(newcolid_colid), " #COLLISIONS: ", final_cols)
+        return final_cols
         
 
 # return dict: slot# -> aggregate value.
@@ -405,11 +406,11 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["FOL_DFracO2SB_1c" ] #"DefaultTD_2c"] 
+expts = ["DFrac1SO2SB_2c" ] #"DefaultTD_2c"] 
 
 runs = range(61,86)
-runs = range(1,52)
-runs.remove(3)
+runs = range(1,51)
+#runs.remove(3)
 print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
@@ -648,6 +649,7 @@ for i in expts:
                                                 run_tputs[chain+"_tput"].append(1.0)
                                                 irun_75p_tput[chain+"_tput"].append(1.0)
                                                 irun_mean_tput[chain+"_tput"].append(1.0)
+                                            raise
 
 	# Get intra run perf metrics
 	# 1. Odometry v=0 fraction per 2s
@@ -684,7 +686,7 @@ for i in expts:
 				    pos_rt_ts = float(obfl[o*numl].split(' ')[3])
                                 except:
                                     print("ERROR in numl = %i, o: %i, line split: "%(numl,o), obfl[o*numl].split(' ') )
-
+                                    raise
 
 				if ( (pos_rt_ts > start_i) and (pos_rt_ts < end_i) ):
 				        # Calculating dist travelled for pathlen:
@@ -708,6 +710,7 @@ for i in expts:
 						robo_ang_odom_arr.append( av )
 					except:
 						print("PROBLEM in reading vang for o: ", o)
+                                                raise
 
 					# get orientation
 					oz = float( obfl[o*numl + num_obst + 2].split(' ')[6] )
@@ -817,7 +820,7 @@ for i in expts:
 		added_to_area_times = {}
                 zip_at = []
                 zip_aa = []
-                zip_as = { 100: {}} # 20s RT ~100s ST.
+                zip_as = { 20: {}, 100: {}} # 20s RT ~100s ST.
 		run_time_to_area = {}
                 run_stime_to_area = {}
                 with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
@@ -830,11 +833,13 @@ for i in expts:
 						new_area_covered.append(known - last_known_area)
 						new_area_covered_ts.append( float(l.split(' ')[4] ) )
                                                 zip_aa.append(known)
-                                                # For RT: zip_at.append( float(l.split(' ')[4] ) )
+                                                # For RT: 
+                                                zip_at.append( float(l.split(' ')[4] ) )
                                                 # For ST: 
-                                                zip_at.append( float(l.split(' ')[2][:-2] ) )
+                                                #zip_at.append( float(l.split(' ')[2][:-2] ) )
                                         except:
 						print("ERROR in line %s in getting area stuff!!"%(l) )
+                                                raise
                                         if ( (known >= 0.8*opt_total_Area) and (last_known_area < 0.8*opt_total_Area) ):
                                             time_80area.append( float(l.split(' ')[4]) - start_i )
                                         if ( (known >= 0.6*opt_total_Area) and (last_known_area < 0.6*opt_total_Area) ):
@@ -855,7 +860,7 @@ for i in expts:
                 time_to_areas.append( run_time_to_area )
                 stime_to_areas.append( run_stime_to_area )
                 for zk in zip_as.keys():
-                    agg_timearea = aggregate_over_time(zip_aa, zip_at, start_st_i, zk, end_st_i)
+                    agg_timearea = aggregate_over_time(zip_aa, zip_at, start_i, zk, end_i)
                     #take last entry for each time slot
                     for si in agg_timearea.keys():
                         zip_as[zk][si] = agg_timearea[si][-1] # last area val covered in each timeslot.
@@ -874,7 +879,7 @@ for i in expts:
 		if (stall_ct > 5) or (sto_ct > 5):
 			colln_count += run_collision_hua
      
-                new_colln_count += run_collision_count
+                #new_colln_count += run_collision_count
 		colln_count_arr.append( run_collision_count )
                 path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))
                 if run_collision_hua:
