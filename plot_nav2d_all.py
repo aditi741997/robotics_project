@@ -267,7 +267,6 @@ def get_robot_edges(px,py,oz,ow):
 	return [ Segment2D(verts[0], verts[1]), Segment2D(verts[1], verts[2]), Segment2D(verts[2], verts[3]), Segment2D(verts[3], verts[0]) ]
 
 def get_obstacle_no_stage(x,y):
-        '''
         if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
 		return 1 # robot1 is line_no+1
 	elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
@@ -305,6 +304,7 @@ def get_obstacle_no_stage(x,y):
                 return 8
         else:
 		return -1
+        '''
 
 def get_dist(x1,y1,x2,y2):
 	return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
@@ -352,7 +352,7 @@ letter = 'N'
 opt_total_Area = 339142.0
 
 # LMap: 818045, 817667, 818141, 817838
-opt_total_Area = 818045.0
+#opt_total_Area = 818045.0
 
 runlevel_agg_lowlevelmetrics = [] # list of lists. 
 runlevel_agg_lowlevelmetrics_dict = {} # metric name -> value. [median in runs, then ?]
@@ -406,7 +406,7 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["DFrac1SO2SB_2c" ] #"DefaultTD_2c"] 
+expts = ["DFracOld2SB_1c" ] #"DefaultTD_2c"] 
 
 runs = range(61,86)
 runs = range(1,51)
@@ -437,9 +437,9 @@ for i in expts:
         fullExplTimes = [] # include expl time only if finished & area > 0.9*opt.
 
         time_80area = [] # for each run, time to cover 80% of area. [in terms of known_area]
-        time_60area = [] # for each run, time to cover 60% of area. [in terms of known_area]
-        time_areas = { 20: [], 30: [], 40: [], 50: [], 60: [], 70: [], 80: [], 90: []} 
-	time_st_areas = { 20: [], 30: [], 40: [], 50: [], 60: [], 70: [], 80: [], 90: []}
+        time_60area = [] #20: [], 30: [],  for each run, time to cover 60% of area. [in terms of known_area]
+        time_areas = { 40: [], 50: [], 60: [], 70: [], 80: [], 90: []} 
+	time_st_areas = { 40: [], 50: [], 60: [], 70: [], 80: [], 90: []}
         area_time_zip_arr = []
         area_time_agg_dict = { 20: [], 100: [] }
         colln_count_arr = []
@@ -491,7 +491,7 @@ for i in expts:
 		# JUST to plot area covered in 1st 60sec: 
 		# end_i = start_i + slot + 1.0
 		print("For i ", i, " Start, end times: ", start_i, end_i)
-		run_total_times.append(end_i - start_i - 0.1)
+		run_total_times.append(end_st_i - start_st_i - 0.1)
 
 		# store each run's metrics as dict: window# -> value
 		# so its easier to take intersection of set of keys of all metrics.
@@ -659,6 +659,7 @@ for i in expts:
 			obfl = f.readlines()
 			numl = (num_obst+3)
 			ts_arr = []
+                        st_ts_arr = []
                         ts_colln_bool_arr = []
 			robo_odom_arr = []
 			robo_ang_odom_arr = []
@@ -718,7 +719,8 @@ for i in expts:
 					
 					
 					ts_arr.append(pos_rt_ts)
-			                ts_colln_hua = False	
+			                st_ts_arr.append(pos_st_ts)
+                                        ts_colln_hua = False	
                                         rob_stalled = obfl[o*numl + num_obst + 2].split(' ')[9]
                                         if "\n" in rob_stalled:
                                             rob_stalled = rob_stalled[:-1]
@@ -745,7 +747,7 @@ for i in expts:
 							ts_colln_hua = True
                                                         sto_ct += 1
                                         ts_colln_bool_arr.append(ts_colln_hua)
-                        run_collision_count = get_num_collisions_run(ts_arr, ts_colln_bool_arr, start_i)
+                        run_collision_count = get_num_collisions_run(st_ts_arr, ts_colln_bool_arr, start_st_i)
 			'''
 					if ( pos_rt_ts > (end_i - (end_i - start_i)/10 ) ) and (pos_rt_ts < (end_i + 1.0) ):
 						robot_edges = get_robot_edges(rob_x, rob_y, oz, ow) # gives an arr of 4segments.
@@ -820,7 +822,7 @@ for i in expts:
 		added_to_area_times = {}
                 zip_at = []
                 zip_aa = []
-                zip_as = { 20: {}, 100: {}} # 20s RT ~100s ST.
+                zip_as = { 100: {}} # 20s RT ~100s ST.
 		run_time_to_area = {}
                 run_stime_to_area = {}
                 with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
@@ -834,9 +836,9 @@ for i in expts:
 						new_area_covered_ts.append( float(l.split(' ')[4] ) )
                                                 zip_aa.append(known)
                                                 # For RT: 
-                                                zip_at.append( float(l.split(' ')[4] ) )
+                                                #zip_at.append( float(l.split(' ')[4] ) )
                                                 # For ST: 
-                                                #zip_at.append( float(l.split(' ')[2][:-2] ) )
+                                                zip_at.append( float(l.split(' ')[2][:-2] ) )
                                         except:
 						print("ERROR in line %s in getting area stuff!!"%(l) )
                                                 raise
@@ -860,7 +862,7 @@ for i in expts:
                 time_to_areas.append( run_time_to_area )
                 stime_to_areas.append( run_stime_to_area )
                 for zk in zip_as.keys():
-                    agg_timearea = aggregate_over_time(zip_aa, zip_at, start_i, zk, end_i)
+                    agg_timearea = aggregate_over_time(zip_aa, zip_at, start_st_i, zk, end_st_i)
                     #take last entry for each time slot
                     for si in agg_timearea.keys():
                         zip_as[zk][si] = agg_timearea[si][-1] # last area val covered in each timeslot.
