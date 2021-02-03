@@ -266,6 +266,7 @@ def get_robot_edges(px,py,oz,ow):
 	return [ Segment2D(verts[0], verts[1]), Segment2D(verts[1], verts[2]), Segment2D(verts[2], verts[3]), Segment2D(verts[3], verts[0]) ]
 
 def get_obstacle_no_stage(x,y):
+        '''
         if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
 		return 1 # robot1 is line_no+1
 	elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
@@ -303,7 +304,6 @@ def get_obstacle_no_stage(x,y):
                 return 8
         else:
 		return -1
-        '''
 
 def get_dist(x1,y1,x2,y2):
 	return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
@@ -351,7 +351,7 @@ letter = 'N'
 opt_total_Area = 339142.0
 
 # LMap: 818045, 817667, 818141, 817838
-#opt_total_Area = 818045.0
+opt_total_Area = 818045.0
 
 runlevel_agg_lowlevelmetrics = [] # list of lists. 
 runlevel_agg_lowlevelmetrics_dict = {} # metric name -> value. [median in runs, then ?]
@@ -405,10 +405,11 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["DFrac1SO2SB_1c" ] #"DefaultTD_2c"] 
+expts = ["FOL_DFracO2SB_1c" ] #"DefaultTD_2c"] 
 
 runs = range(61,86)
-runs = range(1,51)
+runs = range(1,52)
+runs.remove(3)
 print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
@@ -439,7 +440,10 @@ for i in expts:
         time_areas = { 20: [], 30: [], 40: [], 50: [], 60: [], 70: [], 80: [], 90: []} 
 	time_st_areas = { 20: [], 30: [], 40: [], 50: [], 60: [], 70: [], 80: [], 90: []}
         area_time_zip_arr = []
-        area_time_agg_dict = { 20: [], 50: []}
+        area_time_agg_dict = { 20: [], 100: [] }
+        colln_count_arr = []
+        time_to_areas = [] # arr of dicts
+        stime_to_areas = [] # arrof dicts
 
         run_pathlens = [] # Distance travelled by robot
         run_areabypaths = [] # ratio of area covered to path length.
@@ -461,7 +465,8 @@ for i in expts:
                 start_rt_i = 0.0
 		start_st_i = 0.0
 		end_i = 0.0
-		#run = 2 if (i > 1) else 1
+		end_st_i = 0.0
+                #run = 2 if (i > 1) else 1
 		#run = 2
 		print("Starting Frac",i, "run:",run)
 		with open("nav2d_robot_logs_" + exp_id + ".err", 'r') as f:
@@ -472,13 +477,15 @@ for i in expts:
                                 	start_st_i = float( fl.split(' ')[2][:-2] )
 				if ( ("Exploration has failed" in fl) or ("Exploration has finished" in fl) ) and "Time of finish" in fl:
 					end_i = float( fl.split(' ')[-2] )
-		                if ("Exploration has finished" in fl):
+		                        end_st_i = float( fl.split(' ')[2][:-2] )
+                                if ("Exploration has finished" in fl):
                                     run_expl_finished = True
                                 if ("No way between robot and goal!" in fl):
                                     run_path_plan_fail = True
                 		if ("Exploration failed." in fl):
                                         end_rt_i = float( fl.split(' ')[1][1:-1] )
 				    	end_i = start_i + (end_rt_i - start_rt_i)
+                                        end_st_i = float( fl.split(' ')[2][:-2] )
 		end_i += 0.1 # expl should fail after the collision for the collision to count.
 		# JUST to plot area covered in 1st 60sec: 
 		# end_i = start_i + slot + 1.0
@@ -810,8 +817,10 @@ for i in expts:
 		added_to_area_times = {}
                 zip_at = []
                 zip_aa = []
-                zip_as = { 20: {}, 50: {}}
-		with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
+                zip_as = { 100: {}} # 20s RT ~100s ST.
+		run_time_to_area = {}
+                run_stime_to_area = {}
+                with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
 			for l in f.readlines():
 				if 'ratio of unknown/total area' in l:
 					try:
@@ -821,7 +830,9 @@ for i in expts:
 						new_area_covered.append(known - last_known_area)
 						new_area_covered_ts.append( float(l.split(' ')[4] ) )
                                                 zip_aa.append(known)
-                                                zip_at.append( float(l.split(' ')[4] ) )
+                                                # For RT: zip_at.append( float(l.split(' ')[4] ) )
+                                                # For ST: 
+                                                zip_at.append( float(l.split(' ')[2][:-2] ) )
                                         except:
 						print("ERROR in line %s in getting area stuff!!"%(l) )
                                         if ( (known >= 0.8*opt_total_Area) and (last_known_area < 0.8*opt_total_Area) ):
@@ -836,11 +847,15 @@ for i in expts:
                                                 time_areas[k].append( round(float(l.split(' ')[4]) - start_i, 3) )
 						time_st_areas[k].append( round(float(l.split(' ')[2][:-2]) - start_st_i, 3) )
 						added_to_area_times[ratio] = True
-						if ratio > 0.6:
+						run_time_to_area[k] = round(float(l.split(' ')[4]) - start_i, 3)
+                                                run_stime_to_area[k] = round( float(l.split(' ')[2][:-2]) - start_st_i, 3 )
+                                                if ratio > 0.6:
 							print("Adding line %s to ratio %f"%(l, ratio) )
 					last_known_area = known
+                time_to_areas.append( run_time_to_area )
+                stime_to_areas.append( run_stime_to_area )
                 for zk in zip_as.keys():
-                    agg_timearea = aggregate_over_time(zip_aa, zip_at, start_i, zk, end_i)
+                    agg_timearea = aggregate_over_time(zip_aa, zip_at, start_st_i, zk, end_st_i)
                     #take last entry for each time slot
                     for si in agg_timearea.keys():
                         zip_as[zk][si] = agg_timearea[si][-1] # last area val covered in each timeslot.
@@ -860,7 +875,8 @@ for i in expts:
 			colln_count += run_collision_hua
      
                 new_colln_count += run_collision_count
-		path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))
+		colln_count_arr.append( run_collision_count )
+                path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))
                 if run_collision_hua:
                     run_ttc.append(end_i - start_i - 0.1)
                 print("For expt %s, collision hua? %i !! STALL COUNT: %i, ST_O CT: %i"%(exp_id, run_collision_hua, stall_ct, sto_ct) )
@@ -946,6 +962,9 @@ for i in expts:
 
         print("FOR expt %s, area-time zip arr : %s"%( i, str(area_time_zip_arr) ))
         print("FOR expt %s, area-time slot-wise agg : %s" %(i, str(area_time_agg_dict) ) )
+        print("FOR expt %s, colln array : %s"%(i, str(colln_count_arr) ) )
+        print("Time to cover Xp area : ", time_to_areas)
+        print("SimTime to cover Xp area : ", stime_to_areas)
 
         counts_80area.append( len(time_80area) )
 
