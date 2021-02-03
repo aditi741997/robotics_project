@@ -15,6 +15,54 @@ slot = 5 # in seconds.
 
 all_CHAINS = ["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]
 
+def get_num_collisions_run(ts_arr, ts_colln_arr):
+        # make clusters of continuous true's
+        colln_cluster_len = []
+        colln_cluster_start = []
+        colln_cluster_end = []
+        i = 0
+        while i < len(ts_arr):
+            while ( ( i < len(ts_arr) ) and (not ts_colln_arr[i]) ):
+                i += 1
+            if ( ( i < len(ts_arr) ) and ts_colln_arr[i] ):
+                st = i
+                while ( ( i < len(ts_arr) ) and ts_colln_arr[i]):
+                    i += 1
+                end = i-1
+                print("GOT a cluster!! s: %i [%f], e: %i [%f]"%(st, ts_arr[st], end, ts_arr[end]) )
+                colln_cluster_len.append(end - st + 1)
+                colln_cluster_start.append( st )
+                colln_cluster_end.append( end )
+
+        # merge clusters with |end_i - start_i| <= ?
+        newcolid_colid = {} # new id -> arr of col ids.
+        if len(colln_cluster_len) > 0:
+            new_colln_len = []
+            new_colln_start = []
+            new_colln_end = []
+            colid_newcolid = {}
+            colid_newcolid[0] = 0 # col id -> new col id
+            newcolid_colid[0] = [0]
+            for cid in range( len(colln_cluster_len) - 1 ):
+                ei = colln_cluster_end[cid]
+                si1 = colln_cluster_start[cid+1]
+                if (abs(si1-ei) < 3) or ( abs(ts_arr[ei] - ts_arr[si1]) < 0.105):
+                    colid_newcolid[cid+1] = colid_newcolid[cid]
+                    print("MERGED cluster %i [ end %i:%f] WITH cluster %i [start %i: %f]"%(cid, ei, ts_arr[ei], cid+1, si1, ts_arr[si1]) )
+                else:
+                    colid_newcolid[cid+1] = 1+colid_newcolid[cid]
+                    newcolid_colid[ 1+colid_newcolid[cid] ] = []
+                    print("Cluster %i is a new cluster!"%(cid+1) )
+                newcolid_colid[ colid_newcolid[cid+1] ].append(cid+1)
+        # return final #colln clusters with >= 5 true's
+        final_col_ct = 0
+        for newid in newcolid_colid.keys():
+            numvals = sum( [colln_cluster_len[x] for x in newcolid_colid[newid] ] )
+            final_col_ct += (numvals > 4)
+        print("FINAL #nEW COLS : ", len(newcolid_colid), " #COLLISIONS: ", final_col_ct)
+        return final_col_ct
+        
+
 # return dict: slot# -> aggregate value.
 def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
 	m_dict = {}
@@ -218,7 +266,6 @@ def get_robot_edges(px,py,oz,ow):
 	return [ Segment2D(verts[0], verts[1]), Segment2D(verts[1], verts[2]), Segment2D(verts[2], verts[3]), Segment2D(verts[3], verts[0]) ]
 
 def get_obstacle_no_stage(x,y):
-        '''
         if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
 		return 1 # robot1 is line_no+1
 	elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
@@ -256,6 +303,7 @@ def get_obstacle_no_stage(x,y):
                 return 8
         else:
 		return -1
+        '''
 
 def get_dist(x1,y1,x2,y2):
 	return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
@@ -303,7 +351,7 @@ letter = 'N'
 opt_total_Area = 339142.0
 
 # LMap: 818045, 817667, 818141, 817838
-opt_total_Area = 818045.0
+#opt_total_Area = 818045.0
 
 runlevel_agg_lowlevelmetrics = [] # list of lists. 
 runlevel_agg_lowlevelmetrics_dict = {} # metric name -> value. [median in runs, then ?]
@@ -357,20 +405,10 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["FO_DFracV2_2c"] 
-runs = [31,32,33,34,35,36,37,38,39,41] #14,15,16,17,18]
-
-runs = range(41, 89)
-runs.remove(44)
-runs.remove(45)
-runs.remove(48)
-runs.remove(49)
-runs.remove(51)
-runs.remove(55)
-runs = runs[:25]
+expts = ["DFrac1SO2SB_1c" ] #"DefaultTD_2c"] 
 
 runs = range(61,86)
-runs = range(1,21)
+runs = range(1,51)
 print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
@@ -386,7 +424,8 @@ for i in expts:
 	if i == 2:
 		runs = [1,3,4,5]
 	colln_count = 0 # #runs with collision.
-	path_plan_fail_count = 0
+	new_colln_count = 0 # total #collns across all runs.
+        path_plan_fail_count = 0
         
         run_total_times = []
         irun_75p_tput = {} # subchain name -> array.
@@ -399,13 +438,16 @@ for i in expts:
         time_60area = [] # for each run, time to cover 60% of area. [in terms of known_area]
         time_areas = { 20: [], 30: [], 40: [], 50: [], 60: [], 70: [], 80: [], 90: []} 
 	time_st_areas = { 20: [], 30: [], 40: [], 50: [], 60: [], 70: [], 80: [], 90: []}
+        area_time_zip_arr = []
+        area_time_agg_dict = { 20: [], 50: []}
 
         run_pathlens = [] # Distance travelled by robot
         run_areabypaths = [] # ratio of area covered to path length.
 
         for run in runs: #1,2]:
 		run_collision_hua = False
-                
+                run_collision_count = 0
+
 		stall_ct = 0
                 sto_ct = 0
                 run_expl_finished = False
@@ -608,6 +650,7 @@ for i in expts:
 			obfl = f.readlines()
 			numl = (num_obst+3)
 			ts_arr = []
+                        ts_colln_bool_arr = []
 			robo_odom_arr = []
 			robo_ang_odom_arr = []
 			obst_dist_arr = []
@@ -665,12 +708,13 @@ for i in expts:
 					
 					
 					ts_arr.append(pos_rt_ts)
-				
+			                ts_colln_hua = False	
                                         rob_stalled = obfl[o*numl + num_obst + 2].split(' ')[9]
                                         if "\n" in rob_stalled:
                                             rob_stalled = rob_stalled[:-1]
 					if ( (pos_rt_ts > start_i) and (pos_rt_ts < end_i) and (int( rob_stalled ) == 1) ):
 						run_collision_hua = True
+                                                ts_colln_hua = True
 						stall_ct += 1                                       
  
                                         #if "St_O" in obfl[o*numl + num_obst + 2].split(' '):
@@ -688,9 +732,11 @@ for i in expts:
                                                     if (dist < 1.5) and ((pos_rt_ts > start_i) and (pos_rt_ts < end_i)) :
 						    # collision! check pos of robot and this obst
 						        run_collision_hua = True
-							sto_ct += 1
-
-					'''
+							ts_colln_hua = True
+                                                        sto_ct += 1
+                                        ts_colln_bool_arr.append(ts_colln_hua)
+                        run_collision_count = get_num_collisions_run(ts_arr, ts_colln_bool_arr)
+			'''
 					if ( pos_rt_ts > (end_i - (end_i - start_i)/10 ) ) and (pos_rt_ts < (end_i + 1.0) ):
 						robot_edges = get_robot_edges(rob_x, rob_y, oz, ow) # gives an arr of 4segments.
 						colln = False
@@ -718,7 +764,7 @@ for i in expts:
 								if colln:
 									print("For Frac%i%s_run%i : Collision with obstacle!! at time %f, robx: %f, roby: %f"%(i,letter,run,pos_rt_ts,rob_x,rob_y) )
 									collision[exp_id][pos_rt_ts] = True
-					'''
+	    		'''
 
 			odom_agg_i = aggregate_over_time(robo_odom_arr, ts_arr, start_i, slot, end_i)
 			odom_ang_agg_i = aggregate_over_time(robo_ang_odom_arr, ts_arr, start_i, slot, end_i)
@@ -762,6 +808,9 @@ for i in expts:
 		new_area_covered_ts = []
 		last_known_area = 0.0
 		added_to_area_times = {}
+                zip_at = []
+                zip_aa = []
+                zip_as = { 20: {}, 50: {}}
 		with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
 			for l in f.readlines():
 				if 'ratio of unknown/total area' in l:
@@ -771,9 +820,11 @@ for i in expts:
 						known = mpsz - unk
 						new_area_covered.append(known - last_known_area)
 						new_area_covered_ts.append( float(l.split(' ')[4] ) )
+                                                zip_aa.append(known)
+                                                zip_at.append( float(l.split(' ')[4] ) )
                                         except:
 						print("ERROR in line %s in getting area stuff!!"%(l) )
-					if ( (known >= 0.8*opt_total_Area) and (last_known_area < 0.8*opt_total_Area) ):
+                                        if ( (known >= 0.8*opt_total_Area) and (last_known_area < 0.8*opt_total_Area) ):
                                             time_80area.append( float(l.split(' ')[4]) - start_i )
                                         if ( (known >= 0.6*opt_total_Area) and (last_known_area < 0.6*opt_total_Area) ):
                                             time_60area.append( float(l.split(' ')[4]) - start_i )
@@ -788,7 +839,13 @@ for i in expts:
 						if ratio > 0.6:
 							print("Adding line %s to ratio %f"%(l, ratio) )
 					last_known_area = known
-		for rx in added_to_area_times.keys():
+                for zk in zip_as.keys():
+                    agg_timearea = aggregate_over_time(zip_aa, zip_at, start_i, zk, end_i)
+                    #take last entry for each time slot
+                    for si in agg_timearea.keys():
+                        zip_as[zk][si] = agg_timearea[si][-1] # last area val covered in each timeslot.
+                    area_time_agg_dict[zk].append( zip_as[zk] )
+                for rx in added_to_area_times.keys():
 			if (last_known_area < (rx*opt_total_Area)):
 				print("WEIRDDD!!! Final area %f < %f * opt!!!"%(last_known_area, rx) )
                 runlevel_total_area_expl[exp_id] = last_known_area
@@ -801,7 +858,8 @@ for i in expts:
 		new_area_agg.append(sum_new_area_cov_agg)
 		if (stall_ct > 5) or (sto_ct > 5):
 			colln_count += run_collision_hua
-      
+     
+                new_colln_count += run_collision_count
 		path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))
                 if run_collision_hua:
                     run_ttc.append(end_i - start_i - 0.1)
@@ -826,7 +884,7 @@ for i in expts:
         # Total Area explored
 	#print("NEW Area Agg array across runs: ", new_area_agg)
 	run_level_total_times.append(run_total_times)
-	print("For i= ", i, ", run-TotalArea Explored:", run_totalareas)
+        print("For i= ", i, ", run-TotalArea Explored:", run_totalareas)
 	runlevel_med_totalarea.append( (sorted(run_totalareas)[ numrun ])/opt_total_Area ) #median over all runs.
 	runlevel_mean_totalarea.append( (sum(run_totalareas)/len(runs))/opt_total_Area ) # mean totalArea
         runlevel_tail_totalarea.append( (sorted(run_totalareas)[ (8*len(runs))/10 ])/opt_total_Area ) # tail totalArea
@@ -886,6 +944,9 @@ for i in expts:
         runlevel_tail_time80area.append( np.percentile(time_80area, 80, interpolation='nearest') ) #[ (8*len(time_80area))/10 ] )
         runlevel_mean_time80area.append( np.mean(time_80area) ) #sum(time_80area)/len(time_80area) )
 
+        print("FOR expt %s, area-time zip arr : %s"%( i, str(area_time_zip_arr) ))
+        print("FOR expt %s, area-time slot-wise agg : %s" %(i, str(area_time_agg_dict) ) )
+
         counts_80area.append( len(time_80area) )
 
         counts_60area.append( len(time_60area) )
@@ -896,6 +957,7 @@ for i in expts:
 
         # Path Length covered by robot:
         print("For expt %s, pathlength covered by robot: %s"%(i, str(run_pathlens)) )
+        print("For i= ", i, "#COLLISIONS IN RUNS: ", new_colln_count)
         runlevel_med_pathlen.append( np.median(run_pathlens) ) #sorted(run_pathlens)[len(run_pathlens)/2] )
         runlevel_tail_pathlen.append( np.percentile(run_pathlens, 80, interpolation='nearest') ) #sorted(run_pathlens)[(8*len(run_pathlens))/10] )
         runlevel_mean_pathlen.append( np.mean(run_pathlens) ) #sum(run_pathlens)/len(run_pathlens) )
