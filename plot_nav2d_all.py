@@ -15,7 +15,7 @@ slot = 5 # in seconds.
 
 all_CHAINS = ["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP","Scan_LC_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]
 
-def get_num_collisions_run(ts_arr, ts_colln_arr):
+def get_num_collisions_run(ts_arr, ts_colln_arr, start_ts):
         # make clusters of continuous true's
         colln_cluster_len = []
         colln_cluster_start = []
@@ -59,7 +59,7 @@ def get_num_collisions_run(ts_arr, ts_colln_arr):
         for newid in newcolid_colid.keys():
             numvals = sum( [colln_cluster_len[x] for x in newcolid_colid[newid] ] )
             if numvals > 4:
-                final_cols.add( ts_arr [ colln_cluster_start[ newcolid_colid[newid][0] ] ] )
+                final_cols.add( round( ts_arr [ colln_cluster_start[ newcolid_colid[newid][0] ] ] - start_ts, 3 ) )
         print("FINAL #nEW COLS : ", len(newcolid_colid), " #COLLISIONS: ", final_cols)
         return final_cols
         
@@ -745,7 +745,7 @@ for i in expts:
 							ts_colln_hua = True
                                                         sto_ct += 1
                                         ts_colln_bool_arr.append(ts_colln_hua)
-                        run_collision_count = get_num_collisions_run(ts_arr, ts_colln_bool_arr)
+                        run_collision_count = get_num_collisions_run(ts_arr, ts_colln_bool_arr, start_i)
 			'''
 					if ( pos_rt_ts > (end_i - (end_i - start_i)/10 ) ) and (pos_rt_ts < (end_i + 1.0) ):
 						robot_edges = get_robot_edges(rob_x, rob_y, oz, ow) # gives an arr of 4segments.
