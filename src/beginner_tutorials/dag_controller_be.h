@@ -76,8 +76,7 @@ public:
         // DAG data structure : to be used by the scheduling algorithm
         std::map<std::string, int> node_ci, node_fi;
 
-	// std::map<std::string, boost::circular_buffer<double> > node_ci_arr;
-	std::map<std::string, std::list<double> > node_ci_arr, node_ci_ts_arr;
+	std::map<std::string, boost::circular_buffer<double> > node_ci_arr;
 
         std::vector<std::vector<int> > exec_order; // Output from sched algo: vector of subchains.
 	double curr_cc_period = 0.0;
@@ -129,7 +128,6 @@ public:
 
 	std::string get_last_node_cc_name();
 	void update_ci(std::string node_name, double ci);
-	void purge_old_ci(std::string node_name);
 
 	// Helper functions:
 	bool changePriorityThread(std::string nname, int tid, int prio);

@@ -85,11 +85,13 @@ MultiMapper::MultiMapper(ros::Publisher& mcb_pub)
 	mScanPublisher = robotNode.advertise<nav2d_msgs::LocalizedScan>(mScanOutputTopic, 100, true);
 	mMapServer = robotNode.advertiseService(mMapService, &MultiMapper::getMap, this);
 	mMapPublisher = robotNode.advertise<nav_msgs::OccupancyGrid>(mMapTopic, 1, true);
-	mLaserSubscriber = robotNode.subscribe(mLaserTopic, 100, &MultiMapper::receiveLaserScan, this, ros::TransportHints().tcpNoDelay());
+	
+	latest_scans_recv = boost::circular_buffer<sensor_msgs::LaserScan> (100);
+	mLaserSubscriber = robotNode.subscribe("/robot_0/base_scan1", 100, &MultiMapper::receiveLaserScan, this, ros::TransportHints().tcpNoDelay());
 
 	mapperNode.param("drop_fraction", mDropFraction, 1);
 	
-	robotNode.changeDropFraction(mDropFraction);
+	// robotNode.changeDropFraction(mDropFraction);
 
 	mInitialPoseSubscriber = robotNode.subscribe("initialpose", 1, &MultiMapper::receiveInitialPose, this);
 	mOtherRobotsPublisher = robotNode.advertise<nav2d_msgs::RobotPose>("others", 10, true);
@@ -576,7 +578,7 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 		boost::mutex::scoped_lock lock(scan_lock);
 		// Oct: for making mapCB TD:
 		latest_scan_recv.header.frame_id = scan->header.frame_id;
-		latest_scan_recv.header.seq = latest_scan_recv.header.seq;
+		latest_scan_recv.header.seq = scan->header.seq;
 		latest_scan_recv.header.stamp = scan->header.stamp;
 
 		latest_scan_recv.angle_min = scan->angle_min;
@@ -598,6 +600,7 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 	
 		received_scans = true;
 		// ROS_WARN("ROBOT_%i IN nav2d::Mapper receiveLaserScan with TS %f", mRobotID, scan->scan_time);
+		latest_scans_recv.push_back(latest_scan_recv);
 		publishTransform();
 	}
 	/*	
@@ -771,15 +774,29 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 		
 }
 
-void MultiMapper::processLatestScan()
+void MultiMapper::processLatestScans()
 {
 	struct timespec cb_start, cb_end;
         clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
 
 	bool tf_changed = false;
 
+	std::vector<sensor_msgs::LaserScan> scans;
 	{
 		boost::mutex::scoped_lock lock(scan_lock);
+		for (auto const& i : latest_scans_recv)
+		{
+			scans.push_back( i );
+		}
+		latest_scans_recv.clear();
+	}
+	if ( scans.size() > 0 )
+		ROS_ERROR("Will process scan seqs from  %i [ts: %f] to %i [ts: %f]", scans[0].header.seq, scans[0].scan_time, scans[scans.size()-1].header.seq, scans[scans.size()-1].scan_time );
+	if ( scans.size() > 5 )
+		ROS_ERROR("mapcb : TOO MANY [%i] Scans to process!! Why :( ", scans.size() );
+
+	for (int i = 0; i < scans.size(); i++)
+	{
 		// process latest_scan_recv.
 		if(!mLaser)
 		{
@@ -791,11 +808,11 @@ void MultiMapper::processLatestScan()
 			try
 			{
 				mLaser = karto::LaserRangeFinder::CreateLaserRangeFinder(karto::LaserRangeFinder_Custom, name);
-				mLaser->SetMinimumRange(latest_scan_recv.range_min);
-				mLaser->SetMaximumRange(latest_scan_recv.range_max);
-				mLaser->SetMinimumAngle(latest_scan_recv.angle_min);
-				mLaser->SetMaximumAngle(latest_scan_recv.angle_max);
-				mLaser->SetAngularResolution(latest_scan_recv.angle_increment);
+				mLaser->SetMinimumRange(scans[i].range_min);
+				mLaser->SetMaximumRange(scans[i].range_max);
+				mLaser->SetMinimumAngle(scans[i].angle_min);
+				mLaser->SetMaximumAngle(scans[i].angle_max);
+				mLaser->SetAngularResolution(scans[i].angle_increment);
 				mLaser->SetRangeThreshold(mRangeThreshold);
 				mMapper->Process(mLaser);
 
@@ -812,7 +829,7 @@ void MultiMapper::processLatestScan()
 		{
 			// ROS_WARN("IN nav2d_karto::MultiMapper receiveLaserscan -  In ST_LOCALIZING state.");
 			// oct: the shared_ptr throws an error double free. Would need to resolve this for multi robot scenario.
-			boost::shared_ptr<sensor_msgs::LaserScan> cp (&latest_scan_recv);
+			boost::shared_ptr<sensor_msgs::LaserScan> cp (&scans[i]);
 			mSelfLocalizer->process(cp);
 			if(mSelfLocalizer->getCovariance() < mMaxCovariance)
 			{
@@ -827,7 +844,7 @@ void MultiMapper::processLatestScan()
 			tf::StampedTransform tfPose;
 			try
 			{
-				mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, latest_scan_recv.header.stamp, tfPose);
+				mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, scans[i].header.stamp, tfPose);
 			}
 			catch(tf::TransformException e)
 			{
@@ -845,12 +862,12 @@ void MultiMapper::processLatestScan()
 			karto::Pose2 kartoPose = karto::Pose2(tfPose.getOrigin().x(), tfPose.getOrigin().y(), tf::getYaw(tfPose.getRotation()));
 
 			// create localized laser scan
-			karto::LocalizedLaserScanPtr laserScan = createFromRosMessage(latest_scan_recv, mLaser->GetIdentifier());
+			karto::LocalizedLaserScanPtr laserScan = createFromRosMessage(scans[i], mLaser->GetIdentifier());
 			laserScan->SetOdometricPose(kartoPose);
 			laserScan->SetCorrectedPose(kartoPose);
 			// laserScan->setScanTimeStamp(scan->header.stamp.toSec());
 			// using real TS:
-			laserScan->setScanTimeStamp(latest_scan_recv.scan_time);
+			laserScan->setScanTimeStamp(scans[i].scan_time);
 
 			bool success;
 			try
@@ -865,7 +882,6 @@ void MultiMapper::processLatestScan()
 			
 			if(success)
 			{
-				// ROS_WARN("IN nav2d_karto::MultiMapper receiveLaserScan success=true. Now, need to update tf. WIll transform pose : %s and %s", mLaserFrame);
 				// Compute the map->odom transform
 				karto::Pose2 corrected_pose = laserScan->GetCorrectedPose();
 				tf::Pose map_in_robot(tf::createQuaternionFromYaw(corrected_pose.GetHeading()), tf::Vector3(corrected_pose.GetX(), corrected_pose.GetY(), 0.0));
@@ -874,7 +890,7 @@ void MultiMapper::processLatestScan()
 				bool ok = true;
 				try
 				{
-					mTransformListener.transformPose(mOffsetFrame, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) /* latest_scan_recv.header.stamp*/, mLaserFrame), map_in_odom);
+					mTransformListener.transformPose(mOffsetFrame, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) /* scans[i].header.stamp*/, mLaserFrame), map_in_odom);
 				}
 				catch(tf::TransformException e)
 				{
@@ -895,13 +911,13 @@ void MultiMapper::processLatestScan()
 					// Latest scan used in the mapTOOdom TF:
 					// last_scan_mapCB_tf_processed = scan->header.stamp.toSec();
 					// using real TS:
-					last_scan_mapCB_tf_processed = latest_scan_recv.scan_time;
+					last_scan_mapCB_tf_processed = scans[i].scan_time;
 					publishTransform();
 				}
 				mNodesAdded++;
 				mMapChanged = true;
 
-				ROS_ERROR("robot %d : IN nav2d_Mapper scanCB : SUCCESSFULLY processed scan rosTS %f  realTS%f, arr len %i, mNodesAdded: %i", mRobotID, latest_scan_recv.header.stamp.toSec(), latest_scan_recv.scan_time, scan_cb_times.size(), mNodesAdded);
+				ROS_ERROR("robot %d : IN nav2d_Mapper scanCB : SUCCESSFULLY processed scan rosTS %f  realTS%f, arr len %i, mNodesAdded: %i", mRobotID, scans[i].header.stamp.toSec(), scans[i].scan_time, scan_cb_times.size(), mNodesAdded);
 					// Scan CB Times : Exclude map Update time.
 					clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
 					double t = get_time_diff(cb_start, cb_end);
@@ -940,13 +956,7 @@ void MultiMapper::processLatestScan()
 				// denotes that there's atleast 1scan in the list of processed scans.
 				// Needed so that mapUpdate doesnt start running until there are scans. [Throws exception o.w.]
 				processed_scans = true;
-				// Moving mapUpdate to a separate thread.
-				// ros::WallDuration d = ros::WallTime::now() - mLastMapUpdate;
-				// if(mMapUpdateRate > 0 && d.toSec() > mMapUpdateRate)
-				// {
-				//      sendMap();
-				// }
-
+				
 				// Send the scan to the other robots via com-layer (DDS)
 				ROS_DEBUG("Robot %d: Sending scan (uniqueID: %d, Sensor: %s, stateID: %d)", mRobotID, laserScan->GetUniqueId(), laserScan->GetSensorIdentifier().ToString().ToCString(), laserScan->GetStateId());
 				sendLocalizedScan(laserScan->GetOdometricPose());
@@ -1024,7 +1034,7 @@ void MultiMapper::mapScanCBLoop(double per)
 		// process stored scan.
 		if (received_scans)
 		{
-			processLatestScan();
+			processLatestScans();
 		}
 		
 		total_map_cb_trig_count += 1;
@@ -1048,7 +1058,7 @@ void MultiMapper::mapScanCBLoop(double per)
 			{
 				cv_mapcb.wait(lock);
 			}
-			ROS_ERROR("About to processLatestScan %i", mapcb_trigger_count);
+			// ROS_ERROR("About to processLatestScan %i", mapcb_trigger_count);
 			mapcb_trigger_count = 0; // flush on read.
 		}
 
@@ -1068,7 +1078,7 @@ bool MultiMapper::getMap(nav_msgs::GetMap::Request  &req, nav_msgs::GetMap::Resp
 	// ROS_WARN("IN nav2d::MultiMapper getMap service call!!!!");
 	if(mState == ST_WAITING_FOR_MAP && mNodesAdded < mMinMapSize)
 	{
-		ROS_WARN("Still waiting for map from robot 1.");
+		ROS_ERROR("Still waiting for map from robot 1.");
 		return false;
 	}
 	
@@ -1395,21 +1405,23 @@ void MultiMapper::sendLocalizedScan(const karto::Pose2& pose)
         rosScan.y = pose.GetY();
         rosScan.yaw = pose.GetHeading();
 
-        rosScan.scan.angle_min = latest_scan_recv.angle_min;
-        rosScan.scan.angle_max = latest_scan_recv.angle_max;
-        rosScan.scan.range_min = latest_scan_recv.range_min;
-        rosScan.scan.range_max = latest_scan_recv.range_max;
-        rosScan.scan.angle_increment = latest_scan_recv.angle_increment;
-        rosScan.scan.time_increment = latest_scan_recv.time_increment;
-        rosScan.scan.scan_time = latest_scan_recv.scan_time;
+	{
+		boost::mutex::scoped_lock lock(scan_lock);
+		rosScan.scan.angle_min = latest_scan_recv.angle_min;
+		rosScan.scan.angle_max = latest_scan_recv.angle_max;
+		rosScan.scan.range_min = latest_scan_recv.range_min;
+		rosScan.scan.range_max = latest_scan_recv.range_max;
+		rosScan.scan.angle_increment = latest_scan_recv.angle_increment;
+		rosScan.scan.time_increment = latest_scan_recv.time_increment;
+		rosScan.scan.scan_time = latest_scan_recv.scan_time;
 
-        unsigned int nReadings = latest_scan_recv.ranges.size();
-        rosScan.scan.ranges.resize(nReadings);
-        for(unsigned int i = 0; i < nReadings; i++)
-        {
-                rosScan.scan.ranges[i] = latest_scan_recv.ranges[i];
-        }
-
+		unsigned int nReadings = latest_scan_recv.ranges.size();
+		rosScan.scan.ranges.resize(nReadings);
+		for(unsigned int i = 0; i < nReadings; i++)
+		{
+			rosScan.scan.ranges[i] = latest_scan_recv.ranges[i];
+		}
+	}
 //      rosScan.scan = *scan;
         mScanPublisher.publish(rosScan);
 

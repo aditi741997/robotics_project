@@ -15,6 +15,8 @@
 
 #include <string>
 #include <map>
+#include <list>
+#include <boost/circular_buffer.hpp>
 
 #include <fstream>
 #include <boost/thread.hpp>
@@ -99,9 +101,10 @@ public:
 	// Making a thread for mapCB as well:
 	boost::thread* map_scan_cb_thread_;
 	bool map_scan_cb_thread_shutdown_;
-	sensor_msgs::LaserScan latest_scan_recv; // this is what'll be processed by the mapScanCBLoop.
+	boost::circular_buffer<sensor_msgs::LaserScan> latest_scans_recv; // this is what'll be processed by the mapScanCBLoop.
+	sensor_msgs::LaserScan latest_scan_recv;
 	void mapScanCBLoop(double freq);
-	void processLatestScan();
+	void processLatestScans();
 	double mMapScanUpdateRate; // Oct: period of scanCB thread.
 
 	boost::mutex scan_lock; // to lock usage of latest_scan_recv.
