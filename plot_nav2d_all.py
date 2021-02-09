@@ -46,7 +46,7 @@ def get_num_collisions_run(ts_arr, ts_colln_arr, start_ts):
             for cid in range( len(colln_cluster_len) - 1 ):
                 ei = colln_cluster_end[cid]
                 si1 = colln_cluster_start[cid+1]
-                if (abs(si1-ei) < 3) or ( abs(ts_arr[ei] - ts_arr[si1]) < 0.105):
+                if (abs(si1-ei) < 3) or ( abs(ts_arr[ei] - ts_arr[si1]) < 0.505):
                     colid_newcolid[cid+1] = colid_newcolid[cid]
                     print("MERGED cluster %i [ end %i:%f] WITH cluster %i [start %i: %f]"%(cid, ei, ts_arr[ei], cid+1, si1, ts_arr[si1]) )
                 else:
@@ -406,9 +406,8 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["DFracOld2SB_1c" ] #"DefaultTD_2c"] 
+expts = ["DFrNoSC_1c" ] #"DefaultTD_2c"] 
 
-runs = range(61,86)
 runs = range(1,51)
 #runs.remove(3)
 print(runs, len(runs))
