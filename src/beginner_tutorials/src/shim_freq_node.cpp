@@ -137,7 +137,8 @@ ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topi
     real_last_recv_ts = 0.0;
 
     thread_exec_info_pub = nh.advertise<std_msgs::Header>("/robot_0/exec_start_s", 100, true);
-    
+    s_exec_end_pub = nh.advertise<std_msgs::Header>("/robot_0/exec_end_s", 1, false);
+
     // start thread for publishing :
     // Dont need this thread if Scheduler triggers CC:
     
@@ -312,6 +313,11 @@ void ShimFreqNode::printVecStats(std::vector<double> v, std::string st)
 
 void ShimFreqNode::publishLatestData()
 {
+	struct timespec exec_start, exec_end;
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &exec_start);
+
+	double time_now = get_time_now();
+	
 	//publish thread id info.
 	if (pub_count < 11)
 	{
@@ -333,7 +339,6 @@ void ShimFreqNode::publishLatestData()
 	
 	{
 		boost::mutex::scoped_lock lock(data_lock);
-		double time_now = get_time_now();
 		if ( (time_now - latest_scan.scan_time) < -0.004)
 		{
 			neg_lat_count += 1;
@@ -350,6 +355,10 @@ void ShimFreqNode::publishLatestData()
                 	scan_pub_tput.push_back(time_now - last_pub_ts);
         	last_pub_ts = time_now;
 
+		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &exec_end);
+		std_msgs::Header s_exec_time;
+		s_exec_time.frame_id = std::to_string( (exec_end.tv_sec + 1e-9*exec_end.tv_nsec ) - ( exec_start.tv_sec + 1e-9*exec_start.tv_nsec ) ) + " s";
+		s_exec_end_pub.publish(s_exec_time);
 	}
 }
 
