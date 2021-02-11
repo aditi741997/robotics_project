@@ -406,15 +406,15 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["DFrNoSC_1c" ] #"DefaultTD_2c"] 
+expts = ["FracOld2SB_1c" ] #"DefaultTD_2c"] 
 
-runs = range(1,51)
+runs = range(1, 51)
 #runs.remove(3)
 print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
-run_rts_percentile = 75 #50
-run_lats_percentile = 75
+run_rts_percentile = 90 #50
+run_lats_percentile = 90
 for i in expts:
         run_totalareas = []
 	run_tputs = {} # name -> list
@@ -444,6 +444,7 @@ for i in expts:
         colln_count_arr = []
         time_to_areas = [] # arr of dicts
         stime_to_areas = [] # arrof dicts
+        clean_finish_arr = [] # whether each run was a clean exit.
 
         run_pathlens = [] # Distance travelled by robot
         run_areabypaths = [] # ratio of area covered to path length.
@@ -455,7 +456,8 @@ for i in expts:
 		stall_ct = 0
                 sto_ct = 0
                 run_expl_finished = False
-		run_path_plan_fail = False
+		run_expl_clean_finish = False
+                run_path_plan_fail = False
                 
                 #exp_id = str(i) + letter +'run_' + str(run)
 		exp_id = i + '_run' + str(run)
@@ -887,9 +889,12 @@ for i in expts:
                     run_ttc.append(end_i - start_i - 0.1)
                 print("For expt %s, collision hua? %i !! STALL COUNT: %i, ST_O CT: %i"%(exp_id, run_collision_hua, stall_ct, sto_ct) )
                 
-                #if ( (last_known_area > (0.9*opt_total_Area)) ): #run_expl_finished and : for now, only checking 90%area time.
+                if ( (last_known_area > (0.9*opt_total_Area)) ) and run_expl_finished: 
+                    clean_finish_arr.append(True)
+                    run_expl_clean_finish = True
                     #fullExplTimes.append(end_i - start_i - 0.1)
-	        
+                else:
+                    clean_finish_arr.append(False)
                 run_pathlens.append(run_path_len_sum)
                 run_areabypaths.append( last_known_area / run_path_len_sum )
         
@@ -971,6 +976,7 @@ for i in expts:
         print("FOR expt %s, colln array : %s"%(i, str(colln_count_arr) ) )
         print("Time to cover Xp area : ", time_to_areas)
         print("SimTime to cover Xp area : ", stime_to_areas)
+        print("FOR expt %s, clean finish arr : %s"%(i, clean_finish_arr) )
 
         counts_80area.append( len(time_80area) )
 
