@@ -113,7 +113,7 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf, ros::Pub
   std::string tf_prefix = tf::getPrefixParam(prefix_nh);
 
   // get two frames
-  private_nh.param("global_frame", global_frame_, std::string("/map"));
+  private_nh.param("global_frame", global_frame_, std::string("odom"));
   private_nh.param("robot_base_frame", robot_base_frame_, std::string("base_link"));
 
   // make sure that we set the frames appropriately based on the tf_prefix
@@ -147,6 +147,7 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf, ros::Pub
   private_nh.param("track_unknown_space", track_unknown_space, false);
   private_nh.param("always_send_full_costmap", always_send_full_costmap, false);
 
+  ROS_ERROR("In Costmap2dRos, rolling_window param value: %i", rolling_window);
   layered_costmap_ = new LayeredCostmap(global_frame_, rolling_window, track_unknown_space);
 
   if (!private_nh.hasParam("plugins"))
@@ -208,6 +209,8 @@ Costmap2DROS::Costmap2DROS(std::string name, tf::TransformListener& tf, ros::Pub
   robot_stopped_ = false;
   timer_ = private_nh.createTimer(ros::Duration(.1), &Costmap2DROS::movementCB, this);
 
+  lc_exec_end_pub = private_nh.advertise<std_msgs::Header>("/robot_0/exec_end_lc", 1, false);
+
   dsrv_ = new dynamic_reconfigure::Server<Costmap2DConfig>(ros::NodeHandle("~/" + name));
   dynamic_reconfigure::Server<Costmap2DConfig>::CallbackType cb = boost::bind(&Costmap2DROS::reconfigureCB, this, _1,
                                                                               _2);
@@ -253,6 +256,7 @@ void Costmap2DROS::resetOldParameters(ros::NodeHandle& nh)
     plugins.push_back(super_map);
 
     ros::NodeHandle map_layer(nh, "static_layer");
+    ROS_ERROR("Costmap2dros:: static_map was TRUE!!!! Moving params to map layer");
     move_parameter(nh, map_layer, "map_topic");
     move_parameter(nh, map_layer, "unknown_cost_value");
     move_parameter(nh, map_layer, "lethal_cost_threshold");
@@ -330,6 +334,7 @@ void Costmap2DROS::reconfigureCB(costmap_2d::Costmap2DConfig &config, uint32_t l
              config.origin_x,
          origin_y = config.origin_y;
 
+  ROS_ERROR("Costmap2dROS In reconfigureCB: width: %f, height: %f, resolution: %f", map_width_meters, map_height_meters, resolution);
   if (!layered_costmap_->isSizeLocked())
   {
     layered_costmap_->resizeMap((unsigned int)(map_width_meters / resolution),
@@ -418,10 +423,12 @@ void Costmap2DROS::movementCB(const ros::TimerEvent &event)
   }
 }
 
+/*
 double Costmap2DROS::getDeltaFromLastUpdated()
 {
     return (ros::Time::now() - last_updated_).toSec();
 }
+*/
 
 void Costmap2DROS::mapUpdateLoop(double frequency)
 {
@@ -438,9 +445,9 @@ void Costmap2DROS::mapUpdateLoop(double frequency)
   if (lc_pub != NULL)
   	lc_pub->publish(hdr);
   
-  ROS_ERROR("COSTMAP2DROS %s mapUpdateLoop started. thread id : %i", name_.c_str(), ::gettid());
+  ROS_ERROR("COSTMAP2DROS %s mapUpdateLoop started. thread id : %i, freq input: %f", name_.c_str(), ::gettid(), frequency);
 
-  ros::Rate r(frequency);
+  ros::WallRate r(frequency);
   while (nh.ok() && !map_update_thread_shutdown_)
   {
 
@@ -474,16 +481,7 @@ void Costmap2DROS::mapUpdateLoop(double frequency)
       }
     }
 
-    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cmp_end_ts);
-    double cmp_time = (cmp_end_ts.tv_sec + 1e-9*cmp_end_ts.tv_nsec) - (cmp_start_ts.tv_sec + 1e-9*cmp_start_ts.tv_nsec);
-
-    // get real TS for cmp start.
-    double cmp_rt_end = get_time_now();
     
-    cmp_time_arr.push_back(cmp_time);
-    cmp_time_start_arr.push_back(cmp_rt_end);
-    cmp_time_sum += cmp_time;
-
     last_updated_ = ros::Time::now();
 
     // For converting to ED : this func waits for the notification from obstacle layer:
@@ -524,7 +522,24 @@ void Costmap2DROS::mapUpdateLoop(double frequency)
     };
 
     // Notify the robotOperator (LocalPLanner):
-    cv_robot_op_lp->notify_all();
+    if (cv_robot_op_lp != NULL)
+    	cv_robot_op_lp->notify_all();
+    else
+	ROS_ERROR("cv_robot_op_lp IS NULL!!!");
+
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cmp_end_ts);
+    double cmp_time = (cmp_end_ts.tv_sec + 1e-9*cmp_end_ts.tv_nsec) - (cmp_start_ts.tv_sec + 1e-9*cmp_start_ts.tv_nsec);
+
+    // get real TS for cmp start.
+    double cmp_rt_end = get_time_now();
+    
+    cmp_time_arr.push_back(cmp_time);
+    cmp_time_start_arr.push_back(cmp_rt_end);
+    cmp_time_sum += cmp_time;
+
+    // std_msgs::Header lc_exec_end;
+    // lc_exec_end.frame_id = std::to_string( cmp_time ) + " lc";
+    // lc_exec_end_pub.publish(lc_exec_end);
 
     // For converting critical chain of S - LC - LP to ED,
     // LC update needs to wait for a scan to come in [will be notified by obstacle layer].

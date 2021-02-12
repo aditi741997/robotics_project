@@ -313,7 +313,7 @@ bool RobotNavigator::getMap()
 	}
 	
 	nav_msgs::GetMap srv;
-	ROS_ERROR("IN RoboNavigator calling getMap service!!");
+	// ROS_WARN("IN nav2d::RobotNavigator About to call getMap service!!");
 	if(!mGetMapClient.call(srv))
 	{
 		ROS_ERROR("Could not get a map.");
@@ -532,7 +532,6 @@ bool RobotNavigator::createPlan()
 		if (mCurrentPlan[i] != newPlan[i])
 			ROS_ERROR("SHITTTTTTTTT Plan was NOT COPIED CORRECTLY!!! In createPlan()");
 	currentPlanSize = mapSize;
-	currentPlanMutex.unlock();
 	
 	if(mCurrentPlan[mStartPoint] < 0)
 	{
@@ -541,6 +540,7 @@ bool RobotNavigator::createPlan()
 	}
 	
 	publishPlan();
+	currentPlanMutex.unlock();
 
 	// For measuring RT: 
 	current_plan_last_scan_mapCB_mapUpd_used_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
@@ -1408,7 +1408,9 @@ void RobotNavigator::navGenerateCmdLoop()
 			if(cycle%10 == 0)
 			{
 				nav2d_navigator::ExploreFeedback fb;
+				currentPlanMutex.lock();
 				fb.distance = mCurrentPlan[mStartPoint];
+				currentPlanMutex.unlock();
 				fb.robot_pose.x = mCurrentPositionX;
 				fb.robot_pose.y = mCurrentPositionY;
 				fb.robot_pose.theta = mCurrentDirection;
