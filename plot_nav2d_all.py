@@ -406,9 +406,9 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["FracOld2SB_1c" ] #"DefaultTD_2c"] 
+expts = ["DefaultHigh_1c" ] #"DefaultTD_2c"] 
 
-runs = range(1, 51)
+runs = range(51, 101)
 #runs.remove(3)
 print(runs, len(runs))
 
@@ -444,7 +444,8 @@ for i in expts:
         colln_count_arr = []
         time_to_areas = [] # arr of dicts
         stime_to_areas = [] # arrof dicts
-        clean_finish_arr = [] # whether each run was a clean exit.
+        clean_finish_arr = [] # whether each run was a clean [>90p area & expl finished] exit.
+	run_finish_arr = [] # whether the robot claimed expl had finished.
 
         run_pathlens = [] # Distance travelled by robot
         run_areabypaths = [] # ratio of area covered to path length.
@@ -493,7 +494,7 @@ for i in expts:
 		# end_i = start_i + slot + 1.0
 		print("For i ", i, " Start, end times: ", start_i, end_i)
 		run_total_times.append(end_st_i - start_st_i - 0.1)
-
+		run_finish_arr.append( run_expl_finished )
 		# store each run's metrics as dict: window# -> value
 		# so its easier to take intersection of set of keys of all metrics.
 	# Get tput for each subchain
@@ -977,7 +978,7 @@ for i in expts:
         print("Time to cover Xp area : ", time_to_areas)
         print("SimTime to cover Xp area : ", stime_to_areas)
         print("FOR expt %s, clean finish arr : %s"%(i, clean_finish_arr) )
-
+	print("for EXPT %s, run_expl_finished ARR: %s"%(i, str(run_finish_arr) ) )
         counts_80area.append( len(time_80area) )
 
         counts_60area.append( len(time_60area) )
