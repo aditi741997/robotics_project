@@ -21,7 +21,8 @@ def get_num_collisions_run(ts_arr, ts_colln_arr, start_ts):
         colln_cluster_start = []
         colln_cluster_end = []
         i = 0
-        while i < len(ts_arr):
+        last_col_ts = 0.0
+	while i < len(ts_arr):
             while ( ( i < len(ts_arr) ) and (not ts_colln_arr[i]) ):
                 i += 1
             if ( ( i < len(ts_arr) ) and ts_colln_arr[i] ):
@@ -33,9 +34,10 @@ def get_num_collisions_run(ts_arr, ts_colln_arr, start_ts):
                 colln_cluster_len.append(end - st + 1)
                 colln_cluster_start.append( st )
                 colln_cluster_end.append( end )
-
+		last_col_ts = (ts_arr[end] - start_ts)
         # merge clusters with |end_i - start_i| <= ?
-        newcolid_colid = {} # new id -> arr of col ids.
+    	
+  	newcolid_colid = {} # new id -> arr of col ids.
         if len(colln_cluster_len) > 0:
             new_colln_len = []
             new_colln_start = []
@@ -61,7 +63,7 @@ def get_num_collisions_run(ts_arr, ts_colln_arr, start_ts):
             if numvals > 4:
                 final_cols.add( round( ts_arr [ colln_cluster_start[ newcolid_colid[newid][0] ] ] - start_ts, 3 ) )
         print("FINAL #nEW COLS : ", len(newcolid_colid), " #COLLISIONS: ", final_cols)
-        return final_cols
+        return (final_cols, last_col_ts)
         
 
 # return dict: slot# -> aggregate value.
@@ -446,6 +448,7 @@ for i in expts:
         stime_to_areas = [] # arrof dicts
         clean_finish_arr = [] # whether each run was a clean [>90p area & expl finished] exit.
 	run_finish_arr = [] # whether the robot claimed expl had finished.
+	runs_colln_end_arr = [] # whether there was a collision in the end of the run [last 10s ST]
 
         run_pathlens = [] # Distance travelled by robot
         run_areabypaths = [] # ratio of area covered to path length.
@@ -453,6 +456,7 @@ for i in expts:
         for run in runs: #1,2]:
 		run_collision_hua = False
                 run_collision_count = 0
+		run_collision_end = False
 
 		stall_ct = 0
                 sto_ct = 0
@@ -749,7 +753,7 @@ for i in expts:
 							ts_colln_hua = True
                                                         sto_ct += 1
                                         ts_colln_bool_arr.append(ts_colln_hua)
-                        run_collision_count = get_num_collisions_run(st_ts_arr, ts_colln_bool_arr, start_st_i)
+                        run_collision_count, last_colln_ts = get_num_collisions_run(st_ts_arr, ts_colln_bool_arr, start_st_i)
 			'''
 					if ( pos_rt_ts > (end_i - (end_i - start_i)/10 ) ) and (pos_rt_ts < (end_i + 1.0) ):
 						robot_edges = get_robot_edges(rob_x, rob_y, oz, ow) # gives an arr of 4segments.
@@ -886,7 +890,11 @@ for i in expts:
                 #new_colln_count += run_collision_count
 		colln_count_arr.append( run_collision_count )
                 path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))
-                if run_collision_hua:
+                
+		run_collision_end = ( abs(last_colln_ts - (end_st_i - start_st_i) ) <= 10.0 ) # it can take sometime for navigator to end run.
+		runs_colln_end_arr.append( (last_colln_ts, (end_st_i - start_st_i)) )
+		
+		if run_collision_hua:
                     run_ttc.append(end_i - start_i - 0.1)
                 print("For expt %s, collision hua? %i !! STALL COUNT: %i, ST_O CT: %i"%(exp_id, run_collision_hua, stall_ct, sto_ct) )
                 
@@ -979,6 +987,8 @@ for i in expts:
         print("SimTime to cover Xp area : ", stime_to_areas)
         print("FOR expt %s, clean finish arr : %s"%(i, clean_finish_arr) )
 	print("for EXPT %s, run_expl_finished ARR: %s"%(i, str(run_finish_arr) ) )
+	print("FOR EXPT %s, runs_colln_end_arr : %s "%(i, str(runs_colln_end_arr)) )
+
         counts_80area.append( len(time_80area) )
 
         counts_60area.append( len(time_60area) )
