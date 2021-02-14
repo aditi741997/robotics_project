@@ -87,6 +87,8 @@ public:
 	std::vector<double> scan_drop_ts;
 	std::vector<double> scan_drop_exec_time;
 
+	std::vector<bool> scan_pose_ts;
+
 	long int total_mapcb_count, total_mapupdate_count;
 
 	ros::Publisher mScanTSPublisher;
