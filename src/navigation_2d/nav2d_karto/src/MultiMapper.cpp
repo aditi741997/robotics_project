@@ -535,7 +535,8 @@ void write_arrs_to_file(std::vector<double>& times, std::vector<double>& ts, std
 	ts.clear();
 }
 
-void write_arr_to_file(std::vector<double>& tput, std::string s, std::string m)
+template <class T>
+void write_arr_to_file(std::vector<T>& tput, std::string s, std::string m)
 {
 	std::string ename;
     ros::NodeHandle nh;
@@ -845,16 +846,18 @@ void MultiMapper::processLatestScans()
 			try
 			{
 				mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, scans[i].header.stamp, tfPose);
+				scan_pose_ts.push_back(true);
 			}
 			catch(tf::TransformException e)
 			{
 				try
 				{
 					mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, ros::Time(0), tfPose);
+					scan_pose_ts.push_back(false);
 				}
 				catch(tf::TransformException e)
 				{
-					ROS_WARN("ROBOT_%i Failed to compute odometry pose, skipping scan (%s)", mRobotID, e.what());
+					ROS_ERROR("ROBOT_%i Failed to compute odometry pose, skipping scan (%s)", mRobotID, e.what());
 					return;
 				}
 			}
@@ -991,10 +994,11 @@ void MultiMapper::processLatestScans()
 		std::string ss = "nav2d_mapper_scanCB";
         // of.open("/home/aditi/robot_" + ss + "_stats_r1.txt", std::ios_base::app);
         	write_arrs_to_file(scan_cb_times, scan_cb_ts, ss);
-		write_arr_to_file(tput_map_cb, ss, "tput");
-		write_arr_to_file(scan_drop_ts, ss, "scanDrop");
-		write_arr_to_file(scan_drop_exec_time, ss, "scanDropExecTimes");
-		write_arr_to_file(trig_tput_map_cb, ss, "trigTput");
+		write_arr_to_file<double>(tput_map_cb, ss, "tput");
+		write_arr_to_file<double>(scan_drop_ts, ss, "scanDrop");
+		write_arr_to_file<double>(scan_drop_exec_time, ss, "scanDropExecTimes");
+		write_arr_to_file<double>(trig_tput_map_cb, ss, "trigTput");
+		write_arr_to_file<bool>(scan_pose_ts, ss, "scanPoseTS");
 	}
 
 
@@ -1286,7 +1290,7 @@ bool MultiMapper::updateMap()
 		std::string mus = "nav2d_mapper_mapUpdate";
 		// of.open("/home/aditi/robot_" + mus + "_stats_r1.txt",  std::ios_base::app);
 		write_arrs_to_file(map_update_times, map_update_ts, mus, map_update_scan_count);
-		write_arr_to_file(tput_map_update, mus, "tput");
+		write_arr_to_file<double>(tput_map_update, mus, "tput");
 		// of << "\n" << mus << " ScanCount: ";
 		// for (int i = 0; i < map_update_scan_count.size(); i++)
 		// 	of << map_update_scan_count[i] << " ";
