@@ -202,7 +202,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::start()
 	{
-		startup_thread = new boost::thread(&DAGControllerBE::startup_trigger_func, this);
+		if (dag_name.find("illixr") == std::string::npos)
+			startup_thread = new boost::thread(&DAGControllerBE::startup_trigger_func, this);
 	}
 
 	void DAGControllerBE::thread_custom_sleep_for(int microsec)
@@ -281,10 +282,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					sched_started = true;
 					
 					// Lets kill the startup_thread!
-					pthread_cancel(startup_thread->native_handle());
-					pthread_join(startup_thread->native_handle(), NULL);
-					startup_thread->detach();
-					startup_thread = NULL;
+					if (startup_thread->joinable())
+					{
+						pthread_cancel(startup_thread->native_handle());
+						pthread_join(startup_thread->native_handle(), NULL);
+						startup_thread->detach();
+						startup_thread = NULL;
+					}
 					
 					for (int i = 0; i < reset_count.size(); i++)
 						reset_count[i] = true;
