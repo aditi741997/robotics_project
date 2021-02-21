@@ -1045,7 +1045,7 @@ void DAG::clear_old_data(int frac_var_count)
 	all_rt_minmono_periods.clear();
 }
 
-void DAG::update_cis(std::map<std::string, std::list<double> >& node_ci_arr)
+void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> >& node_ci_arr)
 {
 	for (auto const& x: node_ci_arr)
 	{
