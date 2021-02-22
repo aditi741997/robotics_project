@@ -353,8 +353,7 @@ bool DAG::order_chains_criticality(std::vector<std::tuple<float, std::vector<int
 
 	double cons0 = std::get<0>(all_chains[0]);
 	
-	if (name_id_map.find("s") != name_id_map.end() ) // hard-coding for nav2d based on 90p LMap ci.
-		all_chains_rel_weights = std::vector<double> {1.0, 0.0064, 0.006, 0.0046, 0.001};
+	all_chains_rel_weights = std::vector<double> {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
 	// for (int i = 0; i < all_chains.size(); i++)
 		// all_chains_rel_weights.push_back( cons0/ (std::get<0>(all_chains[i])) );
 	print_dvec(all_chains_rel_weights, "All Chains Rel Weights:");
