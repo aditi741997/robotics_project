@@ -10,10 +10,11 @@ class scheduler_plugin : public plugin, public DAGControllerFE {
 public:
     scheduler_plugin(std::string name_, phonebook* pb_)
         : plugin{name_, pb_}
-		, controller{std::make_unique<DAGControllerBE>("../robotics_project/illixr_dag.txt", this, false, "no", "no", 1, 2, 3, 4, 5, 6, 7, 2)}
+		, controller{std::make_unique<DAGControllerBE>("../robotics_project/illixr_dag.txt", this, false, "no", "no", 1, 2, 3, 4, 5, 6, 7, 1)}
 		, sb{pb->lookup_impl<switchboard>()}
 	{
-		for (const auto& pair : controller->node_dag.name_id_map) {
+		std::cout << "Hello world " << controller->node_dag_mc.name_id_map.size() << "\n";
+		for (const auto& pair : controller->node_dag_mc.name_id_map) {
 			std::string name = pair.first;
 			std::cerr << "Creating entry for " << pair.first << ": " << pair.second << "\n";
 			sb->schedule<thread_info>(
@@ -29,7 +30,7 @@ public:
 				std::move(sb->get_writer<switchboard::event_wrapper<bool>>(name + "_trigger"))
 			));
 		}
-		
+
 		sb->schedule<switchboard::event_wrapper<bool>>(
 			id,
 			controller->get_last_node_cc_name() + "_completion",
@@ -37,7 +38,9 @@ public:
 				controller->recv_critical_exec_end();
 			}
 		);
+	}
 
+	virtual void start2() override {
 		controller->start();
 	}
 

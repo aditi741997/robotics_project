@@ -22,6 +22,9 @@
 
 #include <dag_controller_be.h>
 
+#define DEBUG2(x1, x2) std::cerr << __FILE__ << ':' << __LINE__ << ": " << #x1 << "=" << x1 << << ", " << #x2 << "=" << x2 << std::endl;
+#define DEBUG(x) std::cerr << __FILE__ << ':' << __LINE__ << ": " << #x << "=" << x << std::endl;
+
 int sched_setattr(pid_t pid, const struct sched_attr *attr, unsigned int flags)
 {
 	        return syscall(__NR_sched_setattr, pid, attr, flags);
@@ -117,9 +120,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		}
 		else if (dag_name.find("illixr") != std::string::npos)
 		{
-			offline_fracs["8"] = 1.0;
-			offline_fracs["9"] = 1.0/f_mu; // cam-slam : 3,4
-			offline_fracs["5"] = 1.0/f_mc; // render : 7
+			offline_fracs["7"] = 1.0; // imu is start of cc, tw
+			offline_fracs["8"] = 1.0/f_mu; // cam-slam
+			offline_fracs["5"] = 1.0/f_mc; // render
 		}
 		update_per_core_period_map(); // uses offline_fracs,nodeDagMC's sc_core_Assgt. 
 
@@ -281,10 +284,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					sched_started = true;
 					
 					// Lets kill the startup_thread!
-					pthread_cancel(startup_thread->native_handle());
-					pthread_join(startup_thread->native_handle(), NULL);
-					startup_thread->detach();
-					startup_thread = NULL;
+					if (startup_thread->joinable())
+					{
+						pthread_cancel(startup_thread->native_handle());
+						pthread_join(startup_thread->native_handle(), NULL);
+						startup_thread->detach();
+						startup_thread = NULL;
+					}
 					
 					for (int i = 0; i < reset_count.size(); i++)
 						reset_count[i] = true;
@@ -371,7 +377,14 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				core_period += (double)sc_to[i]/1000.0;
 			}
 			offline_fracs_mtx.unlock();
-		
+			if (total_period_count % 100 == 0) {
+				DEBUG(core_period);
+				for (size_t i = 0; i < sc_fracs.size(); ++i) {
+					DEBUG(i);
+					DEBUG(sc_fracs[i]);
+				}
+			}
+
 			for (int i = 0; ( (i < core_exec_order.size()) && (!shutdown_scheduler) ); i++)
 			{
 				// prio(i) = 2, all others = 1.
@@ -535,7 +548,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		else if (dag_name.find("ill") != std::string::npos)
 		{
 			bool ans = true;
-			std::vector<std::string> node_ids {"6", "9", "3", "2", "5", "8"};
+			std::vector<std::string> node_ids {"6", "3", "2", "5", "8", "7"}; // wait for all 6 tids.
 			for (int i = 0; i < node_ids.size(); i++)
 				ans = ans && ( node_tid.find(node_ids[i]) != node_tid.end() );
 			return ans;
@@ -866,10 +879,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		{
 			// printf("MT: %f, RT: %f, trigger node: %s, frac: %i, period_count: %li \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, per_core_period_counts[core_id]);
 		
-                	// we always want the node to run exactly once whenever it wakes up, and hence only a bool is needed.	
 			frontend->trigger_node(name, true);
 			// For Illixr Dag, need to trigger TW along with Imu, cuz Imu is at fixed freq for now. 
-			if ( (name.find("8") != std::string::npos) && (dag_name.find("ill") != std::string::npos) )
+			if ( (name.find("7") != std::string::npos) && (dag_name.find("ill") != std::string::npos) )
 				frontend->trigger_node("6", true);
 
 			if (last_trig_ts[name] > 0)

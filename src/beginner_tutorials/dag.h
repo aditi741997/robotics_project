@@ -1,3 +1,4 @@
+#include <list>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -126,7 +127,7 @@ public:
 	std::map<int, int> nodes_in_most_critical_chain;
 	
 	// True : constraints, False : weights
-	bool is_constraint;
+	bool is_constraint = false;
 
 	// Fields related to mosek solver:
 	Model::t mosek_model;

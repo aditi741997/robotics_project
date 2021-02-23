@@ -4,9 +4,9 @@ gtsam_integrator = 3
 pose_prediction = 4
 gldemo = 5
 timewarp_gl = 6
-debugview = 7
-offline_imu = 8
-offline_cam = 9
+offline_imu = 7
+offline_cam = 8
+debugview = 9
 
 with open("illixr_dag.txt", "w") as f:
     f.write(f"""
@@ -23,8 +23,9 @@ E {gtsam_integrator} {gldemo} {timewarp_gl} X
 E {offline_cam} {open_vins} X
 C 40 {offline_imu} {gtsam_integrator} {timewarp_gl} X
 C 400 {offline_imu} {gtsam_integrator} {gldemo} {timewarp_gl} X
+C 500 {offline_cam} {open_vins} {gtsam_integrator} {timewarp_gl} X
 C 500 {offline_imu} {open_vins} {gtsam_integrator} {timewarp_gl} X
 C 500 {offline_imu} {open_vins} {gtsam_integrator} {gldemo} {timewarp_gl} X
-C 500 {offline_cam} {open_vins} {gtsam_integrator} {timewarp_gl} X
 C 500 {offline_cam} {open_vins} {gtsam_integrator} {gldemo} {timewarp_gl} X
+constr
 """.lstrip())
