@@ -22,6 +22,9 @@
 
 #include <dag_controller_be.h>
 
+#define DEBUG2(x1, x2) std::cerr << __FILE__ << ':' << __LINE__ << ": " << #x1 << "=" << x1 << << ", " << #x2 << "=" << x2 << std::endl;
+#define DEBUG(x) std::cerr << __FILE__ << ':' << __LINE__ << ": " << #x << "=" << x << std::endl;
+
 int sched_setattr(pid_t pid, const struct sched_attr *attr, unsigned int flags)
 {
 	        return syscall(__NR_sched_setattr, pid, attr, flags);
@@ -202,8 +205,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::start()
 	{
-		if (dag_name.find("illixr") == std::string::npos)
-			startup_thread = new boost::thread(&DAGControllerBE::startup_trigger_func, this);
+		startup_thread = new boost::thread(&DAGControllerBE::startup_trigger_func, this);
 	}
 
 	void DAGControllerBE::thread_custom_sleep_for(int microsec)
@@ -375,7 +377,14 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				core_period += (double)sc_to[i]/1000.0;
 			}
 			offline_fracs_mtx.unlock();
-		
+			if (total_period_count % 100 == 0) {
+				DEBUG(core_period);
+				for (size_t i = 0; i < sc_fracs.size(); ++i) {
+					DEBUG(i);
+					DEBUG(sc_fracs[i]);
+				}
+			}
+
 			for (int i = 0; ( (i < core_exec_order.size()) && (!shutdown_scheduler) ); i++)
 			{
 				// prio(i) = 2, all others = 1.
