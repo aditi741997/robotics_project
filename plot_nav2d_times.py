@@ -71,8 +71,9 @@ def plot_agg(x,y,start,slot,end, nm, node):
 
 per_run_scan_ct = []
 per_run_mapupd_ts = []
+per_run_mapu_time = []
 for run in range(start_run_ind,end_run_ind+1):
-    for fname in ["navigator_cmd", "navigator_plan", "mapper_scanCB", "mapper_mapUpdate", "local_map", "operator_loop"]:
+    for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate"]:
         times = []
         ts = []
         scan_count = []
@@ -82,7 +83,7 @@ for run in range(start_run_ind,end_run_ind+1):
         with open(fname_pre_str + fname + fname_post_str + "_run" + str(run) + ".txt", 'r') as f:
             for fl in f.readlines():
                 if ("times:" in fl) or ("local_map Times" in fl):
-                    times += [ float(x) for x in fl.split(" ")[2:-1] ]
+                    times += [ round(float(x),3) for x in fl.split(" ")[2:-1] ]
                 elif "ts:" in fl:
                     ts += [ float(x) for x in fl.split(" ")[2:-1] ]
                 elif "ScanCOunt" in fl:
@@ -158,9 +159,10 @@ for run in range(start_run_ind,end_run_ind+1):
             rel_ts = []
             start_ts = ts[0]
             for i in ts:
-                rel_ts.append(i - ts[0])
+                rel_ts.append(round(i - ts[0], 2))
             per_run_mapupd_ts.append(rel_ts)
-            #print("SCAN COUNTS : ", scan_count, ", TS: ", ts, "\n \n")
+            per_run_mapu_time.append(times)
+	    #print("SCAN COUNTS : ", scan_count, ", TS: ", ts, "\n \n")
 
         '''
             plot_agg(ts[1:], tputs, start_t, 2.0, end_t, "Inter-arrival Time", fname)
@@ -171,3 +173,4 @@ for run in range(start_run_ind,end_run_ind+1):
         '''
 print("per_run_mapupd_ts : ", per_run_mapupd_ts)
 print("PER RUN SCAN CT : ", per_run_scan_ct)
+print("PER RUN MAPUPD CI : ", per_run_mapu_time)
