@@ -41,7 +41,7 @@ public:
 	void setScanSolver(karto::ScanSolver* scanSolver);
 
 	// TS of last scan processed by mapCB.
-        double last_scan_mapCB_processed;
+        double last_scan_mapCB_processed_ST;
 
         // TSS of last scan used in generating the mapToOdom TF.
         double last_scan_mapCB_tf_processed;
@@ -53,6 +53,7 @@ public:
 	long int total_mapcb_count, total_mapupdate_count;
 	
 	ros::Publisher mScanTSPublisher;
+	std::ofstream tf_publish_ts_log; 
 
 private:
 	// Private methods
@@ -65,7 +66,7 @@ private:
 	SelfLocalizer* mSelfLocalizer;
 	
 	// Everything related to ROS
-	tf::TransformListener mTransformListener;
+	tf::TransformListener* mTransformListener;
 	tf::TransformBroadcaster mTransformBroadcaster;
 	tf::Transform mMapToOdometry;
 	tf::Transform mOdometryOffset;
@@ -95,7 +96,7 @@ private:
 	double mRangeThreshold;     // Maximum range of laser sensor. (All robots MUST use the same due to Karto-Mapper!)
 	double mMaxCovariance;      // When to accept the result of the particle filter?
 	int mState;	                // What am I doing? (waiting, localizing, mapping)
-	int mMapUpdateRate;	        // Publish the map every # received updates.
+	double mMapUpdateRate;	        // Publish the map every # received updates.
 	bool mPublishPoseGraph;	    // Whether or not to publish the pose graph as marker-message.
 	int mNodesAdded;            // Number of nodes added to the pose graph.
 	int mMinMapSize;            // Minimum map size (# of nodes) needed for localization.
@@ -120,6 +121,7 @@ private:
         std::vector<double> map_update_ts;
 
         std::vector<int> map_update_scan_count;
+	std::vector<bool> scan_pose_ts;
 };
 
 #endif

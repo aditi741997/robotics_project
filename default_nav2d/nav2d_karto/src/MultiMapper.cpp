@@ -1,6 +1,7 @@
 #include <visualization_msgs/Marker.h>
 #include <nav2d_msgs/RobotPose.h>
 #include <nav2d_karto/MultiMapper.h>
+#include <tf/transform_listener.h>
 
 // compute linear index for given map coords
 #define MAP_IDX(sx, i, j) ((sx) * (j) + (i))
@@ -27,7 +28,8 @@ double get_time_now()
         return time_now;
 }
 
-void write_arr_to_file(std::vector<double>& tput, std::string s, std::string m)
+template <class T>
+void write_arr_to_file(std::vector<T>& tput, std::string s, std::string m)
 {
 	std::string ename;
     	ros::NodeHandle nh;
@@ -96,17 +98,19 @@ MultiMapper::MultiMapper()
 	ros::NodeHandle mapperNode("~/");
 	mapperNode.param("grid_resolution", mMapResolution, 0.05);
 	mapperNode.param("range_threshold", mRangeThreshold, 30.0);
-	mapperNode.param("map_update_rate", mMapUpdateRate, 1);
+	mapperNode.param("map_update_rate", mMapUpdateRate, 1.0);
 	mapperNode.param("publish_pose_graph", mPublishPoseGraph, true);
 	mapperNode.param("max_covariance", mMaxCovariance, 0.05);
 	mapperNode.param("min_map_size", mMinMapSize, 50);
 
+	mTransformListener = new tf::TransformListener(ros::Duration(20.0) ); // 4s RT
+
 	// Apply tf_prefix to all used frame-id's
-	mLaserFrame = mTransformListener.resolve(mLaserFrame);
-	mRobotFrame = mTransformListener.resolve(mRobotFrame);
-	mOdometryFrame = mTransformListener.resolve(mOdometryFrame);
-	mOffsetFrame = mTransformListener.resolve(mOffsetFrame);
-	mMapFrame = mTransformListener.resolve(mMapFrame);
+	mLaserFrame = mTransformListener->resolve(mLaserFrame);
+	mRobotFrame = mTransformListener->resolve(mRobotFrame);
+	mOdometryFrame = mTransformListener->resolve(mOdometryFrame);
+	mOffsetFrame = mTransformListener->resolve(mOffsetFrame);
+	mMapFrame = mTransformListener->resolve(mMapFrame);
 
 	// Initialize Publisher/Subscribers
 	mScanSubscriber = robotNode.subscribe(mScanInputTopic, 100, &MultiMapper::receiveLocalizedScan, this, ros::TransportHints().tcpNoDelay());
@@ -243,12 +247,14 @@ MultiMapper::MultiMapper()
 		mSelfLocalizer = new SelfLocalizer();
 	}
 
-	last_scan_mapCB_processed = 0.0;
+	last_scan_mapCB_processed_ST = 0.0;
         last_scan_mapCB_tf_processed = 0.0;
         mScanTSPublisher = robotNode.advertise<std_msgs::Header>("mapper_scan_ts_used_TF", 1, false);
 
 	total_mapcb_count = 0;
         total_mapupdate_count = 0;
+
+	tf_publish_ts_log.open("/home/ubuntu/catkin_ws/mapper_tf_ts_log.csv");
 }
 
 MultiMapper::~MultiMapper()
@@ -272,7 +278,7 @@ void MultiMapper::setRobotPose(double x, double y, double yaw)
 	pose_in.setData(transform);
 	pose_in.frame_id_ = mRobotFrame;
 	pose_in.stamp_ = ros::Time(0);
-	mTransformListener.transformPose(mOdometryFrame, pose_in, pose_out);
+	mTransformListener->transformPose(mOdometryFrame, pose_in, pose_out);
 	
 	transform = pose_out;
 	mOdometryOffset = transform.inverse();
@@ -387,17 +393,19 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 		tf::StampedTransform tfPose;
 		try
 		{
-			mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, scan->header.stamp, tfPose);
+			mTransformListener->lookupTransform(mOdometryFrame /*mOffsetFrame*/, mLaserFrame, scan->header.stamp, tfPose);
+			scan_pose_ts.push_back(true);	
 		}
 		catch(tf::TransformException e)
 		{
 			try
 			{
-				mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, ros::Time(0), tfPose);
+				mTransformListener->lookupTransform(mOdometryFrame /*mOffsetFrame*/, mLaserFrame, ros::Time(0), tfPose);
+				scan_pose_ts.push_back(false);
 			}
 			catch(tf::TransformException e)
 			{
-				ROS_WARN("Failed to compute odometry pose, skipping scan (%s)", e.what());
+				ROS_ERROR("ROBOT_%i Failed to compute odometry pose, skipping scan (%s)", mRobotID, e.what());
 				return;
 			}
 		}
@@ -431,7 +439,7 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 			bool ok = true;
 			try
 			{
-				mTransformListener.transformPose(mOffsetFrame, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) /*scan->header.stamp*/, mLaserFrame), map_in_odom);
+				mTransformListener->transformPose(mOffsetFrame, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) /*scan->header.stamp*/, mLaserFrame), map_in_odom);
 			}
 			catch(tf::TransformException e)
 			{
@@ -490,12 +498,14 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 			mOtherRobotsPublisher.publish(other);
 		}
 	}
+	last_scan_mapCB_processed_ST = scan->header.stamp.toSec();
 	if (scan_cb_times.size()%20 == 3)
         {
                 // std::ofstream of;
                 std::string ss = "nav2d_mapper_scanCB";
 		write_arrs_to_file(scan_cb_times, scan_cb_ts, ss);
-                write_arr_to_file(tput_map_cb, ss, "tput");
+                write_arr_to_file<double>(tput_map_cb, ss, "tput");
+		write_arr_to_file<bool>(scan_pose_ts, ss, "scanPoseTS");
 	}
 }
 
@@ -684,7 +694,7 @@ bool MultiMapper::updateMap()
 		std::string mus = "nav2d_mapper_mapUpdate";
                 // of.open("/home/aditi/robot_" + mus + "_stats_r1.txt",  std::ios_base::app);
                 write_arrs_to_file(map_update_times, map_update_ts, mus, map_update_scan_count);
-                write_arr_to_file(tput_map_update, mus, "tput");
+                write_arr_to_file<double>(tput_map_update, mus, "tput");
 
 		map_update_scan_count.clear();
 	}
@@ -846,7 +856,8 @@ void MultiMapper::publishTransform()
                 hdr.stamp = ros::Time(last_scan_mapCB_tf_processed);
                 mScanTSPublisher.publish(hdr);
 
-		mTransformBroadcaster.sendTransform(tf::StampedTransform (mOdometryOffset, ros::Time::now() , mOffsetFrame, mOdometryFrame));
-		mTransformBroadcaster.sendTransform(tf::StampedTransform (mMapToOdometry, ros::Time::now() , mMapFrame, mOffsetFrame));
+		tf_publish_ts_log << last_scan_mapCB_processed_ST << ", " << last_scan_mapCB_processed_ST /* ros::Time::now().toSec() */ << "\n";
+		mTransformBroadcaster.sendTransform(tf::StampedTransform (mOdometryOffset, ros::Time(last_scan_mapCB_processed_ST), mOffsetFrame, mOdometryFrame));
+		mTransformBroadcaster.sendTransform(tf::StampedTransform (mMapToOdometry, ros::Time(last_scan_mapCB_processed_ST) /* ros::Time::now() */ , mMapFrame, mOffsetFrame));
 	}
 }
