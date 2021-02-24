@@ -1093,7 +1093,9 @@ bool MultiMapper::getMap(nav_msgs::GetMap::Request  &req, nav_msgs::GetMap::Resp
 	
 	// if(sendMap())
 	// {
+		currentMapMutex.lock();
 		res.map = mGridMap;
+		currentMapMutex.unlock();
 		return true;
 		
 	// 	return true;
@@ -1212,6 +1214,7 @@ bool MultiMapper::updateMap()
 	unsigned int height = kartoGrid->GetHeight();
 	karto::Vector2<kt_double> offset = kartoGrid->GetCoordinateConverter()->GetOffset();
 
+	currentMapMutex.lock();
 	if(	mGridMap.info.width != width || 
 		mGridMap.info.height != height || 
 		mGridMap.info.origin.position.x != offset.GetX() || 
@@ -1254,7 +1257,12 @@ bool MultiMapper::updateMap()
 			}
 		}
 	}
+	// Set the header information on the map
+	// For measuring RT along Scan-MapCB-MapUPdate-NavPlan-NavCmd-LP chain:
+	mGridMap.header.stamp = ts_rost;
+	mGridMap.header.frame_id = mMapFrame.c_str();
 
+	currentMapMutex.unlock();
 	double exec_rt_end = get_time_now();
 	ROS_ERROR("Curr_time: %f In MultiMapper::updateMap Current ratio of unknown/total area : %i %i #", exec_rt_end, unknown_area, total_area);
 
@@ -1301,10 +1309,6 @@ bool MultiMapper::updateMap()
 		map_update_scan_count.clear();
 	}
 
-	// Set the header information on the map
-	// For measuring RT along Scan-MapCB-MapUPdate-NavPlan-NavCmd-LP chain:
-	mGridMap.header.stamp = ts_rost;
-	mGridMap.header.frame_id = mMapFrame.c_str();
 	mMapChanged = false;
 	return true;
 }
