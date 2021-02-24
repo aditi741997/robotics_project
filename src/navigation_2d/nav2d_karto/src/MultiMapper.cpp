@@ -224,7 +224,7 @@ MultiMapper::MultiMapper(ros::Publisher& mcb_pub)
 	}
 
 	// For measuring RT:
-	last_scan_mapCB_processed = 0.0;
+	last_scan_mapCB_processed_ST = 0.0;
 	last_scan_mapCB_tf_processed = 0.0;
 	mScanTSPublisher = robotNode.advertise<std_msgs::Header>("mapper_scan_ts_used_TF", 1, false);
 	publishTransform();
@@ -266,6 +266,8 @@ MultiMapper::MultiMapper(ros::Publisher& mcb_pub)
 
 	map_cb_exec_end_pub = robotNode.advertise<std_msgs::Header>("exec_end_mapcb", 1, true);
 	map_upd_exec_end_pub = robotNode.advertise<std_msgs::Header>("exec_end_mapupd", 1, true);
+
+	tf_publish_ts_log.open("/home/ubuntu/catkin_ws/mapper_tf_ts_log.csv");
 }
 
 void MultiMapper::socket_recv()
@@ -602,7 +604,7 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 		received_scans = true;
 		// ROS_WARN("ROBOT_%i IN nav2d::Mapper receiveLaserScan with TS %f", mRobotID, scan->scan_time);
 		latest_scans_recv.push_back(latest_scan_recv);
-		publishTransform();
+		// publishTransform(); 
 	}
 	/*	
 
@@ -798,6 +800,7 @@ void MultiMapper::processLatestScans()
 
 	for (int i = 0; i < scans.size(); i++)
 	{
+		publishTransform();
 		// process latest_scan_recv.
 		if(!mLaser)
 		{
@@ -845,14 +848,14 @@ void MultiMapper::processLatestScans()
 			tf::StampedTransform tfPose;
 			try
 			{
-				mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, scans[i].header.stamp, tfPose);
+				mTransformListener.lookupTransform(mOdometryFrame/*mOffsetFrame*/, mLaserFrame, scans[i].header.stamp, tfPose);
 				scan_pose_ts.push_back(true);
 			}
 			catch(tf::TransformException e)
 			{
 				try
 				{
-					mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, ros::Time(0), tfPose);
+					mTransformListener.lookupTransform(mOdometryFrame/*mOffsetFrame*/, mLaserFrame, ros::Time(0), tfPose);
 					scan_pose_ts.push_back(false);
 				}
 				catch(tf::TransformException e)
@@ -915,7 +918,7 @@ void MultiMapper::processLatestScans()
 					// last_scan_mapCB_tf_processed = scan->header.stamp.toSec();
 					// using real TS:
 					last_scan_mapCB_tf_processed = scans[i].scan_time;
-					publishTransform();
+					// publishTransform();
 				}
 				mNodesAdded++;
 				mMapChanged = true;
@@ -986,6 +989,7 @@ void MultiMapper::processLatestScans()
 			}
 
 		}
+		last_scan_mapCB_processed_ST = scans[i].header.stamp.toSec();
 	}
 	
 	if (scan_cb_times.size()%20 == 3)
@@ -1464,6 +1468,8 @@ void MultiMapper::publishTransform()
 		hdr.stamp = ros::Time(last_scan_mapCB_tf_processed);
 		mScanTSPublisher.publish(hdr);
 		// ROS_ERROR("From mapScanCB: Publishing transform.. with TS %f", last_scan_mapCB_tf_processed);
+
+		tf_publish_ts_log << last_scan_mapCB_processed_ST << ", " << ros::Time::now().toSec() << "\n";
 
 		mTransformBroadcaster.sendTransform(tf::StampedTransform (mOdometryOffset, ros::Time::now() , mOffsetFrame, mOdometryFrame));
 		mTransformBroadcaster.sendTransform(tf::StampedTransform (mMapToOdometry, ros::Time::now() , mMapFrame, mOffsetFrame));

@@ -69,7 +69,7 @@ public:
 	// For measuring RT:
 
 	// TS of last scan processed by mapCB.
-	double last_scan_mapCB_processed;
+	double last_scan_mapCB_processed_ST;
 
 	// TSS of last scan used in generating the mapToOdom TF.
 	double last_scan_mapCB_tf_processed;
@@ -92,6 +92,7 @@ public:
 	long int total_mapcb_count, total_mapupdate_count;
 
 	ros::Publisher mScanTSPublisher;
+	std::ofstream tf_publish_ts_log;
 
 	// For converting the module into hybrid ED/TD
 	// Making a separate thread for mapUpdates
