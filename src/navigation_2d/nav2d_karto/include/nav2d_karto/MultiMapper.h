@@ -17,6 +17,7 @@
 #include <map>
 #include <list>
 #include <boost/circular_buffer.hpp>
+#include <atomic>
 
 #include <fstream>
 #include <boost/thread.hpp>
@@ -163,7 +164,8 @@ private:
 	karto::LaserRangeFinderPtr mLaser;
 	karto::SmartPointer<karto::OpenMapper> mMapper;
 	std::map<int, karto::LaserRangeFinderPtr> mOtherLasers;
-	bool mMapChanged;
+	std::atomic<bool> mMapChanged;
+	boost::mutex currentMapMutex;
 
 	// Parameters and Variables
 	int mRobotID;               // Who am I?
