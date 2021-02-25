@@ -304,10 +304,9 @@ void ObstacleLayer::laserScanCallback(const sensor_msgs::LaserScanConstPtr& mess
   }
 
   // buffer the point cloud
-  // Removing locking since converting to ED.
-  // buffer->lock();
+  buffer->lock();
   buffer->bufferCloud(cloud);
-  // buffer->unlock();
+  buffer->unlock();
 
   // this is the real TS (based ons ystem_clock.)
   latestObsRealTimeStamp = message->scan_time;
@@ -527,8 +526,8 @@ bool ObstacleLayer::getMarkingObservations(std::vector<Observation>& marking_obs
     current = marking_buffers_[i]->isCurrent() && current;
     
     // For measuring RT:
-    ros::Time d = marking_buffers_[i]->getLatestObsTimeStamp();
-    latestObsTS = std::max(latestObsTS, d.toSec());
+    // ros::Time d = marking_buffers_[i]->getLatestObsTimeStamp();
+    // latestObsTS = std::max(latestObsTS, d.toSec());
 
     marking_buffers_[i]->unlock();
   }
@@ -548,7 +547,7 @@ bool ObstacleLayer::getClearingObservations(std::vector<Observation>& clearing_o
     current = clearing_buffers_[i]->isCurrent() && current;
     
     // For measuring RT:
-    latestObsTS = std::max(latestObsTS, clearing_buffers_[i]->getLatestObsTimeStamp().toSec());
+    // latestObsTS = std::max(latestObsTS, clearing_buffers_[i]->getLatestObsTimeStamp().toSec());
 
     clearing_buffers_[i]->unlock();
   }
