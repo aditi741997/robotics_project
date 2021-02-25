@@ -439,11 +439,11 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 			bool ok = true;
 			try
 			{
-				mTransformListener->transformPose(mOffsetFrame, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) /*scan->header.stamp*/, mLaserFrame), map_in_odom);
+				mTransformListener->transformPose(mOdometryFrame /*mOffsetFrame*/, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) /*scan->header.stamp*/, mLaserFrame), map_in_odom);
 			}
 			catch(tf::TransformException e)
 			{
-				ROS_WARN("Transform from %s to %s failed! (%s)", mLaserFrame.c_str(), mOffsetFrame.c_str(), e.what());
+				ROS_WARN("Transform from %s to %s failed! (%s)", mLaserFrame.c_str(), /*mOffsetFrame*/mOdometryFrame.c_str(), e.what());
 				ok = false;
 			}
 			if(ok) 

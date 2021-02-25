@@ -69,33 +69,45 @@ def plot_agg(x,y,start,slot,end, nm, node):
 	plt.legend()
 	plt.show()
 
+def get_rel_ts_arr(ts):
+	rel_ts = []
+	start_ts = ts[0]
+        for i in ts:
+        	rel_ts.append(round(i - ts[0], 2))
+	return rel_ts
+
 per_run_scan_ct = []
 per_run_mapupd_ts = []
 per_run_mapu_time = []
+per_run_navp_time = []
+per_run_navp_ts = []
 for run in range(start_run_ind,end_run_ind+1):
-    for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate"]:
+    for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_plan"]:
         times = []
         ts = []
         scan_count = []
         tputs = []
         drops_ts = []
         scan_pose_ts = []
-        with open(fname_pre_str + fname + fname_post_str + "_run" + str(run) + ".txt", 'r') as f:
-            for fl in f.readlines():
-                if ("times:" in fl) or ("local_map Times" in fl):
-                    times += [ round(float(x),3) for x in fl.split(" ")[2:-1] ]
-                elif "ts:" in fl:
-                    ts += [ float(x) for x in fl.split(" ")[2:-1] ]
-                elif "ScanCOunt" in fl:
-                    scan_count += [ int(x) for x in fl.split(" ")[2:-1] ]
-                elif "tput:" in fl:
-                    tputs += [ float(x) for x in fl.split(" ")[2:-1] ]
-                    #print("Added to tputs len: %i"%(len(tputs)))
-                elif "scanDrop" in fl:
-                    drops_ts += [ float(x) for x in fl.split(" ")[2:-1] ]
-                elif "scanPoseTS" in fl:
-                    scan_pose_ts += [ int(x) for x in fl.split(" ")[2:-1] ]
-        # plot times,ts and scan_count.
+	try:
+		with open(fname_pre_str + fname + fname_post_str + "_run" + str(run) + ".txt", 'r') as f:
+		    for fl in f.readlines():
+			if ("times:" in fl) or ("local_map Times" in fl):
+			    times += [ round(float(x),3) for x in fl.split(" ")[2:-1] ]
+			elif "ts:" in fl:
+			    ts += [ float(x) for x in fl.split(" ")[2:-1] ]
+			elif "ScanCOunt" in fl:
+			    scan_count += [ int(x) for x in fl.split(" ")[2:-1] ]
+			elif "tput:" in fl:
+			    tputs += [ float(x) for x in fl.split(" ")[2:-1] ]
+			    #print("Added to tputs len: %i"%(len(tputs)))
+			elif "scanDrop" in fl:
+			    drops_ts += [ float(x) for x in fl.split(" ")[2:-1] ]
+			elif "scanPoseTS" in fl:
+			    scan_pose_ts += [ int(x) for x in fl.split(" ")[2:-1] ]
+        except:
+		print("ERROR READING FOR ", fname, run)
+	# plot times,ts and scan_count.
         print("Starting node ", fname, "Lengths of all arrs: times: %i, ts: %i, tputs: %i"%(len(times), len(ts), len(tputs) ) )
         #print("NODE %s TPUT: %s \n \n "%(fname, str(tputs) ) )
         #print("NODE %s CI: %s \n \n"%(fname, str(times) ) )
@@ -114,7 +126,8 @@ for run in range(start_run_ind,end_run_ind+1):
 
         sorted_times = sorted(times)
         ltimes = len(sorted_times)
-        print("For node %s, ci best case: %f, 10p: %f, 25p: %f, median: %f, mean %f, 75ile %f, 90ile %f, 95ile %f, worst case: %f" % ( fname, sorted_times[0], sorted_times[ltimes/10], sorted_times[(25*ltimes)/100], sorted_times[ltimes/2], sum(sorted_times)/ltimes, sorted_times[(75*ltimes)/100], sorted_times[(90*ltimes)/100], sorted_times[(95*ltimes)/100], sorted_times[-1] ) )
+	if ltimes>0:
+        	print("For node %s, ci best case: %f, 10p: %f, 25p: %f, median: %f, mean %f, 75ile %f, 90ile %f, 95ile %f, worst case: %f" % ( fname, sorted_times[0], sorted_times[ltimes/10], sorted_times[(25*ltimes)/100], sorted_times[ltimes/2], sum(sorted_times)/ltimes, sorted_times[(75*ltimes)/100], sorted_times[(90*ltimes)/100], sorted_times[(95*ltimes)/100], sorted_times[-1] ) )
 
         if "oper" in fname:
             for i in range(len(times)):
@@ -142,7 +155,10 @@ for run in range(start_run_ind,end_run_ind+1):
                 #plt.show()
         '''
         '''
-        if len(scan_count) > 0:
+        if ("_plan" in fname and (len(ts) > 0) ):
+		per_run_navp_ts.append(get_rel_ts_arr(ts))
+		per_run_navp_time.append(times)
+	if len(scan_count) > 0:
             msc = max(scan_count)
             # scan_count = [ (x*0.1/msc) for x in scan_count]
             print("Scan ct 1st: %i, last: %i"%(scan_count[0], scan_count[-1]) )
@@ -156,11 +172,7 @@ for run in range(start_run_ind,end_run_ind+1):
             #plt.legend()
             #plt.show()
             per_run_scan_ct.append(scan_count)
-            rel_ts = []
-            start_ts = ts[0]
-            for i in ts:
-                rel_ts.append(round(i - ts[0], 2))
-            per_run_mapupd_ts.append(rel_ts)
+            per_run_mapupd_ts.append(get_rel_ts_arr(ts))
             per_run_mapu_time.append(times)
 	    #print("SCAN COUNTS : ", scan_count, ", TS: ", ts, "\n \n")
 
@@ -171,6 +183,8 @@ for run in range(start_run_ind,end_run_ind+1):
             print("For node %s, Tput: median %f, mean %f, 75ile %f, 90ile %f"%( fname, sorted_tput[ltimest/2], sum(sorted_tput)/ltimest, sorted_tput[(75*ltimest)/100], sorted_tput[(90*ltimest)/100] ) )
             #plot_agg(ts[1:], tputs, start_t, 10.0, end_t, "Inter-arrival Time", fname)
         '''
-print("per_run_mapupd_ts : ", per_run_mapupd_ts)
-print("PER RUN SCAN CT : ", per_run_scan_ct)
-print("PER RUN MAPUPD CI : ", per_run_mapu_time)
+print("\n \n PER RUN SCAN CT : ", per_run_scan_ct)
+print("\n \n per_run_mapupd_ts : ", per_run_mapupd_ts)
+print("\n \n PER RUN MAPUPD CI : ", per_run_mapu_time)
+print("\n \n PER RUN NAVP CI : ", per_run_navp_time)
+print("\n \n PER RUN NAVP TS: ", per_run_navp_ts)
