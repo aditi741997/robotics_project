@@ -96,7 +96,7 @@ public:
 		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/robot_0/exec_end_" + last_node_cc_name, 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
                 exec_end_subs[last_node_cc_name] = critical_exec_end_sub;
 		
-		for (std::map<std::string,int>::iterator it = controller->node_dag.name_id_map.begin(); it != controller->node_dag.name_id_map.end(); ++it)
+		for (std::map<std::string,int>::iterator it = controller->node_dag_mc.name_id_map.begin(); it != controller->node_dag_mc.name_id_map.end(); ++it)
                 {
                         std::string topic = "/robot_0/exec_start_" + it->first;
 			ROS_INFO("Subscribing to %s", topic.c_str());
