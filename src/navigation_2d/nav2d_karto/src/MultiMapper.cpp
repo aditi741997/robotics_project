@@ -70,12 +70,14 @@ MultiMapper::MultiMapper(ros::Publisher& mcb_pub)
 	// Oct: For making a thread for scancb:
         mapperNode.param("map_scan_period", mMapScanUpdateRate, 0.2);
 
+	mTransformListener = new tf::TransformListener(ros::Duration(20.0) ); // 4s RT
+
 	// Apply tf_prefix to all used frame-id's
-	mLaserFrame = mTransformListener.resolve(mLaserFrame);
-	mRobotFrame = mTransformListener.resolve(mRobotFrame);
-	mOdometryFrame = mTransformListener.resolve(mOdometryFrame);
-	mOffsetFrame = mTransformListener.resolve(mOffsetFrame);
-	mMapFrame = mTransformListener.resolve(mMapFrame);
+	mLaserFrame = mTransformListener->resolve(mLaserFrame);
+	mRobotFrame = mTransformListener->resolve(mRobotFrame);
+	mOdometryFrame = mTransformListener->resolve(mOdometryFrame);
+	mOffsetFrame = mTransformListener->resolve(mOffsetFrame);
+	mMapFrame = mTransformListener->resolve(mMapFrame);
 
 	// Initialize Publisher/Subscribers
 	ROS_ERROR("IN NAV2D : Mapper Init : mMapUpdateRate %f, Subscribing to Scan topic %s, Publishing LocalizedScan at %s, Publishing Map at %s, Subscribing to Laser Topic %s, PUblishes its pose on others topic.", mMapUpdateRate, mScanInputTopic.c_str(), mScanOutputTopic.c_str(), mMapTopic.c_str(), mLaserTopic.c_str());
@@ -252,16 +254,14 @@ MultiMapper::MultiMapper(ros::Publisher& mcb_pub)
 
 	sock_recv_thread = boost::thread(&MultiMapper::socket_recv, this);
 
-	ROS_ERROR("Mapper's TF CBT tid: %i", mTransformListener.getTFCBTid() );
+	ROS_ERROR("Mapper's TF CBT tid: %i", mTransformListener->getTFCBTid() );
 	
 	// For making a separate thread for mapCB:
         // map_cb_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapcb", 1, true);
         map_cb_exec_info_pub = mcb_pub;
-	// publish_tid("mapcb_extra", mTransformListener.getTFCBTid(), &map_cb_exec_info_pub);
 	map_scan_cb_thread_ = new boost::thread(boost::bind(&MultiMapper::mapScanCBLoop, this, mMapScanUpdateRate));
 
 	map_upd_exec_info_pub = robotNode.advertise<std_msgs::Header>("exec_start_mapupd", 10, true);
-	// publish_tid("mapupd_extra", mTransformListener.getTFCBTid(), &map_upd_exec_info_pub);
         map_update_thread_ = new boost::thread(boost::bind(&MultiMapper::mapUpdateLoop, this, mMapUpdateRate));
 
 	map_cb_exec_end_pub = robotNode.advertise<std_msgs::Header>("exec_end_mapcb", 1, true);
@@ -422,7 +422,7 @@ void MultiMapper::mapUpdateLoop(double map_update_rate)
 		if (map_upd_ct<10)
 		{
 			if (map_upd_ct%2 == 0)
-				publish_tid("mapupd_extra", mTransformListener.getTFCBTid(), &map_upd_exec_info_pub);	
+				publish_tid("mapupd_extra", mTransformListener->getTFCBTid(), &map_upd_exec_info_pub);	
 			else
 				publish_tid("mapupd", ::gettid(), &map_upd_exec_info_pub);
 		}
@@ -445,7 +445,7 @@ void MultiMapper::setRobotPose(double x, double y, double yaw)
 	pose_in.setData(transform);
 	pose_in.frame_id_ = mRobotFrame;
 	pose_in.stamp_ = ros::Time(0);
-	mTransformListener.transformPose(mOdometryFrame, pose_in, pose_out);
+	mTransformListener->transformPose(mOdometryFrame, pose_in, pose_out);
 	
 	transform = pose_out;
 	mOdometryOffset = transform.inverse();
@@ -655,13 +655,13 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 		tf::StampedTransform tfPose;
 		try
 		{
-			mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, scan->header.stamp, tfPose);
+			mTransformListener->lookupTransform(mOffsetFrame, mLaserFrame, scan->header.stamp, tfPose);
 		}
 		catch(tf::TransformException e)
 		{
 			try
 			{
-				mTransformListener.lookupTransform(mOffsetFrame, mLaserFrame, ros::Time(0), tfPose);
+				mTransformListener->lookupTransform(mOffsetFrame, mLaserFrame, ros::Time(0), tfPose);
 			}
 			catch(tf::TransformException e)
 			{
@@ -705,7 +705,7 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 			bool ok = true;
 			try
 			{
-				mTransformListener.transformPose(mOffsetFrame, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) , mLaserFrame), map_in_odom);
+				mTransformListener->transformPose(mOffsetFrame, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) , mLaserFrame), map_in_odom);
 			}
 			catch(tf::TransformException e)
 			{
@@ -848,14 +848,14 @@ void MultiMapper::processLatestScans()
 			tf::StampedTransform tfPose;
 			try
 			{
-				mTransformListener.lookupTransform(mOdometryFrame/*mOffsetFrame*/, mLaserFrame, scans[i].header.stamp, tfPose);
+				mTransformListener->lookupTransform(mOdometryFrame/*mOffsetFrame*/, mLaserFrame, scans[i].header.stamp, tfPose);
 				scan_pose_ts.push_back(true);
 			}
 			catch(tf::TransformException e)
 			{
 				try
 				{
-					mTransformListener.lookupTransform(mOdometryFrame/*mOffsetFrame*/, mLaserFrame, ros::Time(0), tfPose);
+					mTransformListener->lookupTransform(mOdometryFrame/*mOffsetFrame*/, mLaserFrame, ros::Time(0), tfPose);
 					scan_pose_ts.push_back(false);
 				}
 				catch(tf::TransformException e)
@@ -896,11 +896,11 @@ void MultiMapper::processLatestScans()
 				bool ok = true;
 				try
 				{
-					mTransformListener.transformPose(mOffsetFrame, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) /* scans[i].header.stamp*/, mLaserFrame), map_in_odom);
+					mTransformListener->transformPose(mOdometryFrame /*mOffsetFrame*/, tf::Stamped<tf::Pose>(map_in_robot, ros::Time(0) /* scans[i].header.stamp*/, mLaserFrame), map_in_odom);
 				}
 				catch(tf::TransformException e)
 				{
-					ROS_ERROR("ROBOT_%i Transform from %s to %s failed! (%s)", mRobotID, mLaserFrame.c_str(), mOffsetFrame.c_str(), e.what());
+					ROS_ERROR("ROBOT_%i Transform from %s to %s failed! (%s)", mRobotID, mLaserFrame.c_str(), /*mOffsetFrame*/ mOdometryFrame.c_str(), e.what());
 					ok = false;
 				}
 
@@ -1075,7 +1075,7 @@ void MultiMapper::mapScanCBLoop(double per)
 			if (total_map_cb_trig_count%2 == 1)
 				publish_tid("mapcb", ::gettid(), &map_cb_exec_info_pub);
 			else
-				publish_tid("mapcb_extra", mTransformListener.getTFCBTid(), &map_cb_exec_info_pub);
+				publish_tid("mapcb_extra", mTransformListener->getTFCBTid(), &map_cb_exec_info_pub);
 		}
 	
 	}
@@ -1263,6 +1263,7 @@ bool MultiMapper::updateMap()
 	mGridMap.header.frame_id = mMapFrame.c_str();
 
 	currentMapMutex.unlock();
+
 	double exec_rt_end = get_time_now();
 	ROS_ERROR("Curr_time: %f In MultiMapper::updateMap Current ratio of unknown/total area : %i %i #", exec_rt_end, unknown_area, total_area);
 
@@ -1473,9 +1474,9 @@ void MultiMapper::publishTransform()
 		mScanTSPublisher.publish(hdr);
 		// ROS_ERROR("From mapScanCB: Publishing transform.. with TS %f", last_scan_mapCB_tf_processed);
 
-		tf_publish_ts_log << last_scan_mapCB_processed_ST << ", " << ros::Time::now().toSec() << "\n";
+		tf_publish_ts_log << last_scan_mapCB_processed_ST << ", " << last_scan_mapCB_processed_ST /* ros::Time::now().toSec() */ << "\n";
 
-		mTransformBroadcaster.sendTransform(tf::StampedTransform (mOdometryOffset, ros::Time::now() , mOffsetFrame, mOdometryFrame));
-		mTransformBroadcaster.sendTransform(tf::StampedTransform (mMapToOdometry, ros::Time::now() , mMapFrame, mOffsetFrame));
+		mTransformBroadcaster.sendTransform(tf::StampedTransform (mOdometryOffset, ros::Time(last_scan_mapCB_processed_ST) /* ros::Time::now()*/ , mOffsetFrame, mOdometryFrame));
+		mTransformBroadcaster.sendTransform(tf::StampedTransform (mMapToOdometry, ros::Time(last_scan_mapCB_processed_ST) /* ros::Time::now()*/ , mMapFrame, mOffsetFrame));
 	}
 }
