@@ -877,7 +877,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		std::string name = node_dag_mc.id_name_map[id];
 		if ( (ind_p == 1 || ( (per_core_period_counts[core_id]) %ind_p == 1) ) ) // && (node_tid.find(name) != node_tid.end() ) ) // (ind > 0) && : Removing cuz CC now triggered by scheduler. 
 		{
-			// printf("MT: %f, RT: %f, trigger node: %s, frac: %i, period_count: %li \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, per_core_period_counts[core_id]);
+			if (per_core_period_counts[core_id]%50 == 7)
+				printf("MT: %f, RT: %f, trigger node: %s, frac: %i, period_count: %li \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, per_core_period_counts[core_id]);
 		
 			frontend->trigger_node(name, true);
 			// For Illixr Dag, need to trigger TW along with Imu, cuz Imu is at fixed freq for now. 
