@@ -226,7 +226,8 @@ MultiMapper::MultiMapper(ros::Publisher& mcb_pub)
 	}
 
 	// For measuring RT:
-	last_scan_mapCB_processed_ST = 0.0;
+	last_scan_mapCB_processed_ST = 0;
+	last_scan_mapCB_processed_all_RT = 0.0;
 	last_scan_mapCB_tf_processed = 0.0;
 	mScanTSPublisher = robotNode.advertise<std_msgs::Header>("mapper_scan_ts_used_TF", 1, false);
 	publishTransform();
@@ -268,6 +269,7 @@ MultiMapper::MultiMapper(ros::Publisher& mcb_pub)
 	map_upd_exec_end_pub = robotNode.advertise<std_msgs::Header>("exec_end_mapupd", 1, true);
 
 	tf_publish_ts_log.open("/home/ubuntu/catkin_ws/mapper_tf_ts_log.csv");
+	scan_processed_log.open("/home/ubuntu/catkin_ws/mapper_scan_process_log.csv");
 }
 
 void MultiMapper::socket_recv()
@@ -298,7 +300,7 @@ void MultiMapper::socket_recv()
 	int ret = 7;
 	struct sched_param sp = { .sched_priority = 3,};
         ret = sched_setscheduler(::gettid(), SCHED_FIFO, &sp);
-	ROS_ERROR("MultiMapper:: SOCKET tHREAD prio=3, retval: %i, tid: %i, pid: %i", ret, ::gettid(), ::getpid());
+	ROS_ERROR("MultiMapper:: SOCKET tHREAD prio=3, retval: %i, tid: %li, pid: %li", ret, ::gettid(), ::getpid());
 
 	// wait for msgs.
 	int read_size;
@@ -779,8 +781,6 @@ void MultiMapper::receiveLaserScan(const sensor_msgs::LaserScan::ConstPtr& scan)
 
 void MultiMapper::processLatestScans()
 {
-	struct timespec cb_start, cb_end;
-        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
 
 	bool tf_changed = false;
 
@@ -796,10 +796,15 @@ void MultiMapper::processLatestScans()
 	if ( scans.size() > 0 )
 		ROS_ERROR("Will process scan seqs from  %i [ts: %f] to %i [ts: %f]", scans[0].header.seq, scans[0].scan_time, scans[scans.size()-1].header.seq, scans[scans.size()-1].scan_time );
 	if ( scans.size() > 5 )
-		ROS_ERROR("mapcb : TOO MANY [%i] Scans to process!! Why :( ", scans.size() );
+		ROS_ERROR("mapcb : %f, TOO MANY [%i] Scans to process!! Why :( ", get_time_now(), scans.size() );
 
 	for (int i = 0; i < scans.size(); i++)
 	{
+	struct timespec cb_start, cb_end;
+        clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
+		double wall_scan_start = get_time_now();
+	double wall_scan_end = 0.0;
+
 		publishTransform();
 		// process latest_scan_recv.
 		if(!mLaser)
@@ -929,10 +934,12 @@ void MultiMapper::processLatestScans()
 					double t = get_time_diff(cb_start, cb_end);
 
 					total_mapcb_count += 1;
-					double exec_rt_end = get_time_now();					
+					wall_scan_end = get_time_now();					
 
+					wall_time_map_cb.push_back(wall_scan_end - wall_scan_start);
+					
 					scan_cb_times.push_back(t);
-					scan_cb_ts.push_back(exec_rt_end);
+					scan_cb_ts.push_back(wall_scan_end);
 
 					std_msgs::Header mcb_ee;
 					std::stringstream ss;
@@ -949,7 +956,7 @@ void MultiMapper::processLatestScans()
 				{       
 					// boost::chrono::duration<double> diff = now - last_map_cb_out;
 					// tput_map_cb.push_back( diff.count() );
-					tput_map_cb.push_back(exec_rt_end - last_map_cb_out);			
+					tput_map_cb.push_back(wall_scan_end- last_map_cb_out);			
 	
 				}
 
@@ -957,7 +964,7 @@ void MultiMapper::processLatestScans()
 				// set last map cb out to current time.
 				// last_map_cb_out = boost::chrono::duration_cast<boost::chrono::nanoseconds>(tse).count() * 1e-9;
 				// last_map_cb_out = now;
-				last_map_cb_out = exec_rt_end;
+				last_map_cb_out = wall_scan_end;
 
 				// denotes that there's atleast 1scan in the list of processed scans.
 				// Needed so that mapUpdate doesnt start running until there are scans. [Throws exception o.w.]
@@ -979,8 +986,8 @@ void MultiMapper::processLatestScans()
 			}
 			else
 			{
-				double sdrop_rt = get_time_now();
-				scan_drop_ts.push_back(sdrop_rt);
+				wall_scan_end = get_time_now();
+				scan_drop_ts.push_back(wall_scan_end);
 			
 				clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
                                 double dropt = get_time_diff(cb_start, cb_end);
@@ -989,7 +996,11 @@ void MultiMapper::processLatestScans()
 			}
 
 		}
-		last_scan_mapCB_processed_ST = scans[i].header.stamp.toSec();
+		last_scan_mapCB_processed_ST = (int) (10*scans[i].header.stamp.toSec());
+		last_scan_mapCB_processed_all_RT = scans[i].scan_time;
+
+		// for cleaner logging: 
+		scan_processed_log << last_scan_mapCB_processed_ST << ", " << (wall_scan_start-5000.0) << ", " << (wall_scan_end-5000.0) << ", " << get_time_diff(cb_start, cb_end) << "\n";
 	}
 	
 	if (scan_cb_times.size()%20 == 3)
@@ -1003,6 +1014,7 @@ void MultiMapper::processLatestScans()
 		write_arr_to_file<double>(scan_drop_exec_time, ss, "scanDropExecTimes");
 		write_arr_to_file<double>(trig_tput_map_cb, ss, "trigTput");
 		write_arr_to_file<bool>(scan_pose_ts, ss, "scanPoseTS");
+		write_arr_to_file<double>(wall_time_map_cb, ss, "wallTimeScanCB");
 	}
 
 
@@ -1096,6 +1108,8 @@ bool MultiMapper::getMap(nav_msgs::GetMap::Request  &req, nav_msgs::GetMap::Resp
 		currentMapMutex.lock();
 		res.map = mGridMap;
 		currentMapMutex.unlock();
+		// add latest scan processed TS:
+		// res.map.info.map_load_time = ros::Time(last_scan_mapCB_processed_ST/10.0);
 		return true;
 		
 	// 	return true;
@@ -1471,12 +1485,14 @@ void MultiMapper::publishTransform()
 		// Publish the latest scan TS on which these tf's are based :
 		std_msgs::Header hdr;
 		hdr.stamp = ros::Time(last_scan_mapCB_tf_processed);
+		hdr.frame_id = std::to_string(last_scan_mapCB_processed_ST) + " " + std::to_string(last_scan_mapCB_processed_all_RT);
+		// send RT last scan processed.
 		mScanTSPublisher.publish(hdr);
 		// ROS_ERROR("From mapScanCB: Publishing transform.. with TS %f", last_scan_mapCB_tf_processed);
 
 		tf_publish_ts_log << last_scan_mapCB_processed_ST << ", " << last_scan_mapCB_processed_ST /* ros::Time::now().toSec() */ << "\n";
 
-		mTransformBroadcaster.sendTransform(tf::StampedTransform (mOdometryOffset, ros::Time(last_scan_mapCB_processed_ST) /* ros::Time::now()*/ , mOffsetFrame, mOdometryFrame));
-		mTransformBroadcaster.sendTransform(tf::StampedTransform (mMapToOdometry, ros::Time(last_scan_mapCB_processed_ST) /* ros::Time::now()*/ , mMapFrame, mOffsetFrame));
+		mTransformBroadcaster.sendTransform(tf::StampedTransform (mOdometryOffset, ros::Time(last_scan_mapCB_processed_ST/10.0) /* ros::Time::now()*/ , mOffsetFrame, mOdometryFrame));
+		mTransformBroadcaster.sendTransform(tf::StampedTransform (mMapToOdometry, ros::Time(last_scan_mapCB_processed_ST/10.0) /* ros::Time::now()*/ , mMapFrame, mOffsetFrame));
 	}
 }

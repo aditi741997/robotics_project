@@ -16,6 +16,7 @@
 
 #include <queue>
 #include <boost/thread.hpp>
+#include <atomic>
 
 typedef actionlib::SimpleActionServer<nav2d_navigator::MoveToPosition2DAction> MoveActionServer;
 typedef actionlib::SimpleActionServer<nav2d_navigator::ExploreAction> ExploreActionServer;
@@ -150,7 +151,8 @@ private:
 	double current_mapCB_tf_navPlan_scan_ts, latest_mapCB_tf_navPlan_scan_ts;
 
 	ros::Subscriber mScanUsedTSTFSubscriber;
-	double current_mapper_tf_scan_ts; // latest transform's - scan used TS.
+	double current_mapper_tf_scan_ts, current_mapper_tf_allScans_rt_ts; // latest transform's - scan used TS & latest scan processed.
+	std::atomic<int> current_mapper_tf_allScans_ts;
 	void updateMapperScanTSUsedTF(const std_msgs::Header& hdr);
 
 	// Nov: For using sockets to communicate with scheduler:
@@ -163,4 +165,8 @@ private:
 	int navc_trigger_count, navp_trigger_count;
 	boost::condition_variable cv_navc, cv_navp;
 
+	int latest_mapCB_tf_ts_st_navp = 0;
+	int latest_mapCB_tf_ts_st_navc = 0; // comes with the hdr published along with the tf 
+	double latest_mapCB_tf_ts_rt_navp, latest_mapCB_tf_ts_rt_navc; // RT TS of latest scan processed before navc,navp fetch tf.
+	bool need_to_replan = true;
 };

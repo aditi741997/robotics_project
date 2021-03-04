@@ -70,13 +70,14 @@ public:
 	// For measuring RT:
 
 	// TS of last scan processed by mapCB.
-	double last_scan_mapCB_processed_ST;
+	std::atomic<int> last_scan_mapCB_processed_ST;
+	double last_scan_mapCB_processed_all_RT;
 
 	// TSS of last scan used in generating the mapToOdom TF.
-	double last_scan_mapCB_tf_processed;
+	double last_scan_mapCB_tf_processed; // counts only the scans which produce a new TF
 
 	// For measuring Tput of subchains MapCB and MapUpdate:
-	std::vector<double> tput_map_cb, tput_map_update;
+	std::vector<double> tput_map_cb, tput_map_update, wall_time_map_cb;
 	double last_map_cb_out, last_map_upd_out;
 	// boost::chrono::time_point<boost::chrono::system_clock> last_map_upd_out;
 
@@ -199,6 +200,10 @@ private:
 	std::vector<double> map_update_ts;
 
 	std::vector<int> map_update_scan_count;
+
+	std::ofstream scan_processed_log;
+	std::vector<int> scan_st_processed;
+	std::vector<double> scan_when_process_start_rt, scan_when_process_end_rt, scan_exec_time;
 };
 
 #endif
