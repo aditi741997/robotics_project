@@ -64,7 +64,36 @@ def get_num_collisions_run(ts_arr, ts_colln_arr, start_ts):
                 final_cols.add( round( ts_arr [ colln_cluster_start[ newcolid_colid[newid][0] ] ] - start_ts, 3 ) )
         print("FINAL #nEW COLS : ", len(newcolid_colid), " #COLLISIONS: ", final_cols)
         return (final_cols, last_col_ts)
-        
+
+import math
+small_map = True
+num_phyarea_blocks = 56 if small_map else 100
+def get_phy_area(pos_arr):
+        #small map area : x: -16,16 y: -13.5,13.5
+	#large map area : ?
+	# make 4*4 boxes.
+	#assign each robo locn to a box.
+	xl=-16 if small_map else -50
+	xr=16 if small_map else 50
+	yb=-14 if small_map else -30
+	yt=14 if small_map else 30
+	blocksz = 4 if small_map else 5
+	covered_blocks = {} #block id is x+y
+	ct = 0
+	covered_blks_arr = []
+	for p in pos_arr:
+		blockx = math.floor( (p[0] - xl) / blocksz )
+		blocky = math.floor((p[1] - yb)/blocksz)
+		blockid = str(blockx) + "_" + str(blocky)
+		ct += 1
+		if (ct%50 == 7) and (len(covered_blocks) > 26):
+			print("robot posn : ", p, " block id: ", (blockx, blocky), blockid, " total blocks covered: ", len(covered_blocks)  )
+		if blockid not in covered_blocks:	
+			covered_blocks[blockid] = 0
+		covered_blocks[blockid] += 1
+		covered_blks_arr.append(len(covered_blocks))
+	return covered_blks_arr
+
 
 # return dict: slot# -> aggregate value.
 def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
@@ -408,10 +437,11 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["DefaultHigh_1c" ] #"DefaultTD_2c"] 
+expts = ["StaticNewF2_1c" ] #"DefaultTD_2c"] 
 
-runs = range(51, 101)
-#runs.remove(3)
+runs = range(1,60)
+for badr in [11,19,24,26,32,33,34,35,36]: #[4,20,22,27,35,36,45,53]:
+    runs.remove(badr)
 print(runs, len(runs))
 
 #for i in [1,2,3,4,5,6]: #1,3,6,7,8,9]:
@@ -449,6 +479,8 @@ for i in expts:
         clean_finish_arr = [] # whether each run was a clean [>90p area & expl finished] exit.
 	run_finish_arr = [] # whether the robot claimed expl had finished.
 	runs_colln_end_arr = [] # whether there was a collision in the end of the run [last 10s ST]
+
+	run_time_phyarea = []
 
         run_pathlens = [] # Distance travelled by robot
         run_areabypaths = [] # ratio of area covered to path length.
@@ -676,6 +708,9 @@ for i in expts:
                         old_pos_x = 0.0
                         old_pos_y = 0.0
                         path_started = False
+			
+			robo_posn_arr = []
+			
 			for o in range(len(obfl)//numl):
 				rob_pos = o*numl + 1
 				rob_pos_l = obfl[rob_pos].split(' ')
@@ -724,6 +759,7 @@ for i in expts:
 					ow = float( obfl[o*numl + num_obst + 2].split(' ')[7] )
 					
 					
+					robo_posn_arr.append((rob_x, rob_y))
 					ts_arr.append(pos_rt_ts)
 			                st_ts_arr.append(pos_st_ts)
                                         ts_colln_hua = False	
@@ -754,6 +790,21 @@ for i in expts:
                                                         sto_ct += 1
                                         ts_colln_bool_arr.append(ts_colln_hua)
                         run_collision_count, last_colln_ts = get_num_collisions_run(st_ts_arr, ts_colln_bool_arr, start_st_i)
+			phy_area_numblocks_arr = get_phy_area(robo_posn_arr)
+			phyarea_iter_ct = 0
+			curr_blk_ct = phy_area_numblocks_arr[0]
+			this_run_time_parea_dict = {}
+			this_run_time_parea_dict[curr_blk_ct] = (st_ts_arr[0] - start_st_i)
+			
+			while phyarea_iter_ct < len(phy_area_numblocks_arr):
+				while phyarea_iter_ct < len(phy_area_numblocks_arr) and phy_area_numblocks_arr[phyarea_iter_ct] == curr_blk_ct:
+					phyarea_iter_ct += 1
+				if phyarea_iter_ct < len(phy_area_numblocks_arr) and phy_area_numblocks_arr[phyarea_iter_ct] != curr_blk_ct:
+					curr_blk_ct = phy_area_numblocks_arr[phyarea_iter_ct]
+				 	this_run_time_parea_dict[curr_blk_ct] = (st_ts_arr[phyarea_iter_ct] - start_st_i)
+			print("FOR exptid : ", exp_id, " time_phyarea : ", this_run_time_parea_dict)
+			run_time_phyarea.append(this_run_time_parea_dict)
+			
 			'''
 					if ( pos_rt_ts > (end_i - (end_i - start_i)/10 ) ) and (pos_rt_ts < (end_i + 1.0) ):
 						robot_edges = get_robot_edges(rob_x, rob_y, oz, ow) # gives an arr of 4segments.
@@ -985,6 +1036,7 @@ for i in expts:
         print("FOR expt %s, colln array : %s"%(i, str(colln_count_arr) ) )
         print("Time to cover Xp area : ", time_to_areas)
         print("SimTime to cover Xp area : ", stime_to_areas)
+	print("SimTime to cover #blocks PHYArea", run_time_phyarea)
         print("FOR expt %s, clean finish arr : %s"%(i, clean_finish_arr) )
 	print("for EXPT %s, run_expl_finished ARR: %s"%(i, str(run_finish_arr) ) )
 	print("FOR EXPT %s, runs_colln_end_arr : %s "%(i, str(runs_colln_end_arr)) )
