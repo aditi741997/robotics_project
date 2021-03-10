@@ -83,6 +83,7 @@ per_run_mapu_time = []
 per_run_navp_time = []
 per_run_navp_ts = []
 per_run_drops_ratio = []
+per_run_scan_lat = []
 for run in range(start_run_ind,end_run_ind+1):
     print("################## DOING RUN %i"%(run) )
     for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_plan"]:
@@ -154,6 +155,7 @@ for run in range(start_run_ind,end_run_ind+1):
         if len(lats) > 0:
             large_lats = filter(lambda x: x[0] > 1.0 , zip(lats, ts, wallts, times) ) 
             print("NODE ", fname, " VERY HIGH LATS: ", large_lats, " LARGEST Lat: ", sorted(zip(lats, ts, wallts, times), key=lambda x: x[0])[-1] )
+            per_run_scan_lat += zip(lats, wallts, times)
 
         if len(tputs) > 0:
             if "cmd" in fname:
@@ -217,4 +219,5 @@ print("\n \n PER RUN MAPUPD CI : ", per_run_mapu_time)
 print("\n \n PER RUN NAVP CI : ", per_run_navp_time)
 print("\n \n PER RUN NAVP TS: ", per_run_navp_ts)
 '''
+print("\n \n PER RUN SCAN LATENCY AT MAPCB : ", per_run_scan_lat)
 print("PER RUN DROPS RATIO: , avg ratio : %f, median ratio : %f", per_run_drops_ratio, sum(per_run_drops_ratio)/len(per_run_drops_ratio), np.median(per_run_drops_ratio) )
