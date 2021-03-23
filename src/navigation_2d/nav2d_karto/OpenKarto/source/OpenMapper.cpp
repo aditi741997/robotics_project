@@ -2276,8 +2276,16 @@ namespace karto
   void check_tdiff(timespec& a, timespec& b, std::string s)
   {
 	  double d = get_tdiff(a,b);
-	  if (d > 0.054)
-		  std::cerr << "OpenMapper:: Process " << s <<  " took > 10ms!! time: " << d << std::endl;
+	  if (d > 0.0015)
+		  std::cerr << "OpenMapper:: Process " << s <<  " took > 1.5ms!! time: " << d << std::endl;
+  }
+
+  void check_corrPose(LocalizedObject* pLocObj, karto::Pose2 pose, std::string s)
+  {
+	  // check if pLocObj->GetCorrPose is different from pose.
+	  karto::Pose2 newpose = pLocObj->GetCorrectedPose();
+	  if (newpose != pose)
+		  std::cerr << "OpenMapper:: Process " << s << "CorrectedPose was CHANGED after setCorr line!!!!" << std::endl;
   }
 
   kt_bool OpenMapper::Process(Object* pObject)
@@ -2292,7 +2300,9 @@ clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_start);
 struct timespec process_end1, process_end2, process_end3, process_end4, process_end5, process_end6, process_end7, process_end8, process_end9, process_end10;
     
     kt_bool isObjectProcessed = Module::Process(pObject);
-    	
+
+    kt_bool old_objProc = isObjectProcessed;
+
 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end1);
 check_tdiff(process_start, process_end1, "Start_End1");
 
@@ -2316,6 +2326,10 @@ check_tdiff(process_end1, process_end2, "End1_End2");
     }
     
     LocalizedObject* pLocalizedObject = dynamic_cast<LocalizedObject*>(pObject);
+    karto::Pose2 curr_pose, curr_pose2;
+    curr_pose = pLocalizedObject->GetCorrectedPose();
+    curr_pose2 = pLocalizedObject->GetCorrectedPose();
+
     if (pLocalizedObject != NULL)
     {
       LocalizedLaserScan* pScan = dynamic_cast<LocalizedLaserScan*>(pObject);
@@ -2359,9 +2373,11 @@ check_tdiff(process_end1, process_end5, "End1_End5");
         pLocalizedObject->SetCorrectedPose(lastTransform.TransformPose(pLocalizedObject->GetOdometricPose()));
       
 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end6);
-check_tdiff(process_end1, process_end6, "End1_End6");
+// check_tdiff(process_end1, process_end6, "End1_End6");
       }
-      
+     
+	curr_pose = pLocalizedObject->GetCorrectedPose();
+
       // check custom data if object is not a scan or if scan has not moved enough (i.e.,
       // scan is outside minimum boundary or if heading is larger then minimum heading)
       if (pScan == NULL || (!HasMovedEnough(pScan, pLastScan) && !pScan->IsGpsReadingValid()))
@@ -2376,12 +2392,14 @@ check_tdiff(process_end1, process_end6, "End1_End6");
          
 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end7);
 check_tdiff(process_end1, process_end7, "End1_End7 True");
-
+std::cerr << "End1_End7 True\n"; // this never happens.
+check_corrPose(pLocalizedObject, curr_pose, "End1_End7 True");
           return true;
         }
 
 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end7);
 check_tdiff(process_end1, process_end7, "End1_End7 False");
+// std::cerr << "End1_End7 False\n";
 	 
 	/*
 	if (pScan == NULL)
@@ -2392,7 +2410,8 @@ check_tdiff(process_end1, process_end7, "End1_End7 False");
 	*/
 	  return false;
       }
-      
+     
+      // Put the rest of the code in a separate function.
       /////////////////////////////////////////////
       // object is a scan
       
@@ -2406,11 +2425,11 @@ check_tdiff(process_end1, process_end7, "End1_End7 False");
         m_pSequentialScanMatcher->MatchScan(pScan, m_pMapperSensorManager->GetRunningScans(pScan->GetSensorIdentifier()), bestPose, covariance);
         pScan->SetSensorPose(bestPose);
       }
-      
+      curr_pose2 = pLocalizedObject->GetCorrectedPose();
       ScanMatched(pScan);
      
 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end7);
-check_tdiff(process_end1, process_end7, "End1_End7 AfterScanMatched");
+// check_tdiff(process_end1, process_end7, "End1_End7 AfterScanMatched");
 
       // add scan to buffer and assign id
       m_pMapperSensorManager->AddLocalizedObject(pLocalizedObject);
@@ -2424,7 +2443,7 @@ check_tdiff(process_end1, process_end7, "End1_End7 AfterScanMatched");
         m_pMapperSensorManager->AddRunningScan(pScan);
         
 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end10);
-check_tdiff(process_end1, process_end10, "End1_End10 If GetVal AddRunningScan");
+// check_tdiff(process_end1, process_end10, "End1_End10 If GetVal AddRunningScan");
 
         List<Identifier> sensorNames = m_pMapperSensorManager->GetSensorNames();
         karto_const_forEach(List<Identifier>, &sensorNames)
@@ -2433,7 +2452,7 @@ check_tdiff(process_end1, process_end10, "End1_End10 If GetVal AddRunningScan");
         }      
       
 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end8);
-check_tdiff(process_end1, process_end8, "End1_End8 If GetVal done CloseLoop");
+// check_tdiff(process_end1, process_end8, "End1_End8 If GetVal done CloseLoop");
       }
       
       m_pMapperSensorManager->SetLastScan(pScan);
@@ -2442,9 +2461,16 @@ check_tdiff(process_end1, process_end8, "End1_End8 If GetVal done CloseLoop");
       
       isObjectProcessed = true;
     } // if object is LocalizedObject
-    
+
+    if (!isObjectProcessed)
+    {
+	    std::cerr << "isObjectProcessed is FALSE!!!, returning now \n";
 clock_gettime(CLOCK_THREAD_CPUTIME_ID, &process_end9);
-check_tdiff(process_end1, process_end9, "End1_End9 AllDone!");
+check_tdiff(process_end1, process_end9, "End1_End9 NOT isObjectProcessed");
+    }
+
+// check_corrPose(pLocalizedObject, curr_pose, "End1_End9 ObjProc: " + std::to_string(isObjectProcessed) );
+check_corrPose(pLocalizedObject, curr_pose2, "End1_End9 ObjProc[Pose2]: " + std::to_string(isObjectProcessed) );
     return isObjectProcessed;
   }
 
