@@ -221,7 +221,7 @@ public:
   std::string last_odom_bl_tf;
 
   // For measuring RT:
-  double getDeltaFromLastUpdated();
+  // double getDeltaFromLastUpdated();
 
   // For making the critical chain ED:
   std::mutex mutex_map_update;

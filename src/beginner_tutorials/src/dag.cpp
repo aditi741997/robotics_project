@@ -233,16 +233,17 @@ DAG::DAG(std::string fname)
 				//its a node!!
 				DAGNode n;
 				std::string name;
-				float ci, fixed_per, min_per;
-				ss >> name >> ci >> fixed_per >> min_per;
+				float ci, fixed_per, min_per, max_per;
+				ss >> name >> ci >> fixed_per >> min_per >> max_per;
 
 				n.name = name;
 				n.id = node_count;
 				n.compute = ci;
 				n.fixed_period = fixed_per;
 				n.min_period = min_per;
+				n.max_period = max_per;
 
-				std::cout << "Adding node, name : " << name << ", id : " << n.id << ", ci :" << ci << ", fixed_period: " << fixed_per << ", min per: " << min_per << std::endl;
+				std::cout << "Adding node, name : " << name << ", id : " << n.id << ", ci :" << ci << ", fixed_period: " << fixed_per << ", min per: " << min_per << ", max period: " << max_per << std::endl;
 
 				id_name_map[node_count] = name;
 				id_node_map[node_count] = n;
@@ -353,10 +354,7 @@ bool DAG::order_chains_criticality(std::vector<std::tuple<float, std::vector<int
 
 	double cons0 = std::get<0>(all_chains[0]);
 	
-	if (name_id_map.find("s") != name_id_map.end() ) // hard-coding for nav2d based on 90p LMap ci.
-		all_chains_rel_weights = std::vector<double> {1.0, 0.0064, 0.006, 0.0046, 0.0175};
-	// for (int i = 0; i < all_chains.size(); i++)
-		// all_chains_rel_weights.push_back( cons0/ (std::get<0>(all_chains[i])) );
+	all_chains_rel_weights = std::vector<double> {1.0, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
 	print_dvec(all_chains_rel_weights, "All Chains Rel Weights:");
 
 	return ret;	
@@ -1045,7 +1043,7 @@ void DAG::clear_old_data(int frac_var_count)
 	all_rt_minmono_periods.clear();
 }
 
-void DAG::update_cis(std::map<std::string, std::list<double> >& node_ci_arr)
+void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> >& node_ci_arr)
 {
 	for (auto const& x: node_ci_arr)
 	{

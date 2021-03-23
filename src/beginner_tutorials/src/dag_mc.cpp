@@ -7,7 +7,7 @@ DAGMultiCore::DAGMultiCore()
 
 void DAGMultiCore::set_params(int numc, std::vector< std::vector<int> >& sc_core_a)
 {
-	printf("IN DAGMultiCore::set_params, numc: %i, len of sc_core_assgt: %lu, len of sc_core_assgt[0]: %lu \n", numc, sc_core_assgt.size(), sc_core_a[0].size());
+	printf("IN DAGMultiCore::set_params, numc: %i, len of sc_core_assgt: %lu, len of sc_core_assgt[0]: %lu \n", numc, sc_core_a.size(), sc_core_a[0].size());
 	num_cores = numc;
 	sc_core_assgt = sc_core_a;
 }
@@ -202,8 +202,8 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	}
 	
 	
-	// ci*fi > 1 for all. ci: sum of ith subchain compute.
-	// To minimize overhead and keep sleep time error < 10%.
+	// ci*fi > 1ms for all. ci: sum of ith subchain compute.
+	// To minimize overhead and keep sleep time error < 10%. [sleep time error is ~0.12ms]
 	for (int i = 0; i < exec_order.size(); i++)
 		if (sc_id_frac_id.find(i) != sc_id_frac_id.end())
 		{
@@ -244,6 +244,15 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 				printf("ADDED constraint on per of SC id %i, >= min_per: %f ", node_id_sc_id[jnode.id], jnode.min_period);
 				print_dvec(a, "");
 				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(1.0/jnode.min_period) ) );
+			}
+			// period of SC containing jnode <= max_period.
+			if (jnode.max_period > 0)
+			{
+				std::vector<double> a (total_vars, 0.0);
+				a[frac_var_ct + node_id_sc_id[jnode.id] ] = 1.0;
+				printf("ADDED constraint on per of SC id %i, <= max_per: %f ", node_id_sc_id[jnode.id], jnode.max_period);
+				print_dvec(a, "");
+				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(jnode.max_period) ) );
 			}
 			if ( fixed_per > 0 )
 			{
@@ -417,7 +426,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 				// Directly using node's SC's period variable in Jan26 formulation.
 				std::vector<double> a (total_vars, 0.0);
 				a[frac_var_ct + node_id_sc_id[nj1.id] ] = 1.0;
-				print_dvec(a, "Adding period of subchain "+std::to_string(node_id_sc_id[nj1.id]) );
+				print_dvec(a, "Adding period of subchain"+std::to_string(node_id_sc_id[nj1.id]) );
 				ith_ap.push_back(a);
 				ith_ac.push_back( log(p_mult_factor) );
 

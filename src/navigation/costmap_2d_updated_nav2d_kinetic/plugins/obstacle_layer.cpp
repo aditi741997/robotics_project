@@ -103,6 +103,8 @@ void ObstacleLayer::onInitialize()
     source_node.param("clearing", clearing, false);
     source_node.param("marking", marking, true);
 
+    ROS_ERROR("Obstacle Layer: For scan topic %s, obs persistence %f ", topic.c_str(), observation_keep_time);
+
     if (!sensor_frame.empty())
     {
       sensor_frame = tf::resolve(tf_prefix, sensor_frame);
@@ -492,9 +494,9 @@ bool ObstacleLayer::getMarkingObservations(std::vector<Observation>& marking_obs
     marking_buffers_[i]->getObservations(marking_observations);
     current = marking_buffers_[i]->isCurrent() && current;
     
-    // For measuring RT:
-    ros::Time d = marking_buffers_[i]->getLatestObsTimeStamp();
-    latestObsTS = std::max(latestObsTS, d.toSec());
+    // For measuring RT: old
+    // ros::Time d = marking_buffers_[i]->getLatestObsTimeStamp();
+    // latestObsTS = std::max(latestObsTS, d.toSec());
 
     marking_buffers_[i]->unlock();
   }
@@ -514,7 +516,7 @@ bool ObstacleLayer::getClearingObservations(std::vector<Observation>& clearing_o
     current = clearing_buffers_[i]->isCurrent() && current;
     
     // For measuring RT:
-    latestObsTS = std::max(latestObsTS, clearing_buffers_[i]->getLatestObsTimeStamp().toSec());
+    // latestObsTS = std::max(latestObsTS, clearing_buffers_[i]->getLatestObsTimeStamp().toSec());
 
     clearing_buffers_[i]->unlock();
   }

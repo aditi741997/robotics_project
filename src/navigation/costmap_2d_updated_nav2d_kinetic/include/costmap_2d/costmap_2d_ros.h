@@ -221,7 +221,7 @@ public:
   std::string last_odom_bl_tf;
 
   // For measuring RT:
-  double getDeltaFromLastUpdated();
+  // double getDeltaFromLastUpdated();
 
   // For making the critical chain ED:
   std::mutex mutex_map_update;
@@ -229,6 +229,7 @@ public:
 
   std::condition_variable* cv_robot_op_lp;
   ros::Publisher* lc_pub;
+  ros::Publisher lc_exec_end_pub;
 
 protected:
   LayeredCostmap* layered_costmap_;

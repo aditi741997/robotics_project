@@ -34,6 +34,22 @@ void publish_tids_loop(ros::Publisher* pub, std::vector<int> tids, std::vector<s
 			}
 }
 
+void publishTfLoop(int milli_sleeptime, MultiMapper* mapper)
+{
+	// this thread sleep for some time
+	// publish current tf with current simTS.
+	// set high prio so this can run whenever needed.
+	struct sched_param sp = { .sched_priority = 3,};
+	int ret = sched_setscheduler(::gettid(), SCHED_FIFO, &sp);
+	ROS_ERROR("PublishTf LOOP Has started!! with sleeptime: %i", milli_sleeptime);
+	while(ros::ok())
+	{
+		std::this_thread::sleep_for (std::chrono::milliseconds(milli_sleeptime));
+		mapper->publishTransform();
+	}
+}
+
+
 int main(int argc, char **argv)
 {
 	// Initialize ROS
@@ -54,6 +70,8 @@ int main(int argc, char **argv)
 	ROS_ERROR("Publishing mapper_extra tid %i (CBT), pmt %i , InternalCBQT %i , pid %i to controller", ::gettid(), node.getPMTId(), node.getInternalCBQTId(), ::getpid() );
 
 	std::thread pub_id_thr (publish_tids_loop, &pub1, std::vector<int> {::gettid(),node.getPMTId(),node.getInternalCBQTId()}, std::vector<std::string> {"mapcb_extra","mapupd_extra"} );
+
+	// std::thread pub_tf_thr ( publishTfLoop, 20, &mapper); // 50Hz RT ~ 10Hz ST
 
 	/*
 	publish_tid("mapcb_extra", ::gettid(), &pub1);

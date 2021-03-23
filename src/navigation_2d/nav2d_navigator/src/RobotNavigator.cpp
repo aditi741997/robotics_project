@@ -300,6 +300,12 @@ RobotNavigator::~RobotNavigator()
 void RobotNavigator::updateMapperScanTSUsedTF(const std_msgs::Header& hdr)
 {
 	current_mapper_tf_scan_ts = hdr.stamp.toSec();
+	// stringstream : get ST and RT.
+	std::stringstream ss;
+	ss << hdr.frame_id;
+	int a;
+	ss >> a >> current_mapper_tf_allScans_rt_ts;
+	current_mapper_tf_allScans_ts = a; // stoi(hdr.frame_id); // this is int 10*ST.
 }
 
 bool RobotNavigator::getMap()
@@ -313,7 +319,7 @@ bool RobotNavigator::getMap()
 	}
 	
 	nav_msgs::GetMap srv;
-	ROS_ERROR("IN RoboNavigator calling getMap service!!");
+	// ROS_WARN("IN nav2d::RobotNavigator About to call getMap service!!");
 	if(!mGetMapClient.call(srv))
 	{
 		ROS_ERROR("Could not get a map.");
@@ -389,9 +395,23 @@ bool RobotNavigator::preparePlan()
 		ROS_ERROR("Could not get a new map, trying to go with the old one...");
 	}
 	
+	// check if the location info is new...
+	// can also check current_mapper_tf : if mapcb has processed new scans...
+	// check this before querying for position Tf.
+	// double current_mapCB_tf_ts_st = mCurrentMap.getMap().info.map_load_time.toSec(); // represents the latest scan TS processed by the mapper.
+	/* if (current_mapCB_tf_ts_st <= latest_mapCB_tf_ts_st_navp)
+	{
+		ROS_ERROR("TF TS %F SAME As before %f, no new scan processed!!! NOT planning this time...", current_mapCB_tf_ts_st, latest_mapCB_tf_ts_st_navp);
+		need_to_replan = false;
+		return true;
+	}
+	latest_mapCB_tf_ts_st_navp = current_mapCB_tf_ts_st;
+	*/
+	need_to_replan = true;
+
 	// Where am I?
 	if(!setCurrentPosition(1) || (get_pos_tf_error_ct>3)) return false;
-	
+
 	// Clear robot footprint in map
 	unsigned int x = 0, y = 0;
 	if(mCurrentMap.getCoordinates(x, y, mStartPoint))
@@ -532,7 +552,6 @@ bool RobotNavigator::createPlan()
 		if (mCurrentPlan[i] != newPlan[i])
 			ROS_ERROR("SHITTTTTTTTT Plan was NOT COPIED CORRECTLY!!! In createPlan()");
 	currentPlanSize = mapSize;
-	currentPlanMutex.unlock();
 	
 	if(mCurrentPlan[mStartPoint] < 0)
 	{
@@ -541,12 +560,13 @@ bool RobotNavigator::createPlan()
 	}
 	
 	publishPlan();
+	currentPlanMutex.unlock();
 
 	// For measuring RT: 
 	current_plan_last_scan_mapCB_mapUpd_used_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
 	// current_... denotes the TS for the current copy of navPlan
 	// latest_... denotes the TS for the navPlan being made, i.e. latest_ >= current_.
-	current_mapCB_tf_navPlan_scan_ts = latest_mapCB_tf_navPlan_scan_ts;
+	current_mapCB_tf_navPlan_scan_ts = latest_mapCB_tf_ts_rt_navp; // latest_mapCB_tf_navPlan_scan_ts;
 	return true;
 }
 
@@ -662,7 +682,7 @@ bool RobotNavigator::generateCommand()
 	// These 2 values are set by the planner node, 
 	// since it can run in ||al with the NavCmd node, we shoudl save these at 
 	double using_curr_plan_mapUpd_scan_ts = current_plan_last_scan_mapCB_mapUpd_used_ts;
-	double using_curr_plan_mapCB_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts;
+	double using_curr_plan_mapCB_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts; // this TS now represents all scans processed latest TS.
 
 	// ROS_WARN("IN RobotNavigator::generateCommand - WIll try to publish a command for the Operator to follow.");
 	// Do nothing when paused
@@ -758,7 +778,9 @@ bool RobotNavigator::generateCommand()
 
 	// For measuring RT:
 	msg.LastScanTSScanMapCBMapUpdNavPlanNavCmd = using_curr_plan_mapUpd_scan_ts;
-	msg.LastScanTSScanMapCBNavCmd = current_mapCB_tf_navCmd_scan_ts;// dont need to store 'using' here since NavCmd runs in the order : setCurrentPosition, stuff, generateCommand.
+
+	// Chains 2,3 i.e. without mapUpd, use TF with a different TS.
+	msg.LastScanTSScanMapCBNavCmd = latest_mapCB_tf_ts_rt_navc; // current_mapCB_tf_navCmd_scan_ts;// dont need to store 'using' here since NavCmd runs in the order : setCurrentPosition, stuff, generateCommand.
 	msg.LastScanTSScanMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_scan_ts;
 	mCommandPublisher.publish(msg);
 	return true;
@@ -1161,190 +1183,213 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 			stop();
 			return;
 		}
-		
-		// Where are we now : Uses the tf output from Mapper Node.
-		mHasNewMap = false;
-		if(!setCurrentPosition(1) || (get_pos_tf_error_ct > 3) )
+	
+		// DONT run if latest_? >= current_ and current is not too old
+		if (( latest_mapCB_tf_ts_st_navp < current_mapper_tf_allScans_ts) && ( (current_mapper_tf_allScans_ts > ( (ros::Time::now().toSec() * 10) - 100) ) || ( ( get_time_now() - last_nav_plan_out) > 1.2) ) )
 		{
-			ROS_ERROR("Exploration failed. could not get current position.");
-			mExploreActionServer->setAborted();
-			nav_cmd_thread_shutdown_ = true;
-			stop();
-			return;
-		}
-
-		// Making the navigator Plan a periodic node:
-		// running at period mReplanningPeriod.
-
-		// // Regularly recheck for exploration target
-		// bool reCheck = lastCheck == 0 || (recheckCycles && (cycle - lastCheck > recheckCycles));
-		// bool planOk = mCurrentPlan && mCurrentPlan[mStartPoint] >= 0;
-		// bool nearGoal = planOk && ((cycle - lastCheck) > recheckThrottle && mCurrentPlan[mStartPoint] <= mExplorationGoalDistance);
-		
-		// if(reCheck || nearGoal)
-		// {
-
-		double using_map_ts, using_tf_scan_ts;
-
-			WallTime startTime = WallTime::now();
-			lastCheck = cycle;
-
-			bool success = false;
-			if(preparePlan())
+			// All navP code here.
+			// Where are we now : Uses the tf output from Mapper Node.
+			latest_mapCB_tf_ts_st_navp = current_mapper_tf_allScans_ts;
+			latest_mapCB_tf_ts_rt_navp = current_mapper_tf_allScans_rt_ts;
+			mHasNewMap = false;
+			if(!setCurrentPosition(1) || (get_pos_tf_error_ct > 3) )
 			{
-				// the TS of TF being used by navPlan is set when setCurrentPosition is called from within preparePlan
-				// TS of map being used is also set when setCurrentPosition is called from within preparePlan
-				using_map_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
-				using_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts;
-				
-				int result = mExplorationPlanner->findExplorationTarget(&mCurrentMap, mStartPoint, mGoalPoint);
-				switch(result)
-				{
-				case EXPL_TARGET_SET:
-					success = createPlan();
-					mStatus = NAV_ST_EXPLORING;
-					break;
-				case EXPL_FINISHED:
-					{
-						nav2d_navigator::ExploreResult r;
-						r.final_pose.x = mCurrentPositionX;
-						r.final_pose.y = mCurrentPositionY;
-						r.final_pose.theta = mCurrentDirection;
-						mExploreActionServer->setSucceeded(r);
-						explore_end_clk = clock();
-						double explore_end_real_ts = get_time_now();
-						ROS_ERROR("Exploration has finished. Total_Time_Taken_Clk: %f, Time of finish : %f #", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC, explore_end_real_ts);
-					}
-					stop();
-					clock_gettime(CLOCK_MONOTONIC, &explore_end);
-					ROS_ERROR("Exploration has finished. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
-					nav_cmd_thread_shutdown_ = true;
-					return;
-				case EXPL_WAITING:
-					mStatus = NAV_ST_WAITING;
-					{
-						nav2d_operator::cmd stopMsg;
-						stopMsg.Turn = 0;
-						stopMsg.Velocity = 0;
-						mCommandPublisher.publish(stopMsg);
-					}
-					ROS_ERROR("Exploration is waiting.");
-					break;
-				case EXPL_FAILED:
-					ROS_ERROR("Got EXPL_FAILED from findExplorationTarget");
-					break;
-				default:
-					ROS_ERROR("Exploration planner returned invalid status code: %d!", result);
-				}
+				ROS_ERROR("Exploration failed. could not get current position.");
+				mExploreActionServer->setAborted();
+				nav_cmd_thread_shutdown_ = true;
+				stop();
+				return;
 			}
-			else
-				ROS_ERROR("PreparePlan was unsuccessful!!");
+
+			// Making the navigator Plan a periodic node:
+			// running at period mReplanningPeriod.
+
+			// // Regularly recheck for exploration target
+			// bool reCheck = lastCheck == 0 || (recheckCycles && (cycle - lastCheck > recheckCycles));
+			// bool planOk = mCurrentPlan && mCurrentPlan[mStartPoint] >= 0;
+			// bool nearGoal = planOk && ((cycle - lastCheck) > recheckThrottle && mCurrentPlan[mStartPoint] <= mExplorationGoalDistance);
 			
-			if(mStatus == NAV_ST_EXPLORING)
-			{
-				if(success)
+			// if(reCheck || nearGoal)
+			// {
+
+			double using_map_ts, using_tf_scan_ts;
+
+				WallTime startTime = WallTime::now();
+				lastCheck = cycle;
+
+				bool success = false;
+				if(preparePlan())
 				{
-					WallTime endTime = WallTime::now();
-					WallDuration d = endTime - startTime;
-					ROS_ERROR("Exploration planning took %.09f seconds, distance is %.2f m.", d.toSec(), mCurrentPlan[mStartPoint]);
-					// indicates a plan was made successfully. [preparePlan, findExplorationtarget, createPlan.]
-					// if ( (using_map_ts > nav_plan_last_map_used) || (using_tf_scan_ts > nav_plan_last_tf_used) )
+					if (need_to_replan)
 					{
-						double time_now = get_time_now();
-						if (last_nav_plan_out > 0.0)
+						// the TS of TF being used by navPlan is set when setCurrentPosition is called from within preparePlan
+						// TS of map being used is also set when setCurrentPosition is called from within preparePlan
+						
+						using_map_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
+						using_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts;
+						
+						int result = mExplorationPlanner->findExplorationTarget(&mCurrentMap, mStartPoint, mGoalPoint);
+						switch(result)
 						{
-							tput_nav_plan.push_back(time_now - last_nav_plan_out);
-							ROS_ERROR("MADE NEW NAV PLAN, Tput : %f , realtime: %f", (time_now - last_nav_plan_out), time_now );
-							if ( (time_now - last_nav_plan_out) > 5.0 )
-								ROS_ERROR("WEIRD!!!!! NAV PLAN TPUT TOO HIGH!!!");
+						case EXPL_TARGET_SET:
+							success = createPlan();
+							mStatus = NAV_ST_EXPLORING;
+							break;
+						case EXPL_FINISHED:
+							{
+								nav2d_navigator::ExploreResult r;
+								r.final_pose.x = mCurrentPositionX;
+								r.final_pose.y = mCurrentPositionY;
+								r.final_pose.theta = mCurrentDirection;
+								mExploreActionServer->setSucceeded(r);
+								explore_end_clk = clock();
+								double explore_end_real_ts = get_time_now();
+								ROS_ERROR("Exploration has finished. Total_Time_Taken_Clk: %f, Time of finish : %f #", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC, explore_end_real_ts);
+							}
+							stop();
+							clock_gettime(CLOCK_MONOTONIC, &explore_end);
+							ROS_ERROR("Exploration has finished. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
+							nav_cmd_thread_shutdown_ = true;
+							return;
+						case EXPL_WAITING:
+							mStatus = NAV_ST_WAITING;
+							{
+								nav2d_operator::cmd stopMsg;
+								stopMsg.Turn = 0;
+								stopMsg.Velocity = 0;
+								mCommandPublisher.publish(stopMsg);
+							}
+							ROS_ERROR("Exploration is waiting.");
+							break;
+						case EXPL_FAILED:
+							ROS_ERROR("Got EXPL_FAILED from findExplorationTarget");
+							break;
+						default:
+							ROS_ERROR("Exploration planner returned invalid status code: %d!", result);
 						}
 
-						last_nav_plan_out = time_now;
-						nav_plan_last_map_used = using_map_ts;
-						nav_plan_last_tf_used = using_tf_scan_ts;
 					}
-				}else
-				{
-					mExploreActionServer->setAborted();
-					stop();
-					explore_end_clk = clock();
-					clock_gettime(CLOCK_MONOTONIC, &explore_end);
-					double explore_end_ts = get_time_now();
-					ROS_ERROR("Exploration has failed. Total_Time_Taken_Clk: %fi, Time of finish : %f #", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC, explore_end_ts);
-					ROS_ERROR("Exploration has failed. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
-					nav_cmd_thread_shutdown_ = true;
-					return;
+					else
+						success = true;
 				}
-			}
+				else
+					ROS_ERROR("PreparePlan was unsuccessful!!");
+				
+				if(mStatus == NAV_ST_EXPLORING)
+				{
+					if(success)
+					{
+						if (need_to_replan)
+						{
+							// count time etc only if needed to re plan.
+							WallTime endTime = WallTime::now();
+							WallDuration d = endTime - startTime;
+							ROS_ERROR("Exploration planning took %.09f seconds, distance is %.2f m.", d.toSec(), mCurrentPlan[mStartPoint]);
+							// indicates a plan was made successfully. [preparePlan, findExplorationtarget, createPlan.]
+							// if ( (using_map_ts > nav_plan_last_map_used) || (using_tf_scan_ts > nav_plan_last_tf_used) )
+							{
+								double time_now = get_time_now();
+								if (last_nav_plan_out > 0.0)
+								{
+									tput_nav_plan.push_back(time_now - last_nav_plan_out);
+									ROS_ERROR("MADE NEW NAV PLAN, Tput : %f , realtime: %f", (time_now - last_nav_plan_out), time_now );
+									if ( (time_now - last_nav_plan_out) > 5.0 )
+										ROS_ERROR("WEIRD!!!!! NAV PLAN TPUT TOO HIGH!!!");
+								}
 
-			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
-			double plan_t = get_time_diff(cb_start, cb_end);
+								last_nav_plan_out = time_now;
+								nav_plan_last_map_used = using_map_ts;
+								nav_plan_last_tf_used = using_tf_scan_ts;
+							}
+						}
+						
+					}else
+					{
+						mExploreActionServer->setAborted();
+						stop();
+						explore_end_clk = clock();
+						clock_gettime(CLOCK_MONOTONIC, &explore_end);
+						double explore_end_ts = get_time_now();
+						ROS_ERROR("Exploration has failed. Total_Time_Taken_Clk: %fi, Time of finish : %f #", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC, explore_end_ts);
+						ROS_ERROR("Exploration has failed. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
+						nav_cmd_thread_shutdown_ = true;
+						return;
+					}
+				}
 
-			double exec_rt_end = get_time_now();
+				clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
+				double plan_t = get_time_diff(cb_start, cb_end);
 
-			explore_cb_plan_times.push_back(plan_t);
-			explore_cb_plan_ts.push_back(exec_rt_end);
-			ROS_WARN("Exploration planning took %f cputime using CLOCK_THREAD_CPUTIME_ID", plan_t);
+				double exec_rt_end = get_time_now();
 
-			std_msgs::Header np_ee;
-			np_ee.frame_id = std::to_string(plan_t) + " navp";
-			navp_exec_end_pub.publish(np_ee);
+				explore_cb_plan_times.push_back(plan_t);
+				explore_cb_plan_ts.push_back(exec_rt_end);
+				ROS_WARN("Exploration planning took %f cputime using CLOCK_THREAD_CPUTIME_ID", plan_t);
 
-			// Making a separate thread for Navigator generateCommand
-			// It should start after a plan has been made.
-			if (nav_cmd_thread_ == NULL)
-			{
-				nav_cmd_thread_shutdown_ = false;
-				ROS_ERROR("IN RobotNavigator::receiveExploreGoal, STARTING navCmd thread!!");
-				nav_cmd_thread_ = new boost::thread(boost::bind(&RobotNavigator::navGenerateCmdLoop, this));
-			}
+				std_msgs::Header np_ee;
+				np_ee.frame_id = std::to_string(plan_t) + " navp";
+				navp_exec_end_pub.publish(np_ee);
 
-			if (nav_cmd_thread_shutdown_)
-			{
-				// if the navC shuts down due to tf error, fail expl and exit.
-			}
-		// }
+				// Making a separate thread for Navigator generateCommand
+				// It should start after a plan has been made.
+				if (nav_cmd_thread_ == NULL)
+				{
+					nav_cmd_thread_shutdown_ = false;
+					ROS_ERROR("IN RobotNavigator::receiveExploreGoal, STARTING navCmd thread!!");
+					nav_cmd_thread_ = new boost::thread(boost::bind(&RobotNavigator::navGenerateCmdLoop, this));
+				}
+
+				if (nav_cmd_thread_shutdown_)
+				{
+					// if the navC shuts down due to tf error, fail expl and exit.
+				}
+			// }
 	
-		// Moving this code to the navGenerateCmdLoop function.
-		// if(mStatus == NAV_ST_EXPLORING)
-		// {
-		// 	// Publish feedback via ActionServer
-		// 	if(cycle%10 == 0)
-		// 	{
-		// 		nav2d_navigator::ExploreFeedback fb;
-		// 		fb.distance = mCurrentPlan[mStartPoint];
-		// 		fb.robot_pose.x = mCurrentPositionX;
-		// 		fb.robot_pose.y = mCurrentPositionY;
-		// 		fb.robot_pose.theta = mCurrentDirection;
-		// 		mExploreActionServer->publishFeedback(fb);
-		// 	}
+			// Moving this code to the navGenerateCmdLoop function.
+			// if(mStatus == NAV_ST_EXPLORING)
+			// {
+			// 	// Publish feedback via ActionServer
+			// 	if(cycle%10 == 0)
+			// 	{
+			// 		nav2d_navigator::ExploreFeedback fb;
+			// 		fb.distance = mCurrentPlan[mStartPoint];
+			// 		fb.robot_pose.x = mCurrentPositionX;
+			// 		fb.robot_pose.y = mCurrentPositionY;
+			// 		fb.robot_pose.theta = mCurrentDirection;
+			// 		mExploreActionServer->publishFeedback(fb);
+			// 	}
 
-		// 	// Create a new command and send it to Operator
-		// 	generateCommand();
-		// }
+			// 	// Create a new command and send it to Operator
+			// 	generateCommand();
+			// }
 
-		// cb_cmd is in a separate thread now, measuring ci there.
-		// if (!(reCheck || nearGoal))
-		// {
-		// 	// add to cmd tme arr
-		// 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
-		// 	double cmd_t = get_time_diff(cb_start, cb_end);
+			// cb_cmd is in a separate thread now, measuring ci there.
+			// if (!(reCheck || nearGoal))
+			// {
+			// 	// add to cmd tme arr
+			// 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
+			// 	double cmd_t = get_time_diff(cb_start, cb_end);
 
-		// 	explore_cb_cmd_times.push_back(cmd_t);
-		// 	explore_cb_cmd_ts.push_back(ros::Time::now().toSec());
-		// }
+			// 	explore_cb_cmd_times.push_back(cmd_t);
+			// 	explore_cb_cmd_ts.push_back(ros::Time::now().toSec());
+			// }
+			
+			// Sleep remaining time
+			cycle++;
+
+			// Moved spinOnce to setCurrentPosition function.
+
 		
-		// Sleep remaining time
-		cycle++;
-
-		// Moved spinOnce to setCurrentPosition function.
-
-	
-		if (explore_cb_plan_ts.size()%20 == 7)
-		{
-			write_arrs_to_file(explore_cb_plan_times, explore_cb_plan_ts, "nav2d_navigator_plan");
-			write_arr_to_file(tput_nav_plan, "nav2d_navigator_plan");
+			if (explore_cb_plan_ts.size()%20 == 7)
+			{
+				write_arrs_to_file(explore_cb_plan_times, explore_cb_plan_ts, "nav2d_navigator_plan");
+				write_arr_to_file(tput_nav_plan, "nav2d_navigator_plan");
+			}
 		}
+		else
+			ROS_ERROR("TF TS %i SAME As before %i, no new scan processed!!! NOT planning this time...", current_mapper_tf_allScans_ts.load(), latest_mapCB_tf_ts_st_navp);
+
+		
 		
 		// Nov: Scheduler triggers navPlan.
 		// planUpdateLoopRate.sleep();
@@ -1390,89 +1435,100 @@ void RobotNavigator::navGenerateCmdLoop()
 			nav_cmd_thread_shutdown_ = true;
 		}
 
-		// Need to get latest position.
-		if (!setCurrentPosition(0) || (get_pos_tf_error_ct > 3))
+		// dont do anything if current_mapper_.... <= latest_.._navc. and (either fresh mapcb or its been too long since last run)
+		if ( (current_mapper_tf_allScans_ts > latest_mapCB_tf_ts_st_navc) && ( (current_mapper_tf_allScans_ts > ( (ros::Time::now().toSec() * 10) - 100) ) || ( ( get_time_now() - last_nav_cmd_out) > 0.2) ) )
 		{
-			ROS_WARN("Exploration failed, could not get current position. Stopping nav_cmd_thread_");
-			nav_cmd_thread_shutdown_ = true;
-		}
-
-		double using_tf_scan_ts = current_mapCB_tf_navCmd_scan_ts;
-		double using_plan_ts = last_nav_plan_out; // navP itself has multiple inputs, so we consider the TS of the latest new plan. 
-
-		// The generateCommand work, moved from the receiveExploreGoal:
-		if(mStatus == NAV_ST_EXPLORING)
-		{
-
-			// Publish feedback via ActionServer
-			if(cycle%10 == 0)
+			latest_mapCB_tf_ts_st_navc = current_mapper_tf_allScans_ts;
+			latest_mapCB_tf_ts_rt_navc = current_mapper_tf_allScans_rt_ts;
+			// Need to get latest position. : Uses mapcb'S TF output here.
+			if (!setCurrentPosition(0) || (get_pos_tf_error_ct > 3))
 			{
-				nav2d_navigator::ExploreFeedback fb;
-				fb.distance = mCurrentPlan[mStartPoint];
-				fb.robot_pose.x = mCurrentPositionX;
-				fb.robot_pose.y = mCurrentPositionY;
-				fb.robot_pose.theta = mCurrentDirection;
-				mExploreActionServer->publishFeedback(fb);
+				ROS_WARN("Exploration failed, could not get current position. Stopping nav_cmd_thread_");
+				nav_cmd_thread_shutdown_ = true;
 			}
 
-			// Create a new command and send it to Operator
-			generateCommand();
-			// ROS_ERROR("Generated command!");
+			double using_tf_scan_ts = current_mapCB_tf_navCmd_scan_ts;
+			double using_plan_ts = last_nav_plan_out; // navP itself has multiple inputs, so we consider the TS of the latest new plan. 
 
-			clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
-			double cmd_t = get_time_diff(cb_start, cb_end);
-
-			double exec_rt_end = get_time_now();
-
-			explore_cb_cmd_times.push_back(cmd_t);
-			explore_cb_cmd_ts.push_back(exec_rt_end);
-		
-			std_msgs::Header nc_ee;
-			nc_ee.frame_id = std::to_string(cmd_t) + " navc";
-			navc_exec_end_pub.publish(nc_ee);
-
-			double time_now = exec_rt_end;		
-	
-			// Measuring NavC tput : check if used a new tf or a new plan?
-			// if ( (using_plan_ts > nav_cmd_last_plan_used) || (using_tf_scan_ts > nav_cmd_last_tf_used) )
+			// The generateCommand work, moved from the receiveExploreGoal:
+			if(mStatus == NAV_ST_EXPLORING)
 			{
-				// add to tput array.
-				if (last_nav_cmd_out > 0.0)
+
+				// Publish feedback via ActionServer
+				if(cycle%10 == 0)
 				{
-					tput_nav_cmd.push_back(time_now - last_nav_cmd_out);
-					// ROS_ERROR("MADE NEW NAV CMD, tput %f", time_now - last_nav_cmd_out);
-					if ( (time_now - last_nav_cmd_out) > 1.0)
-						ROS_ERROR("WEIRD!!!!! MADE NEW NAV CMD TPUT TOO HIGH %f", time_now - last_nav_cmd_out);
+					nav2d_navigator::ExploreFeedback fb;
+					currentPlanMutex.lock();
+					fb.distance = mCurrentPlan[mStartPoint];
+					currentPlanMutex.unlock();
+					fb.robot_pose.x = mCurrentPositionX;
+					fb.robot_pose.y = mCurrentPositionY;
+					fb.robot_pose.theta = mCurrentDirection;
+					mExploreActionServer->publishFeedback(fb);
 				}
 
-				last_nav_cmd_out = time_now;	
-				nav_cmd_last_plan_used = using_plan_ts;
-				nav_cmd_last_tf_used = using_tf_scan_ts;
-			}
-		}
-		cycle++;
+				// Create a new command and send it to Operator
+				generateCommand();
+				// ROS_ERROR("Generated command!");
 
-		// if (explore_cb_cmd_ts.size() == 1)
-		// This only needs to be published exactly once.
-		if (cycle == 1)
-		{
-			// Publish tid after 1st comd has been generated. Indicates that at this TS, mC,mU, nC,nP all are waiting for triggers.
-			ROS_ERROR("Publishing node navCmd tid %i, pid %i to controller.", ::gettid(), ::getpid());
-			std_msgs::Header hdr;
+				clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
+				double cmd_t = get_time_diff(cb_start, cb_end);
+
+				double exec_rt_end = get_time_now();
+
+				explore_cb_cmd_times.push_back(cmd_t);
+				explore_cb_cmd_ts.push_back(exec_rt_end);
 			
-			std::stringstream ss_e;
-			ss_e << ::getpid() << " navc " << ::gettid();
-			hdr.frame_id = ss_e.str();
-			navc_exec_info_pub.publish(hdr);	
-		}
+				std_msgs::Header nc_ee;
+				nc_ee.frame_id = std::to_string(cmd_t) + " navc";
+				navc_exec_end_pub.publish(nc_ee);
 
-
-		if (explore_cb_cmd_ts.size()%50 == 20)
-		{
-			write_arrs_to_file(explore_cb_cmd_times, explore_cb_cmd_ts, "nav2d_navigator_cmd");
-			write_arr_to_file(tput_nav_cmd, "nav2d_navigator_cmd");
-		}
+				double time_now = exec_rt_end;		
 		
+				// Measuring NavC tput : check if used a new tf or a new plan?
+				// if ( (using_plan_ts > nav_cmd_last_plan_used) || (using_tf_scan_ts > nav_cmd_last_tf_used) )
+				{
+					// add to tput array.
+					if (last_nav_cmd_out > 0.0)
+					{
+						tput_nav_cmd.push_back(time_now - last_nav_cmd_out);
+						// ROS_ERROR("MADE NEW NAV CMD, tput %f", time_now - last_nav_cmd_out);
+						if ( (time_now - last_nav_cmd_out) > 1.0)
+							ROS_ERROR("WEIRD!!!!! MADE NEW NAV CMD TPUT TOO HIGH %f", time_now - last_nav_cmd_out);
+					}
+
+					last_nav_cmd_out = time_now;	
+					nav_cmd_last_plan_used = using_plan_ts;
+					nav_cmd_last_tf_used = using_tf_scan_ts;
+				}
+			}
+			cycle++;
+
+			// if (explore_cb_cmd_ts.size() == 1)
+			// This only needs to be published exactly once.
+			if (cycle == 1)
+			{
+				// Publish tid after 1st comd has been generated. Indicates that at this TS, mC,mU, nC,nP all are waiting for triggers.
+				ROS_ERROR("Publishing node navCmd tid %i, pid %i to controller.", ::gettid(), ::getpid());
+				std_msgs::Header hdr;
+				
+				std::stringstream ss_e;
+				ss_e << ::getpid() << " navc " << ::gettid();
+				hdr.frame_id = ss_e.str();
+				navc_exec_info_pub.publish(hdr);	
+			}
+
+
+			if (explore_cb_cmd_ts.size()%50 == 20)
+			{
+				write_arrs_to_file(explore_cb_cmd_times, explore_cb_cmd_ts, "nav2d_navigator_cmd");
+				write_arr_to_file(tput_nav_cmd, "nav2d_navigator_cmd");
+			}
+
+		}
+		else
+			ROS_ERROR("TF TS %i NOT new from latest %i, So, NOT generating new cmd!", current_mapper_tf_allScans_ts.load(), latest_mapCB_tf_ts_st_navc);
+				
 		// Nov: NavC triggered by scheduler.
 		// r.sleep();
 		if (use_timer)
@@ -1513,7 +1569,7 @@ bool RobotNavigator::setCurrentPosition(int x)
 	}catch(TransformException ex)
 	{
 		get_pos_tf_error_ct += 1;
-		ROS_ERROR("In setCurrentPosition() : Could not get robot position: %s, TF_ERROR CT: %i", ex.what(), get_pos_tf_error_ct);
+		ROS_ERROR("In setCurrentPosition() : Could not get robot position: %s, TF_ERROR CT: %i, who called? %i", ex.what(), get_pos_tf_error_ct, x);
 		return true; // Jan: Modifying so that we exit from exploration only after we've seen this error 2/3 times.
 	}
 	double world_x = transform.getOrigin().x();

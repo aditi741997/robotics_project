@@ -425,10 +425,12 @@ void Costmap2DROS::movementCB(const ros::TimerEvent &event)
   }
 }
 
+/*
 double Costmap2DROS::getDeltaFromLastUpdated()
 {
     return (ros::Time::now() - last_updated_).toSec();
 }
+*/
 
 void Costmap2DROS::mapUpdateLoop(double frequency)
 {

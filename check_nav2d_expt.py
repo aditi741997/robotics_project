@@ -86,7 +86,12 @@ for r in runs:
                 if (nane):
 			print("Ename: %s, run: %i, HAS nan transforms!"% (ename, r) )	
 			bad_runs.add(r)
-        print("ST:RT ratio for ename %s, run %i is %f"%(ename, r, (end_st-start_st)/(end_rt-start_rt) ) )
+        ratio=(end_st-start_st)/(end_rt-start_rt)
+        if (end_rt == 0.0):
+                print("Ename %s, run %i, did NOT finish!!!"% (ename, r) )
+        #if (ratio < 4.5):i
+        else:
+                print("ST:RT ratio for ename %s, run %i is %f"%(ename, r, (end_st-start_st)/(end_rt-start_rt) ) )
 
 # get #tf errors.
 for r in runs:

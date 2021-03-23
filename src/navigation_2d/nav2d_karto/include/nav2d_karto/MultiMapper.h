@@ -17,6 +17,7 @@
 #include <map>
 #include <list>
 #include <boost/circular_buffer.hpp>
+#include <atomic>
 
 #include <fstream>
 #include <boost/thread.hpp>
@@ -29,6 +30,7 @@
 #include <boost/chrono/system_clocks.hpp>
 #include <boost/chrono/ceil.hpp>
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
+#include <boost/thread.hpp>
 
 // FOR sockets
 #include <sys/types.h>
@@ -69,13 +71,14 @@ public:
 	// For measuring RT:
 
 	// TS of last scan processed by mapCB.
-	double last_scan_mapCB_processed;
+	std::atomic<int> last_scan_mapCB_processed_ST;
+	double last_scan_mapCB_processed_all_RT;
 
 	// TSS of last scan used in generating the mapToOdom TF.
-	double last_scan_mapCB_tf_processed;
+	double last_scan_mapCB_tf_processed; // counts only the scans which produce a new TF
 
 	// For measuring Tput of subchains MapCB and MapUpdate:
-	std::vector<double> tput_map_cb, tput_map_update;
+	std::vector<double> tput_map_cb, tput_map_update, wall_time_map_cb, lat_map_cb;
 	double last_map_cb_out, last_map_upd_out;
 	// boost::chrono::time_point<boost::chrono::system_clock> last_map_upd_out;
 
@@ -87,9 +90,12 @@ public:
 	std::vector<double> scan_drop_ts;
 	std::vector<double> scan_drop_exec_time;
 
+	std::vector<bool> scan_pose_ts;
+
 	long int total_mapcb_count, total_mapupdate_count;
 
 	ros::Publisher mScanTSPublisher;
+	std::ofstream tf_publish_ts_log;
 
 	// For converting the module into hybrid ED/TD
 	// Making a separate thread for mapUpdates
@@ -127,7 +133,7 @@ public:
 	int client_sock_fd;
 	boost::thread sock_recv_thread; // to indefinitely listen on the socket fd.
 	void socket_recv(); // does what recv_trigger_exec does when getting a trigger msg.
-	tf::TransformListener mTransformListener;
+	tf::TransformListener* mTransformListener;
 
 private:
 	// Private methods
@@ -142,6 +148,7 @@ private:
 	// Everything related to ROS
 	tf::TransformBroadcaster mTransformBroadcaster;
 	tf::Transform mMapToOdometry;
+	boost::mutex tf_lock;
 	tf::Transform mOdometryOffset;
 
 	nav_msgs::OccupancyGrid mGridMap;
@@ -161,7 +168,8 @@ private:
 	karto::LaserRangeFinderPtr mLaser;
 	karto::SmartPointer<karto::OpenMapper> mMapper;
 	std::map<int, karto::LaserRangeFinderPtr> mOtherLasers;
-	bool mMapChanged;
+	std::atomic<bool> mMapChanged;
+	boost::mutex currentMapMutex;
 
 	// Parameters and Variables
 	int mRobotID;               // Who am I?
@@ -194,6 +202,10 @@ private:
 	std::vector<double> map_update_ts;
 
 	std::vector<int> map_update_scan_count;
+
+	std::ofstream scan_processed_log;
+	std::vector<int> scan_st_processed;
+	std::vector<double> scan_when_process_start_rt, scan_when_process_end_rt, scan_exec_time;
 };
 
 #endif
