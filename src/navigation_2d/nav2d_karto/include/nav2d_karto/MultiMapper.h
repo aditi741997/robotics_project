@@ -30,6 +30,7 @@
 #include <boost/chrono/system_clocks.hpp>
 #include <boost/chrono/ceil.hpp>
 #include <boost/date_time/posix_time/posix_time_duration.hpp>
+#include <boost/thread.hpp>
 
 // FOR sockets
 #include <sys/types.h>
@@ -77,7 +78,7 @@ public:
 	double last_scan_mapCB_tf_processed; // counts only the scans which produce a new TF
 
 	// For measuring Tput of subchains MapCB and MapUpdate:
-	std::vector<double> tput_map_cb, tput_map_update, wall_time_map_cb;
+	std::vector<double> tput_map_cb, tput_map_update, wall_time_map_cb, lat_map_cb;
 	double last_map_cb_out, last_map_upd_out;
 	// boost::chrono::time_point<boost::chrono::system_clock> last_map_upd_out;
 
@@ -147,6 +148,7 @@ private:
 	// Everything related to ROS
 	tf::TransformBroadcaster mTransformBroadcaster;
 	tf::Transform mMapToOdometry;
+	boost::mutex tf_lock;
 	tf::Transform mOdometryOffset;
 
 	nav_msgs::OccupancyGrid mGridMap;
