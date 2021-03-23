@@ -70,6 +70,10 @@ def plot_agg(x,y,start,slot,end, nm, node):
 	plt.legend()
 	plt.show()
 
+def print_arr(a,s):
+    sa = sorted(a)
+    la = len(a)
+
 def get_rel_ts_arr(ts):
 	rel_ts = []
 	start_ts = ts[0]
@@ -84,7 +88,8 @@ per_run_navp_time = []
 per_run_navp_ts = []
 per_run_drops_ratio = []
 per_run_scan_lat = []
-for run in range(start_run_ind,end_run_ind+1):
+aggregate_navc_tput = []
+for run in range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]: 
     print("################## DOING RUN %i"%(run) )
     for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_plan"]:
         times = []
@@ -159,9 +164,10 @@ for run in range(start_run_ind,end_run_ind+1):
 
         if len(tputs) > 0:
             if "cmd" in fname:
+                aggregate_navc_tput += tputs
                 for i in range(len(tputs)):
-                    if tputs[i] > 0.7:
-                        print("FOR navc, tput: %f, ts: %f"%(tputs[i], ts[i]) )
+                    if tputs[i] > 0.03:
+                        print("FOR NAVC , LARGE tput: %f, ts: %f"%(tputs[i], ts[i]) )
             
             sorted_tput = sorted(tputs)
             ltimest = len(tputs)
@@ -212,12 +218,23 @@ for run in range(start_run_ind,end_run_ind+1):
             print("For node %s, Tput: median %f, mean %f, 75ile %f, 90ile %f"%( fname, sorted_tput[ltimest/2], sum(sorted_tput)/ltimest, sorted_tput[(75*ltimest)/100], sorted_tput[(90*ltimest)/100] ) )
             #plot_agg(ts[1:], tputs, start_t, 10.0, end_t, "Inter-arrival Time", fname)
         '''
+print("Aggregate NC: median: %f, 75ile: %f, 95ile: %f"%(np.median(aggregate_navc_tput), np.percentile(aggregate_navc_tput, 75), np.percentile(aggregate_navc_tput, 95) ) )
 '''
 print("\n \n PER RUN SCAN CT : ", per_run_scan_ct)
+print("-")
+print("-")
 print("\n \n per_run_mapupd_ts : ", per_run_mapupd_ts)
+print("-")
+print("-")
 print("\n \n PER RUN MAPUPD CI : ", per_run_mapu_time)
-print("\n \n PER RUN NAVP CI : ", per_run_navp_time)
+print("-")
+print("-")
+print("\n \n PER RUN NAVP CI : ", per_run_navp_time, '\n')
+print("-")
+print("-")
 print("\n \n PER RUN NAVP TS: ", per_run_navp_ts)
-'''
-print("\n \n PER RUN SCAN LATENCY AT MAPCB : ", per_run_scan_lat)
+print("-")
+print("-")
+print("\n \n PER RUN SCAN LATENCY AT MAPCB : ", len(per_run_scan_lat), per_run_scan_lat)
 print("PER RUN DROPS RATIO: , avg ratio : %f, median ratio : %f", per_run_drops_ratio, sum(per_run_drops_ratio)/len(per_run_drops_ratio), np.median(per_run_drops_ratio) )
+'''
