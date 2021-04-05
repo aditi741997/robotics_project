@@ -380,7 +380,7 @@ def get_closest_wall_dist(x,y):
 # w8: (-9.5,-4) - (-6.5,-4)
 
 letter = 'N'
-opt_total_Area = 339142.0
+opt_total_Area = 339142.0 if small_map else 818045
 
 # LMap: 818045, 817667, 818141, 817838
 #opt_total_Area = 818045.0
@@ -437,10 +437,10 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["StaticNewF2_1c" ] #"DefaultTD_2c"] 
+expts = ["AllHigh2_1c" ] #"DefaultTD_2c"] 
 
-runs = range(1,60)
-for badr in [11,19,24,26,32,33,34,35,36]: #[4,20,22,27,35,36,45,53]:
+runs = range(1, 51)
+for badr in []: #57,89]: #[3,20,25,28,31,40,51,55]:
     runs.remove(badr)
 print(runs, len(runs))
 
@@ -529,7 +529,7 @@ for i in expts:
 		# JUST to plot area covered in 1st 60sec: 
 		# end_i = start_i + slot + 1.0
 		print("For i ", i, " Start, end times: ", start_i, end_i)
-		run_total_times.append(end_st_i - start_st_i - 0.1)
+		run_total_times.append(round(end_st_i - start_st_i - 0.1,2))
 		run_finish_arr.append( run_expl_finished )
 		# store each run's metrics as dict: window# -> value
 		# so its easier to take intersection of set of keys of all metrics.
@@ -801,7 +801,7 @@ for i in expts:
 					phyarea_iter_ct += 1
 				if phyarea_iter_ct < len(phy_area_numblocks_arr) and phy_area_numblocks_arr[phyarea_iter_ct] != curr_blk_ct:
 					curr_blk_ct = phy_area_numblocks_arr[phyarea_iter_ct]
-				 	this_run_time_parea_dict[curr_blk_ct] = (st_ts_arr[phyarea_iter_ct] - start_st_i)
+				 	this_run_time_parea_dict[curr_blk_ct] = (round(st_ts_arr[phyarea_iter_ct] - start_st_i,2))
 			print("FOR exptid : ", exp_id, " time_phyarea : ", this_run_time_parea_dict)
 			run_time_phyarea.append(this_run_time_parea_dict)
 			
@@ -943,7 +943,7 @@ for i in expts:
                 path_plan_fail_count += (run_path_plan_fail and (not run_collision_hua))
                 
 		run_collision_end = ( abs(last_colln_ts - (end_st_i - start_st_i) ) <= 10.0 ) # it can take sometime for navigator to end run.
-		runs_colln_end_arr.append( (last_colln_ts, (end_st_i - start_st_i)) )
+		runs_colln_end_arr.append( (last_colln_ts, round(end_st_i - start_st_i,2)) )
 		
 		if run_collision_hua:
                     run_ttc.append(end_i - start_i - 0.1)

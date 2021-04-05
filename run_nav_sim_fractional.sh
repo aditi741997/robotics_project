@@ -4,28 +4,28 @@ export ROS_MASTER_URI=http://localhost:11311
 source devel/setup.bash
 sleep 2s
 ct=7
-td="nono"
-for navpF in 1.259 #1.056 #5.0 #1.0 0.2
+td="yesyessy"
+for navpF in 100.0 #1.056 #5.0 #1.0 0.2
 do
-	for mcbF in 10.07 #1.107 #10.0 7.0 4.0 1.0 0.4 0.16 
+	for mcbF in 100.0 #1.107 #10.0 7.0 4.0 1.0 0.4 0.16 
 	do
-		for muF in 1.259 #1.928 #1.056 #10.0 #5.0 1.0 0.4
+		for muF in 100.0 #1.928 #1.056 #10.0 #5.0 1.0 0.4
 		do
-			for navcF in 30.23 #9.0 #5.8125 #20.0 #10.0 5.0 1.0
+			for navcF in 100.0 #9.0 #5.8125 #20.0 #10.0 5.0 1.0
 			do
-				for ccF in 30.23 #54.0 #23.25 #20.0 #10.0 5.0 2.5 1.0 
+				for ccF in 100.0 #54.0 #23.25 #20.0 #10.0 5.0 2.5 1.0 
 				do
 					div=0
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in 90 #66 67 68 69 #44 45 43 44 #19 20 21 22 23 24 25 26 27 28 29 30 #8 9 10 11 12 13 14 15 16 17 18 #1 2 3 4 5 6 7 #50 #45 46 47 48 49 # # 31 # 1  
+						for run in 3 16 45 #54 57 58 67 77 {98..101} 
 						do
 							rosclean purge -y
 							rm ../robot_nav2d_obstacleDist_logs_.txt
-							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage_largemap.launch &
+							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage.launch &
 							sleep 27s
-							ename="DFrac_1c_run$run"
+							ename="AllHigh2_1c_run$run"
 							
 							echo "DELETING OLD LOGFILES For this expt:"
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
@@ -46,19 +46,23 @@ do
 							robofname="nav2d_robot_logs_${ename}.err"
 							dagcontEname="dag_contBE_${ename}.err"
 							dagcontOname="dag_contBE_${ename}.out"
-							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "dummy_nav2d" $td "no" 1 1 1 1 1 1 1 1 > $dagcontOname 2> $dagcontEname &
+							#For slowing down navp: 
+							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_75p_smallnavp" $td "no" 16 63 3 63 1 1 1 0 > $dagcontOname 2> $dagcontEname &
+							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_95p_small" $td "no" 63 63 3 60 1 1 1 0 > $dagcontOname 2> $dagcontEname &
 							sleep 4s
-							taskset -a -c 1 chrt -f 1 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
+							taskset -a -c 1 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" $td > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
 							
 							# Start evt with prio=1, in any core.
 							sleep 2s
-							taskset -a -c 0 chrt -f 1 roslaunch nav2d_tutorials tutorial4_robot.launch 2> $opeMapFname &
+							taskset -a -c 0 roslaunch nav2d_tutorials tutorial4_robot.launch 2> $opeMapFname &
 							sleep 3s
-							taskset -a -c 0 chrt -f 1 roslaunch nav2d_tutorials tutorial4_robot2.launch 2> $robofname &
+							navRecvMapName="${ename}_navRecv"
+							taskset -a -c 15 rosrun map_server map_saver -f $navRecvMapName __name:=navRecvMapNode map:=/robot_0/nav_recv_map &
+							taskset -a -c 0 roslaunch nav2d_tutorials tutorial4_robot2.launch 2> $robofname &
 							sleep 12s
 							rosservice call /robot_0/StartMapping
 							
-							taskset -a -c 6-7 python src/rbx/src/move_dynamic_obstacles_nav2d.py 200 0.15 0.9 > "nav2d_moveObst_logs_${ename}.txt" &
+							taskset -a -c 5-6 python src/rbx/src/move_dynamic_obstacles_nav2d.py 200 0.1 0.9 > "nav2d_moveObst_logs_${ename}.txt" &
 							# Before startingExpl, Look for MAPPING Failed / Successful.
 							failct="0"
 							success="0"
@@ -90,13 +94,15 @@ do
 							rosservice call /robot_0/StartExploration
 							sleep 2s
 							
-							taskset -a -c 6-7 python measure_cpu.py 0 0 40 $ename $robofname &
+							taskset -a -c 5-6 python measure_cpu.py 0 0 40 $ename $robofname &
 							echo "STARTED everything. NOW waiting for Exploration to FINISH/FAIL."
 							j="0"
 							t=0
 							while [ $j -lt 2 ]
 							do
-								sleep 5s
+								mapi="${ename}_i${t}"
+								taskset -a -c 14 rosrun map_server map_saver -f $mapi map:=/robot_0/map &
+								sleep 10s
 								j=`grep "Exploration has finished." $robofname | wc -l`
 								if [ $j -lt 2 ]; then
 									j=`grep "Exploration has failed." $robofname | wc -l`
@@ -117,13 +123,15 @@ do
 									echo "Something DIED in SOME node!!", $xnav, $xmap, $xdag
 								fi
 								echo "j&t: ", $j, $t
-								timelimit=160 # divide timelimit=800s by sleeptime=5s.
+								timelimit=35 # divide timelimit=800s by sleeptime=5s.
 								if [ $t = $timelimit ]; then
 									j=2
 									echo "!!!!!~~~%%% EXPLORATION DIDNT FINISH EVEN IN ", $timelimit, "For: ", $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
 								fi
 							done
-							sleep 4s
+							sleep 1s
+							navRecvMapOName="${ename}_navRecvO"
+							taskset -a -c 15 rosrun map_server map_saver -f $navRecvMapOName __name:=navRecvMapONode map:=/robot_0/nav_recv_mapO &
 							echo "SAVING map to file!!"
 							rosrun map_server map_saver -f $ename map:=/robot_0/map &
 							sleep 5s
