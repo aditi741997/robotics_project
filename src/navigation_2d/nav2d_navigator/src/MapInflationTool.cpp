@@ -41,6 +41,8 @@ void MapInflationTool::computeCaches(unsigned int radius)
 			mCachedCosts[i][j] = (1.0 - d) * mCostObstacle;
 		}
 	}
+
+	ROS_ERROR("MapInflationTool::computeCaches called with mCellInflationRadius %i, mCostObstacle : %i", mCellInflationRadius, mCostObstacle);
 }
 
 // Method used to query the cache for a distance.
@@ -95,7 +97,7 @@ void MapInflationTool::inflateMap(GridMap* map)
 			unsigned int sx, sy;
 			mGridMap->getCoordinates(sx, sy, index);
 			enqueueObstacle(index, sx, sy);
-		}else if(mGridMap->getData(index) == -1)
+		}else if(mGridMap->getData(index) == -1) // indicates unKnown region
 		{
 			mInflationMarkers[index] = 1;
 		} 

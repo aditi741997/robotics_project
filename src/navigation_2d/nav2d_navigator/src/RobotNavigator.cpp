@@ -181,6 +181,10 @@ RobotNavigator::RobotNavigator(ros::Publisher& nc_pub)
 	navc_exec_end_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_end_navc", 1, true);
 	navp_exec_end_pub = navigatorNode.advertise<std_msgs::Header>("/robot_0/exec_end_navp", 1, true);
 
+	mRecvMapPublisher = navigatorNode.advertise<nav_msgs::OccupancyGrid>("/robot_0/nav_recv_map", 1, true);
+	mRecvMapOPublisher = navigatorNode.advertise<nav_msgs::OccupancyGrid>("/robot_0/nav_recv_mapO", 1, true);
+	mRecvMappingPublisher = navigatorNode.advertise<nav_msgs::OccupancyGrid>("/robot_0/nav_recv_mapping", 1, true);
+
 	// For measuring tput of subchains :
 	last_nav_cmd_out = 0.0;
 	last_nav_plan_out = 0.0;
@@ -317,7 +321,8 @@ bool RobotNavigator::getMap()
 		ROS_ERROR("GetMap-Client is invalid!");
 		return false;
 	}
-	
+
+	double t1 = get_time_now();	
 	nav_msgs::GetMap srv;
 	// ROS_WARN("IN nav2d::RobotNavigator About to call getMap service!!");
 	if(!mGetMapClient.call(srv))
@@ -330,6 +335,11 @@ bool RobotNavigator::getMap()
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &map_upd_start);
 
 	mCurrentMap.update(srv.response.map);
+	mRecvMapOPublisher.publish(mCurrentMap.getMap());
+
+	double t2 = get_time_now();
+	if ( (t2-t1) > 1.0)
+		ROS_ERROR("DAMNNNN!!! NAVIGATOR getMap service call took VERY LONG!! %f", t2-t1);
 
 	currentPlanMutex.lock();	
 	if(mCurrentPlan) delete[] mCurrentPlan;
@@ -339,11 +349,11 @@ bool RobotNavigator::getMap()
 
 	if(mCellInflationRadius == 0)
 	{
-		ROS_INFO("Navigator is now initialized.");
 		mCellInflationRadius = mInflationRadius / mCurrentMap.getResolution();
 		mCellRobotRadius = mRobotRadius / mCurrentMap.getResolution();
 		mInflationTool.computeCaches(mCellInflationRadius);
 		mCurrentMap.setLethalCost(mCostLethal);
+		ROS_ERROR("Navigator is now initialized. mCellInflationRadius: %i, mCellRobotRadius: %i, mCostLethal: %i", mCellInflationRadius, mCellRobotRadius, mCostLethal);
 	}
 	
 	mHasNewMap = true;
@@ -879,6 +889,7 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 	if(getMap() && setCurrentPosition())
 	{
 		ROS_ERROR("MAPPING Successful!!!!");
+		mRecvMappingPublisher.publish(mCurrentMap.getMap());
 		mGetMapActionServer->setSucceeded();
 	}else
 	{
@@ -1185,7 +1196,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		}
 	
 		// DONT run if latest_? >= current_ and current is not too old
-		if (( latest_mapCB_tf_ts_st_navp < current_mapper_tf_allScans_ts) && ( (current_mapper_tf_allScans_ts > ( (ros::Time::now().toSec() * 10) - 100) ) || ( ( get_time_now() - last_nav_plan_out) > 1.2) ) )
+		// if (( latest_mapCB_tf_ts_st_navp < current_mapper_tf_allScans_ts) && ( (current_mapper_tf_allScans_ts > ( (ros::Time::now().toSec() * 10) - 100) ) || ( ( get_time_now() - last_nav_plan_out) > 1.8) ) )
 		{
 			// All navP code here.
 			// Where are we now : Uses the tf output from Mapper Node.
@@ -1248,6 +1259,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 							}
 							stop();
 							clock_gettime(CLOCK_MONOTONIC, &explore_end);
+							mRecvMapPublisher.publish(mCurrentMap.getMap());
 							ROS_ERROR("Exploration has finished. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
 							nav_cmd_thread_shutdown_ = true;
 							return;
@@ -1310,6 +1322,18 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 						explore_end_clk = clock();
 						clock_gettime(CLOCK_MONOTONIC, &explore_end);
 						double explore_end_ts = get_time_now();
+						// mGoalPoint is set by findExplTarget
+						// copy mCurrentMap and set goalPoint [and ngbrs] index to 100 so it looks black?
+						nav_msgs::OccupancyGrid mMap = mCurrentMap.getMap();
+						signed char curr_Goal_value = mCurrentMap.getMap().data[mGoalPoint];
+						mMap.data[mGoalPoint] = 100;
+						std::vector<unsigned int> gneighbors = mCurrentMap.getNeighbors(mGoalPoint);
+						for (auto& ni : gneighbors)
+							mMap.data[ni] = 100;
+
+						mRecvMapPublisher.publish(mMap);
+						if (mCurrentMap.getMap().data[mGoalPoint] != curr_Goal_value)
+							ROS_ERROR("DAMNNNN, DIDNT COPY PROPERLY, curr goal val : %i, currMap data: %i, mMap.data : %i", curr_Goal_value, mCurrentMap.getMap().data[mGoalPoint], mMap.data[mGoalPoint]);
 						ROS_ERROR("Exploration has failed. Total_Time_Taken_Clk: %fi, Time of finish : %f #", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC, explore_end_ts);
 						ROS_ERROR("Exploration has failed. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
 						nav_cmd_thread_shutdown_ = true;
@@ -1327,7 +1351,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 				ROS_WARN("Exploration planning took %f cputime using CLOCK_THREAD_CPUTIME_ID", plan_t);
 
 				std_msgs::Header np_ee;
-				np_ee.frame_id = std::to_string(plan_t) + " navp";
+				np_ee.frame_id = std::to_string(plan_t) + " navp " + std::to_string(latest_mapCB_tf_ts_st_navp);
 				navp_exec_end_pub.publish(np_ee);
 
 				// Making a separate thread for Navigator generateCommand
@@ -1386,10 +1410,11 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 				write_arr_to_file(tput_nav_plan, "nav2d_navigator_plan");
 			}
 		}
+		/*
 		else
 			ROS_ERROR("TF TS %i SAME As before %i, no new scan processed!!! NOT planning this time...", current_mapper_tf_allScans_ts.load(), latest_mapCB_tf_ts_st_navp);
 
-		
+		*/
 		
 		// Nov: Scheduler triggers navPlan.
 		// planUpdateLoopRate.sleep();
@@ -1436,7 +1461,7 @@ void RobotNavigator::navGenerateCmdLoop()
 		}
 
 		// dont do anything if current_mapper_.... <= latest_.._navc. and (either fresh mapcb or its been too long since last run)
-		if ( (current_mapper_tf_allScans_ts > latest_mapCB_tf_ts_st_navc) && ( (current_mapper_tf_allScans_ts > ( (ros::Time::now().toSec() * 10) - 100) ) || ( ( get_time_now() - last_nav_cmd_out) > 0.2) ) )
+		// if ( (current_mapper_tf_allScans_ts > latest_mapCB_tf_ts_st_navc) && ( (current_mapper_tf_allScans_ts > ( (ros::Time::now().toSec() * 10) - 100) ) || ( ( get_time_now() - last_nav_cmd_out) > 0.2) ) )
 		{
 			latest_mapCB_tf_ts_st_navc = current_mapper_tf_allScans_ts;
 			latest_mapCB_tf_ts_rt_navc = current_mapper_tf_allScans_rt_ts;
@@ -1480,7 +1505,7 @@ void RobotNavigator::navGenerateCmdLoop()
 				explore_cb_cmd_ts.push_back(exec_rt_end);
 			
 				std_msgs::Header nc_ee;
-				nc_ee.frame_id = std::to_string(cmd_t) + " navc";
+				nc_ee.frame_id = std::to_string(cmd_t) + " navc " + std::to_string(latest_mapCB_tf_ts_st_navc);
 				navc_exec_end_pub.publish(nc_ee);
 
 				double time_now = exec_rt_end;		
@@ -1526,9 +1551,11 @@ void RobotNavigator::navGenerateCmdLoop()
 			}
 
 		}
+		/*
 		else
 			ROS_ERROR("TF TS %i NOT new from latest %i, So, NOT generating new cmd!", current_mapper_tf_allScans_ts.load(), latest_mapCB_tf_ts_st_navc);
-				
+		*/
+
 		// Nov: NavC triggered by scheduler.
 		// r.sleep();
 		if (use_timer)
@@ -1581,13 +1608,26 @@ bool RobotNavigator::setCurrentPosition(int x)
 	unsigned int i;
 	
 	// getIndex just checks if current_x and current_y are within the current GridMap.
+	// to avoid contention bw navC, navP threads due to mCurrentMap, let us disallow navC from calling getMap [i.e. map is modified only by the navP thread]
 	if(!mCurrentMap.getIndex(current_x, current_y, i))
 	{
-		if(mHasNewMap || !getMap() || !mCurrentMap.getIndex(current_x, current_y, i))
+		if (x != 0)
 		{
-			ROS_ERROR("Is the robot out of the map? Called by %i navC:0,P:1", x);
-			return false;
+			if(mHasNewMap || !getMap() || !mCurrentMap.getIndex(current_x, current_y, i))
+			{
+				ROS_ERROR("Is the robot out of the map? Called by %i navC:0,P:1", x);
+				return false;
+			}
 		}
+		else // 0: navc
+		{
+			if (mHasNewMap || !mCurrentMap.getIndex(current_x, current_y, i))
+			{
+				 ROS_ERROR("Is the robot out of the map? Called by %i navC:0,P:1", x);
+				 return false;
+			}
+		}
+		
 	}
 	mStartPoint = i;
 	mCurrentDirection = world_theta;

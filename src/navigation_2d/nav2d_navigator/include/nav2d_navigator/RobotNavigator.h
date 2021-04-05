@@ -121,6 +121,7 @@ private:
 	double* mCurrentPlan;
 	int currentPlanSize;
 	boost::mutex currentPlanMutex; // need to take this lock when reading,writing on mCurrentPlan.
+	ros::Publisher mRecvMapOPublisher, mRecvMapPublisher, mRecvMappingPublisher; // to publish the map received and being used by navigator.
 
 	double mFrequency;
 	double mInflationRadius;
