@@ -120,6 +120,8 @@ for r in runs:
         #if (ratio < 4.5):i
         else:
                 print("ST:RT ratio for ename %s, run %i is %f"%(ename, r, (end_st-start_st)/(end_rt-start_rt) ) )
+        if (ratio < 4.1):
+                bad_runs.add(r)
 
 # get #tf errors.
 for r in runs:
