@@ -66,7 +66,9 @@ def get_num_collisions_run(ts_arr, ts_colln_arr, start_ts):
         return (final_cols, last_col_ts)
 
 import math
-small_map = True
+small_map = ((sys.argv[1]) == "small" ) # whether its the small map
+smallest_map = (sys.argv[1] == "smallest")
+print("MAP SIZE: small_map? %i, smallest_map? %i"%(small_map, smallest_map) )
 num_phyarea_blocks = 56 if small_map else 100
 def get_phy_area(pos_arr):
         #small map area : x: -16,16 y: -13.5,13.5
@@ -298,44 +300,53 @@ def get_robot_edges(px,py,oz,ow):
 	return [ Segment2D(verts[0], verts[1]), Segment2D(verts[1], verts[2]), Segment2D(verts[2], verts[3]), Segment2D(verts[3], verts[0]) ]
 
 def get_obstacle_no_stage(x,y):
-        if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
-		return 1 # robot1 is line_no+1
-	elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
-		return 2 # robot2 is line_no+2
-	elif (x >= 1) and (x <= 7) and (y >= 6) and (y <= 12) :
-		return 3 # robot3 is line_no+3
-	elif (x >= 0.9) and (x <= 7) and (y >= 1) and (y <= 5.5):
-		return 4 # robot4 is line_no+4
-	elif (x >= 9) and (x <= 15) and (y <= -2.5) and (y >= -7):
-		return 5
-	elif (x <= 0) and (x >= -8) and (y >= 9) and (y <= 13):
-		return 6
-	elif (x <= -8) and (x >= -16) and (y >= 9) and (y <= 13):
-		return 7
-	elif (x >= 0) and (x <= 4.5) and (y >= -13) and (y <= -8):
-		return 8
+    # colln setup : obst1 : y: ? to ?, obst2: 
+        if smallest_map:
+                if (x >= 1.5) and (x <= 6.0):
+                    if (y < 3.17):
+                            return 1
+                    else:
+                            return 2
+                else:
+                        return -1
+        elif small_map:
+                if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
+                        return 1 # robot1 is line_no+1
+                elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
+                        return 2 # robot2 is line_no+2
+                elif (x >= 1) and (x <= 7) and (y >= 6) and (y <= 12) :
+                        return 3 # robot3 is line_no+3
+                elif (x >= 0.9) and (x <= 7) and (y >= 1) and (y <= 5.5):
+                        return 4 # robot4 is line_no+4
+                elif (x >= 9) and (x <= 15) and (y <= -2.5) and (y >= -7):
+                        return 5
+                elif (x <= 0) and (x >= -8) and (y >= 9) and (y <= 13):
+                        return 6
+                elif (x <= -8) and (x >= -16) and (y >= 9) and (y <= 13):
+                        return 7
+                elif (x >= 0) and (x <= 4.5) and (y >= -13) and (y <= -8):
+                        return 8
+                else:
+                        return -1
         else:
-		return -1
-        '''
-        if (x >= -27) and (x <= -17) and (y >= -11) and (y <= -5):
-                return 1
-        elif (x >= 5.5) and (x <= 11.5) and (y >= -14) and (y <= -5):
-                return 2
-        elif (x >= 0) and (x <= 5.5) and (y >= 5) and (y <= 13):
-                return 3
-        elif (x >= 7) and (x <= 15) and (y >= 7) and (y <= 13):
-                return 4
-        elif (x >= 13) and (x <= 22) and (y >= -11) and (y <= -5):
-                return 5
-        elif (x >= -28) and (x <= -19) and (y >= 9.5) and (y <= 15.5):
-                return 6
-        elif (x >= -18) and (x <= -10) and (y >= -3) and (y <= 3):
-                return 7
-        elif (x >= -18.5) and (x <= -9) and (y >= 5.0) and (y <= 10.0):
-                return 8
-        else:
-		return -1
-        '''
+                if (x >= -27) and (x <= -17) and (y >= -11) and (y <= -5):
+                        return 1
+                elif (x >= 5.5) and (x <= 11.5) and (y >= -14) and (y <= -5):
+                        return 2
+                elif (x >= 0) and (x <= 5.5) and (y >= 5) and (y <= 13):
+                        return 3
+                elif (x >= 7) and (x <= 15) and (y >= 7) and (y <= 13):
+                        return 4
+                elif (x >= 13) and (x <= 22) and (y >= -11) and (y <= -5):
+                        return 5
+                elif (x >= -28) and (x <= -19) and (y >= 9.5) and (y <= 15.5):
+                        return 6
+                elif (x >= -18) and (x <= -10) and (y >= -3) and (y <= 3):
+                        return 7
+                elif (x >= -18.5) and (x <= -9) and (y >= 5.0) and (y <= 10.0):
+                        return 8
+                else:
+                        return -1
 
 def get_dist(x1,y1,x2,y2):
 	return math.sqrt((x2-x1)*(x2-x1) + (y2-y1)*(y2-y1))
@@ -380,7 +391,8 @@ def get_closest_wall_dist(x,y):
 # w8: (-9.5,-4) - (-6.5,-4)
 
 letter = 'N'
-opt_total_Area = 339142.0 if small_map else 818045
+#opt_total_Area = 339142.0
+opt_total_Area = 242367.0 if smallest_map else 339142.0 if small_map else 818045.0
 
 # LMap: 818045, 817667, 818141, 817838
 #opt_total_Area = 818045.0
@@ -437,9 +449,10 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = ["AllHigh2_1c" ] #"DefaultTD_2c"] 
+expts = [ "DefSM4V3_1c_CC1" ] #,"DefSM4V3_1c_CC2" ,"DefSM4V3_1c_CC3" ,"DefSM4V3_1c_CC4""DefaultTD_2c"] 
 
-runs = range(1, 51)
+#runs = range(5, 8) + range(31,48)
+runs = range(1,31)
 for badr in []: #57,89]: #[3,20,25,28,31,40,51,55]:
     runs.remove(badr)
 print(runs, len(runs))
@@ -497,8 +510,8 @@ for i in expts:
                 run_path_plan_fail = False
                 
                 #exp_id = str(i) + letter +'run_' + str(run)
-		exp_id = i + '_run' + str(run)
-		collision[exp_id] = {}
+		exp_id = i + ('_r' if smallest_map else '_run') + str(run)
+                collision[exp_id] = {}
 		# get start, end times
 		start_i = 0.0
                 start_rt_i = 0.0
@@ -693,7 +706,7 @@ for i in expts:
 	# 1. Odometry v=0 fraction per 2s
                 run_path_len_sum = 0.0
 		with open('../robot_nav2d_obstacleDist_logs_' + exp_id + '.txt', 'r') as f:
-			num_obst = 8
+                        num_obst = 2 if smallest_map else 8
 			obfl = f.readlines()
 			numl = (num_obst+3)
 			ts_arr = []
@@ -1075,18 +1088,22 @@ print("Arr for #PathPlanFailures: ", runlevel_agg_path_plan_fail_count)
 
 # CC: expected_tputs = [0.05, 0.1, 0.2, 0.4, 1.0] # the tputs set for the experiments 1-5.
 # MCB:
-expected_tputs = [0.1, 0.143, 0.25, 1.0, 2.5]
+#expected_tputs = [0.1, 0.143, 0.25, 1.0, 2.5]
 for sc in ["mapper_mapUpdate", "mapper_scanCB", "navigator_cmd", "navigator_plan", "Scan_LC_LP_tput"]:
     scn = (sc + "_tput") if "tput" not in sc else sc
     print("Plotting ScatterPlot for %s, runs_75p_tputs: %s, run_med_tputs: %s"%(scn, str(runs_75p_tputs[sc]), str(runs_med_tputs[sc]) ) )
     #plot_scatter(expected_tputs, runs_med_tputs[sc], runs_75p_tputs[sc], 'MCb', scn) # plt.scatter(expected_tputs[i], all vals of med[i] array.)
 
+
+'''
 for k in runs_tput_arrs:
     plot_cdfs(runs_tput_arrs[k], ["run"+str(r) for r in runs], k, k + " Inter-arrival (s)")
+'''
+
 
 # title, yl, xl
-pxl = ["MapCB period", "RT S_Mcb_NC_LP", "CC Tput", "mapUpd Tput", "CC RT", "NavCmd Tput"] #"CC RT", "MapScanCB Tput", "CC Tput"]
-pxnm = ["mapper_scanCB", "Scan_MapCB_NavCmd_LP", "Scan_LC_LP_tput", "mapper_mapUpdate", "Scan_LC_LP", "navigator_cmd"] #, "Scan_LC_LP", "mapper_scanCB", "Scan_LC_LP_tput"]
+pxl = ["CC RT", "MapCB period", "RT S_Mcb_NC_LP", "CC Tput", "mapUpd Tput", "NavCmd Tput"] #"CC RT", "MapScanCB Tput", "CC Tput"]
+pxnm = ["Scan_LC_LP", "mapper_scanCB", "Scan_MapCB_NavCmd_LP", "Scan_LC_LP_tput", "mapper_mapUpdate", "navigator_cmd"] #, "Scan_LC_LP", "mapper_scanCB", "Scan_LC_LP_tput"]
 for i in range(len(pxl)):
         for k in runlevel_meds.keys(): 
             plot_runlevel_agg(runlevel_agg_lowlevelmetrics_dict[pxnm[i]], runlevel_meds[k], pxl[i]+" vs "+k, k, pxl[i], mean=runlevel_means[k], tail=runlevel_tails[k])
