@@ -47,6 +47,7 @@ double get_realtime_now()
 	struct timespec ts;
         clock_gettime(CLOCK_REALTIME, &ts);
 	return (ts.tv_sec + 1e-9*ts.tv_nsec - 1605000000.0);
+	
 }
 
 	void set_other_policy_pthr(pthread_t& pt)
@@ -245,6 +246,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	DAGControllerBE::~DAGControllerBE()
 	{
+		std::cout << "DAGControllerBE::~DAGControllerBE" << std::endl;
 		shutdown_scheduler = true;
 		if (sched_started)
 			handle_sched_thread.join();
@@ -256,6 +258,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::startup_trigger_func()
 	{
+		pthread_setname_np(pthread_self(), "startup_trig");
 		set_high_priority("Startup trigger thread", 4, 0);
 		double cc_period = 0.0; // in millisec.
 		for (int i = 0; i < exec_order.size(); i++)
@@ -278,7 +281,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				total_period_count += 1;
 				per_core_period_counts[0] += 1;
 				// printf("MT: %f, RealTime: %f, Period ct: %li, checking Trigger for all, exec_order sz: %lu, curr_cc_period: %f", get_monotime_now(), get_realtime_now(), total_period_count, exec_order.size(), curr_cc_period);
-				for (int i = 0; i < exec_order.size(); i++)
+				for (int i = 0; i < exec_order.size() && !sched_started; i++)
 					checkTriggerExec(exec_order[i], 0, 1.0); // just for startup, we keep triggering nodes at some rate.
 			}
 			
@@ -298,14 +301,14 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					std::cout << "MonoTime: " << get_monotime_now() << " RealTime: " << get_realtime_now() << " $$$$$ DAGControllerBE:: STARTING SCHEDULING!!! \n";
 					sched_started = true;
 					
-					// Lets kill the startup_thread!
-					if (startup_thread->joinable())
-					{
-						pthread_cancel(startup_thread->native_handle());
-						pthread_join(startup_thread->native_handle(), NULL);
-						startup_thread->detach();
-						startup_thread = NULL;
-					}
+					// // Lets kill the startup_thread!
+					// if (startup_thread->joinable())
+					// {
+					// 	pthread_cancel(startup_thread->native_handle());
+					// 	pthread_join(startup_thread->native_handle(), NULL);
+					// 	startup_thread->detach();
+					// 	startup_thread = NULL;
+					// }
 					
 					for (int i = 0; i < reset_count.size(); i++)
 						reset_count[i] = true;
@@ -346,6 +349,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	void DAGControllerBE::handle_sched_main(std::vector<int> core_ids)
 	{
+		std::string name = "hand_sched_" + std::to_string(core_ids.at(0));
+		pthread_setname_np(pthread_self(), name.c_str());
 		set_high_priority("MAIN sched Thread", 4, 0);
 		for (auto &i : node_dag_mc.name_id_map)
 			printf("#EXTRA THREADS for node %s : %lu", i.first.c_str(), node_extra_tids[i.first].size() );
@@ -403,13 +408,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					illixr_noncrit_to_budget += sc_to[i];
 			}
 			offline_fracs_mtx.unlock();
-			if (total_period_count % 100 == 0) {
-				DEBUG(core_period);
-				for (size_t i = 0; i < sc_fracs.size(); ++i) {
-					DEBUG(i);
-					DEBUG(sc_fracs[i]);
-				}
-			}
 
 			/* ORIGINAL:
 			for (int i = 0; ( (i < core_exec_order.size()) && (!shutdown_scheduler) ); i++)
@@ -430,7 +428,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					boost::unique_lock<boost::mutex> lock(sched_thread_mutex);
 					int ct = 0;
 
-					while ( (!ready_sched) && (ct<10) && (!shutdown_scheduler) )
+					while ( (!ready_sched) && (ct<100) && (!shutdown_scheduler) )
 					{
 						cv_sched_thread.wait_for(lock, boost::chrono::microseconds(i_to*2) );
 						ct += 1;
@@ -637,7 +635,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		node_pid[node_name] = pid;
 		// todo: do we need to inc priority of CC here?
 		// not if it starts with p>=2 already : True for ROS.
-
+		std::cout << "GOT TID FOR " << node_name << ", " << tid << std::endl;
 		if (offline_use_td && got_all_info() )
 		{
 			if (fifo_nc == -1)
