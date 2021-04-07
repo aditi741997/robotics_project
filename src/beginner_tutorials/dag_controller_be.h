@@ -128,6 +128,9 @@ public:
 
 	std::string get_last_node_cc_name();
 	void update_ci(std::string node_name, double ci);
+	void update_latest_sensor_ts(std::string node_name, int sensor_ts);
+	std::map<std::string, int> node_latest_sensor_ts;
+	void notify_node_exec_end(std::string node_name);
 
 	// Helper functions:
 	bool changePriorityThread(std::string nname, int tid, int prio);
@@ -154,6 +157,10 @@ private:
 	std::atomic<bool> cc_end, ready_sched;
 	boost::condition_variable cv_sched_thread; // this is just for the core with CC in it.
 	void thread_custom_sleep_for(int microsec); // to be used if need quick exit at shutdown.
+	
+	std::map<int, boost::mutex> node_sched_thread_mutex; // might wanna wait for completion of multiple nodes.
+	std::map<int, std::atomic<bool> > node_finished; // node's completion notification
+	std::map<int, boost::condition_variable> node_cv_sched_thread; // cv to be notified when a node completion is recvd.
 
 	// For multi-core scheduling:
 	std::vector< std::vector<int> > curr_sc_core_assgt;
