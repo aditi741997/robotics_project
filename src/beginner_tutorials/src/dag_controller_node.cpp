@@ -198,6 +198,11 @@ public:
 		controller->start();
 	}
 
+	int get_sim_time()
+	{
+		return (int) 10*ros::Time::now().toSec();
+	}
+
 	// This is called when any of the nodes finishes exec (except last node of CC)
 	// Used to update ci estimates of all nodes.
 	void exec_end_cb(const std_msgs::Header::ConstPtr& msg)
@@ -208,6 +213,14 @@ public:
 		std::string n_name;
 		ss >> ci >> n_name;
 		controller->update_ci(n_name, ci);
+		controller->notify_node_exec_end(n_name);
+		// TODO: get TS for all nodes. Getting for just mapcb for now:
+		if ( (n_name.find("mapcb") != std::string::npos) || (n_name.find("navc") != std::string::npos) || (n_name.find("navp") != std::string::npos) || (n_name.find("mapupd") != std::string::npos))
+		{
+			int ts;
+			ss >> ts;
+			controller->update_latest_sensor_ts(n_name, ts);
+		}
 	}
 
 
