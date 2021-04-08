@@ -136,8 +136,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		for (int i = 0; i < exec_order.size(); i++)
 		{
 			node_finished[ exec_order[i][0] ] = false;
-			// node_cv_sched_thread = cv;
-			// node_sched_thread_mutex = ?;
 		}
 
 		/* This was needed only when we were not using optimal core assgt for expts:
@@ -407,6 +405,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				if ( (scname.find(RENDER_PLUGIN_NAME) != std::string::npos) || (scname.find(CAM_PLUGIN_NAME) != std::string::npos) )
 					illixr_noncrit_to_budget += sc_to[i];
 			}
+			if (total_period_count % 100 == 0) {
+				DEBUG(core_period);
+				for (size_t i = 0; i < sc_to.size(); ++i) {
+					DEBUG(i);
+					DEBUG(sc_to[i]);
+				}
+			}
 			offline_fracs_mtx.unlock();
 
 			/* ORIGINAL:
@@ -449,7 +454,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			// NEW CODE FOR ILLIXR: [TW - f=1 wait for it, Reder - f=1 wait for it, CS: Rem time based on vsync freq]
 			// ILLIXR_SPECIAL_TESTING_LOGIC specific to 1core, just for testing v1
 			
-			auto render_trigger_ts = 0;
+			long render_trigger_ts = 0;
 			for (int i = 0; ( (i < core_exec_order.size()) && (!shutdown_scheduler) ); i++)
 			{
 				long i_to = sc_to[i];
@@ -462,11 +467,11 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				if (nodename.find(RENDER_PLUGIN_NAME) != std::string::npos)
 					render_trigger_ts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count();
 
-				if ( ( nodename.find(TW_PLUGIN_NAME) != std::string::npos ) || ( nodename.find(RENDER_PLUGIN_NAME) != std::string::npos ) )
+				if ( ( nodename.find(IMU_PLUGIN_NAME) != std::string::npos ) || ( nodename.find(RENDER_PLUGIN_NAME) != std::string::npos ) )
 				{
 					boost::unique_lock<boost::mutex> lock(node_sched_thread_mutex[ core_exec_order[i][0] ]);
 					int ct = 0;
-					while (!node_finished[ core_exec_order[i][0] ] && (ct<10) && (!shutdown_scheduler))
+					while (!node_finished[ core_exec_order[i][0] ] && (ct<100) && (!shutdown_scheduler))
 					{
 						ct += 1;
 						node_cv_sched_thread[ core_exec_order[i][0] ].wait_for(lock, boost::chrono::microseconds(i_to*2));
@@ -480,6 +485,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				{
 					// sleep for remaining time in budget.
 					long render_time = (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() - render_trigger_ts  );
+					static_assert(sizeof(long) >= 7);
 					thread_custom_sleep_for( illixr_noncrit_to_budget - render_time );
 					cc_completion_log << render_trigger_ts << ", " << render_time << ", " << illixr_noncrit_to_budget << "\n";
 				}

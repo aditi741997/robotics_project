@@ -15,6 +15,7 @@ public:
 		, controller{std::make_unique<DAGControllerBE>("../robotics_project/illixr_dag.txt", this, false, "no", "no", 1, 3, 3, 4, 5, 6, 7, 1)}
 		, sb{pb->lookup_impl<switchboard>()}
 	{
+		if (!is_scheduler()) { abort(); }
 		std::cout << "Hello world " << controller->node_dag_mc.name_id_map.size() << "\n";
 		for (const auto& pair : controller->node_dag_mc.name_id_map) {
 			std::string name = pair.first;
@@ -28,19 +29,23 @@ public:
 					controller->recv_node_info(event->name, event->pid, ::getpid());
 				}
 			);
+			sb->schedule<switchboard::event_wrapper<bool>>(
+				id,
+				name + "_completion",
+				[this, name](switchboard::ptr<const switchboard::event_wrapper<bool>>, size_t event) {
+					// controller->update_ci(name, ci);
+					if (name == controller->get_last_node_cc_name()) {
+						controller->recv_critical_exec_end();
+					} else {
+					controller->notify_node_exec_end(name);
+					}
+				}
+			);
 			triggers.insert(std::make_pair<std::string, switchboard::writer<switchboard::event_wrapper<bool>>>(
 				std::move(name),
 				std::move(sb->get_writer<switchboard::event_wrapper<bool>>(name + "_trigger"))
 			));
 		}
-
-		sb->schedule<switchboard::event_wrapper<bool>>(
-			id,
-			controller->get_last_node_cc_name() + "_completion",
-			[this](switchboard::ptr<const switchboard::event_wrapper<bool>>, size_t event) {
-				controller->recv_critical_exec_end();
-			}
-		);
 	}
 
 	virtual void start2() override {
