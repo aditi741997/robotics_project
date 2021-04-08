@@ -7,16 +7,20 @@ runs = range( int(sys.argv[2]), int(sys.argv[3])+1 )
 bad_runs = { -1}
 efails = {-1}
 
+smallest_map = (sys.argv[4] == "smallest")
+
+run_txt = "_r" if smallest_map else "_run"
+
 # check NEG lat at shim
 if "Default" not in ename:
 	for r in runs:
 		neg_ct = 0
 		neg_ratio = 0.0
-		with open("nav2d_shim_logs_"  + ename + "_run" + str(r) + ".out", 'r') as f:
+		with open("nav2d_shim_logs_"  + ename + run_txt + str(r) + ".out", 'r') as f:
 			for l in f.readlines():
 				if "NEGAT" in l:	
 					neg_ratio = float( l.split(' ')[-1][:5] )
-		with open("nav2d_shim_logs_"  + ename + "_run" + str(r) + ".err", 'r') as f:
+		with open("nav2d_shim_logs_"  + ename + run_txt + str(r) + ".err", 'r') as f:
 			for l in f.readlines():
 				if "-VE LAT" in l:
 					neg_ct += 1
@@ -28,7 +32,7 @@ if "Default" not in ename:
 
 # check mMaxVel = 0.3
 for r in runs:
-	with open("nav2d_robot_logs_OpeMap_" + ename + "_run" + str(r) + ".err", 'r') as f:
+	with open("nav2d_robot_logs_OpeMap_" + ename + run_txt + str(r) + ".err", 'r') as f:
 		for l in f.readlines():
 			if "MaxVel" in l:
 				try:
@@ -46,7 +50,7 @@ for r in runs:
 for r in runs:
 	fnames = ["nav2d_robot_logs_OpeMap_", "nav2d_robot_logs_"]
 	for fname in fnames:
-		with open(fname + ename + "_run" + str(r) + ".err", 'r') as f:
+		with open(fname + ename + run_txt + str(r) + ".err", 'r') as f:
 			for l in f.readlines():
 				if "process has died" in l:
 					pname = l.split(' ')[0]
@@ -58,7 +62,7 @@ for r in runs:
 # check #weird prints in opeMap, nav logs
 for r in runs:
 	fnames = ["nav2d_robot_logs_OpeMap_", "nav2d_robot_logs_"]
-	with open(fname + ename + "_run" + str(r) + ".err", 'r') as f:
+	with open(fname + ename + run_txt + str(r) + ".err", 'r') as f:
 		weird_arr = []
 		for l in f.readlines():
 			if "WEIRD" in l:
@@ -80,7 +84,7 @@ for r in runs:
         goali = (0,0)
         goali1 = (0,0)
         count_goali1 = 0
-        with open("nav2d_robot_logs_" + ename + "_run" + str(r) + ".err", 'r') as f:
+        with open("nav2d_robot_logs_" + ename + run_txt + str(r) + ".err", 'r') as f:
 		nane = False
 		for l in f.readlines():
 			if "nan" in l:
@@ -104,7 +108,7 @@ for r in runs:
                                     thrashing += 1 
                                     count_goali1 = 0
                                 else:
-                                    print("Ename: %s, run: %i, HAS NEW goal!!"%(ename, r) , goal, goali1, goali, count_goali1)
+                                    #print("Ename: %s, run: %i, HAS NEW goal!!"%(ename, r) , goal, goali1, goali, count_goali1)
                                     goali = goali1 # prev goal
                                     goali1 = goal # current goal
                                     count_goali1 = 1
@@ -125,7 +129,7 @@ for r in runs:
 
 # get #tf errors.
 for r in runs:
-        with open("nav2d_robot_logs_" + ename + "_run" + str(r) + ".err", 'r') as f:
+        with open("nav2d_robot_logs_" + ename + run_txt + str(r) + ".err", 'r') as f:
 		tf_err = False
 		map_fail_ct = 0
 		efail = False
