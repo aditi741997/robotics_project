@@ -328,7 +328,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				else
 				{
 					// Notify the handle_sched_main : it waits for CC to end before moving on to NC nodes.	
-					notify_node_exec_end( node_dag_mc.id_name_map[exec_order[0][0]] );
+					// assuming exec_order[0] is CC.
+					notify_node_exec_end( node_dag_mc.id_name_map[ exec_order[0][ exec_order[0].size()-1 ] ] );
 				}
 
 				
@@ -390,7 +391,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		
 		while (!shutdown_scheduler)
 		{
-			// ILLIXR_SPECIAL_TESTING_LOGIC : calculate render+CS budget (in us) = fr*cr + fcs*ccs.
+			// ILLIXR_SPECIAL_TESTING_LOGIC : calculate render+CS budget (in us) for each HP = fr*cr + fcs*ccs.
 			long illixr_noncrit_to_budget = 0; 
 			offline_fracs_mtx.lock();
 			// Using lock to protect offline_fracs, node_dag_mc. core_period = per_core_period_map[ core_ids[0] ];
@@ -461,25 +462,26 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				changePriority(core_exec_order, i, core_ids[0]); // handles changing priority
 				checkTriggerExec( core_exec_order[i], core_ids[0], sc_fracs[i] );
 
-
-				// wait for finish for both TW, render [this assumes render f=1]
-				std::string nodename = node_dag_mc.id_name_map[ core_exec_order[i][0] ];
-				if (nodename.find(RENDER_PLUGIN_NAME) != std::string::npos)
+				// [wait for finish of last node of SC] for both TW, render [this assumes render f=1]
+				int lastnode_id = core_exec_order[i][ core_exec_order[i].size()-1 ];
+				std::string lastnodename = node_dag_mc.id_name_map[ lastnode_id ];
+				
+				if (lastnodename.find(RENDER_PLUGIN_NAME) != std::string::npos)
 					render_trigger_ts = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count();
 
-				if ( ( nodename.find(IMU_PLUGIN_NAME) != std::string::npos ) || ( nodename.find(RENDER_PLUGIN_NAME) != std::string::npos ) )
+				if ( ( lastnodename.find(TW_PLUGIN_NAME) != std::string::npos ) || ( lastnodename.find(RENDER_PLUGIN_NAME) != std::string::npos ) )
 				{
-					boost::unique_lock<boost::mutex> lock(node_sched_thread_mutex[ core_exec_order[i][0] ]);
+					boost::unique_lock<boost::mutex> lock(node_sched_thread_mutex[ lastnode_id ]);
 					int ct = 0;
-					while (!node_finished[ core_exec_order[i][0] ] && (ct<100) && (!shutdown_scheduler))
+					while (!node_finished[ lastnode_id ] && (ct<100) && (!shutdown_scheduler))
 					{
 						ct += 1;
-						node_cv_sched_thread[ core_exec_order[i][0] ].wait_for(lock, boost::chrono::microseconds(i_to*2));
+						node_cv_sched_thread[ lastnode_id ].wait_for(lock, boost::chrono::microseconds(i_to*2));
 					}
-					if (ct > 10)
-						printf("Monotime %f, realtime %f, Waited for %s completion, ct %i ready_sched %i [if 0, node hasnt ended!] \n", get_monotime_now(), get_realtime_now(), nodename.c_str(), ct, (bool)(node_finished[ core_exec_order[i][0] ].load()) );
+					if (ct > 5)
+						printf("Monotime %f, realtime %f, Waited for %s completion, ct %i ready_sched %i [if 0, node hasnt ended!] \n", get_monotime_now(), get_realtime_now(), nodename.c_str(), ct, (bool)(node_finished[ lastnode_id ].load()) );
 					// clear node_finished bool.
-					node_finished[ core_exec_order[i][0] ] = false;
+					node_finished[ lastnode_id ] = false;
 				}
 				else
 				{
@@ -487,7 +489,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					long render_time = (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() - render_trigger_ts  );
 					static_assert(sizeof(long) >= 7);
 					thread_custom_sleep_for( illixr_noncrit_to_budget - render_time );
-					cc_completion_log << render_trigger_ts << ", " << render_time << ", " << illixr_noncrit_to_budget << "\n";
+					cc_completion_log << render_trigger_ts << ", " << render_time << ", " << lastnodename << ", " << illixr_noncrit_to_budget << "\n";
 				}
 			}
 
