@@ -26,6 +26,18 @@ if "Default" not in ename:
 			print("Ename: %s, run: %i, has NEG LAT count : %f"%(ename, r, neg_ct) )
 			bad_runs.add(r)
 
+# check scan lat if its negative.
+for r in runs:
+        with open("../robot_nav2d_mapper_scanCB_stats_" + ename + "_run" + str(r) + ".txt", 'r') as f:
+                scan_lat = []
+                for fl in f.readlines():
+                        if "lat:" in fl:
+                                scan_lat += [ float(x) for x in fl.split(" ")[2:-1] ]
+                neg_scan_lat = filter(lambda x: x < 0.0, scan_lat)
+                if len(neg_scan_lat) > 0:
+                        print("ENAME %s, run %i has NEG LAT AT MAPCB!!"%(ename, r) )
+                        bad_runs.add(r)
+
 # check mMaxVel = 0.3
 for r in runs:
 	with open("nav2d_robot_logs_OpeMap_" + ename + "_run" + str(r) + ".err", 'r') as f:
