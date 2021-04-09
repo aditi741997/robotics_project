@@ -483,7 +483,7 @@ for i in expts:
         time_80area = [] # for each run, time to cover 80% of area. [in terms of known_area]
         time_60area = [] #20: [], 30: [],  for each run, time to cover 60% of area. [in terms of known_area]
         time_areas = { 40: [], 50: [], 60: [], 70: [], 80: [], 90: []} 
-	time_st_areas = { 40: [], 50: [], 60: [], 70: [], 80: [], 90: []}
+        time_st_areas = { 40: [], 50: [], 55: [], 60: [], 65: [], 70: [], 75: [], 80: [], 85: [], 90: [], 95: []}
         area_time_zip_arr = []
         area_time_agg_dict = { 20: [], 100: [] }
         colln_count_arr = []
@@ -918,7 +918,7 @@ for i in expts:
                                             time_60area.append( float(l.split(' ')[4]) - start_i )
 		                        if ( (known >= 0.9*opt_total_Area) and (last_known_area < 0.9*opt_total_Area) ):
                                             fullExplTimes.append( float(l.split(' ')[4]) - start_i )
-                                        for k in time_areas.keys():
+                                        for k in time_st_areas.keys():
                                             ratio = float(k)/100.0
                                             if ( ( known >= ratio*opt_total_Area) and (last_known_area < ratio*opt_total_Area) ):
                                                 time_areas[k].append( round(float(l.split(' ')[4]) - start_i, 3) )

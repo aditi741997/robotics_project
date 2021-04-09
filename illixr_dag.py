@@ -15,9 +15,9 @@ N {gtsam_integrator} 0.04 5 0 0
 N {timewarp_gl} 0.15 0 8.33 8.33 
 N {gldemo} 0.115 0 0 0
 N {offline_cam} 3.5 0 0 0
-N {open_vins} 15.65 0 0 0
+N {open_vins} 19.3 0 0 0
 E {offline_imu} {gtsam_integrator} {open_vins} X
-E {open_vins} {gtsam_integrator} {timewarp_gl} {gldemo}  X
+E {open_vins} {gtsam_integrator}  X
 E {gldemo} {timewarp_gl} X
 E {gtsam_integrator} {gldemo} {timewarp_gl} X
 E {offline_cam} {open_vins} X
