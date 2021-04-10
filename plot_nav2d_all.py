@@ -68,6 +68,7 @@ def get_num_collisions_run(ts_arr, ts_colln_arr, start_ts):
 import math
 small_map = ((sys.argv[1]) == "small" ) # whether its the small map
 smallest_map = (sys.argv[1] == "smallest")
+small_map_obst = ("obst" in sys.argv[1])
 print("MAP SIZE: small_map? %i, smallest_map? %i"%(small_map, smallest_map) )
 num_phyarea_blocks = 56 if small_map else 100
 def get_phy_area(pos_arr):
@@ -309,7 +310,7 @@ def get_obstacle_no_stage(x,y):
                             return 2
                 else:
                         return -1
-        elif small_map:
+        elif small_map and small_map_obst:
                 if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
                         return 1 # robot1 is line_no+1
                 elif (x >= -15) and (x <= -9) and (y >= -2) and (y <= +4):
@@ -326,6 +327,11 @@ def get_obstacle_no_stage(x,y):
                         return 7
                 elif (x >= 0) and (x <= 4.5) and (y >= -13) and (y <= -8):
                         return 8
+                else:
+                        return -1
+        elif small_map and (not small_map_obst):
+                if (x >= -7) and (x <= -1) and (y >= -1) and (y <= 5):
+                        return 1
                 else:
                         return -1
         else:
@@ -449,11 +455,11 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = [ "DefSM4V3_1c_CC1" ] #,"DefSM4V3_1c_CC2" ,"DefSM4V3_1c_CC3" ,"DefSM4V3_1c_CC4""DefaultTD_2c"] 
+expts = [ "Static2NO_1c" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
 
 #runs = range(5, 8) + range(31,48)
-runs = range(1,31)
-for badr in []: #57,89]: #[3,20,25,28,31,40,51,55]:
+runs = range(1,29)
+for badr in [4,6,11,15]: #57,89]: #[3,20,25,28,31,40,51,55]:
     runs.remove(badr)
 print(runs, len(runs))
 
@@ -482,7 +488,7 @@ for i in expts:
 
         time_80area = [] # for each run, time to cover 80% of area. [in terms of known_area]
         time_60area = [] #20: [], 30: [],  for each run, time to cover 60% of area. [in terms of known_area]
-        time_areas = { 40: [], 50: [], 60: [], 70: [], 80: [], 90: []} 
+        time_areas = { 40: [], 50: [], 55: [], 60: [], 65: [], 70: [], 75: [], 80: [], 85: [], 90: [], 95: []}
         time_st_areas = { 40: [], 50: [], 55: [], 60: [], 65: [], 70: [], 75: [], 80: [], 85: [], 90: [], 95: []}
         area_time_zip_arr = []
         area_time_agg_dict = { 20: [], 100: [] }
@@ -706,7 +712,7 @@ for i in expts:
 	# 1. Odometry v=0 fraction per 2s
                 run_path_len_sum = 0.0
 		with open('../robot_nav2d_obstacleDist_logs_' + exp_id + '.txt', 'r') as f:
-                        num_obst = 2 if smallest_map else 8
+                        num_obst = 2 if smallest_map else 1 if (not small_map_obst) else 8
 			obfl = f.readlines()
 			numl = (num_obst+3)
 			ts_arr = []
