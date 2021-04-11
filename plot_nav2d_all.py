@@ -386,6 +386,47 @@ def get_closest_wall_dist(x,y):
 			closest_wall = wi
 	return (closest_dist, closest_wall) 
 
+# sometimes, the robot collides with an obst & gets stuck, but the navPlan still keeps planning!! check for that:
+# return 'end TS', expl_finish etc info.
+def check_limbo_run(exp_id, smallest_map, small_map_obst):
+	# logic: get last posn, see since when its same posn [dx,dy small]
+	stall_start_ts_st = 0.0
+	stall_start_ts_rt = 0.0
+	last_ts_rt = 0.0
+	start = False
+	with open('../robot_nav2d_obstacleDist_logs_' + exp_id + '.txt', 'r') as f:	
+		fl = f.readlines()
+		num_obst = 2 if smallest_map else 1 if (not small_map_obst) else 8
+		numl = (num_obst+3)
+		last_pos_x = 0.0
+		last_pos_y = 0.0
+		arr = reversed(range(len(fl)//numl))
+		for o in reversed(range(len(fl)//numl)):
+			rob_pos = o*numl + 1
+			rob_pos_l = fl[rob_pos].split(' ')
+                        rob_x = float(rob_pos_l[1])
+                        rob_y = float(rob_pos_l[2][:-1])	
+			if not start:
+				start = True
+				last_ts_rt = float(fl[o*numl].split(' ')[3])
+				print("STARTING now! last ts rt: ", last_ts_rt, ", o: ", o, len(fl))
+			'''
+				last_pos_x = rob_x
+				last_pos_y = rob_y
+			elif (last_pos_x-rob_x) < 0.01 and () > 0.01:
+			'''
+			rob_stalled = fl[o*numl + num_obst + 2].split(' ')[9]
+			if "\n" in rob_stalled:
+				rob_stalled = rob_stalled[:-1]
+			if int(rob_stalled) == 1:
+				stall_start_ts_st = float(fl[o*numl].split(' ')[1])
+				stall_start_ts_rt = float(fl[o*numl].split(' ')[3])
+			else:
+				break # break the for loop.	
+	buffer_time = 5.0
+	print("$$$$$ LIMBO RUN: %s, was stalled from ts: %f to %f"%(exp_id, stall_start_ts_rt, last_ts_rt) )	
+	return (stall_start_ts_st + buffer_time*5, stall_start_ts_rt+buffer_time)
+
 # Walls:Thichness is ~0.25
 # w1: (0,1) - (0,6) : 2sided
 # w2: (0,5.6) - (8,5.6) : 2sided
@@ -455,10 +496,10 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = [ "AllHigh2NO" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
+expts = [ "Default2SM_1c" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
 
 #runs = range(5, 8) + range(31,48)
-runs = range(25,51)
+runs = range(1,31)
 for badr in []: #57,89]: #[3,20,25,28,31,40,51,55]:
     runs.remove(badr)
 print(runs, len(runs))
@@ -519,7 +560,8 @@ for i in expts:
                 
                 #exp_id = str(i) + letter +'run_' + str(run)
 		exp_id = i + ('_r' if smallest_map else '_run') + str(run)
-                collision[exp_id] = {}
+                exp_id = i + '_run' + str(run)
+		collision[exp_id] = {}
 		# get start, end times
 		start_i = 0.0
                 start_rt_i = 0.0
@@ -547,8 +589,8 @@ for i in expts:
 				    	end_i = start_i + (end_rt_i - start_rt_i)
                                         end_st_i = float( fl.split(' ')[2][:-2] )
 		end_i += 0.1 # expl should fail after the collision for the collision to count.
-		# JUST to plot area covered in 1st 60sec: 
-		# end_i = start_i + slot + 1.0
+		if (end_i == 0.1):
+			end_st_i, end_i = check_limbo_run(exp_id, smallest_map, small_map_obst)
 		print("For i ", i, " Start, end times: ", start_i, end_i)
 		run_total_times.append(round(end_st_i - start_st_i - 0.1,2))
 		run_finish_arr.append( run_expl_finished )
