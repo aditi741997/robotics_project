@@ -455,11 +455,11 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = [ "Static2NO_1c" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
+expts = [ "AllHigh2NO" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
 
 #runs = range(5, 8) + range(31,48)
-runs = range(1,29)
-for badr in [4,6,11,15]: #57,89]: #[3,20,25,28,31,40,51,55]:
+runs = range(25,51)
+for badr in []: #57,89]: #[3,20,25,28,31,40,51,55]:
     runs.remove(badr)
 print(runs, len(runs))
 
@@ -491,7 +491,9 @@ for i in expts:
         time_areas = { 40: [], 50: [], 55: [], 60: [], 65: [], 70: [], 75: [], 80: [], 85: [], 90: [], 95: []}
         time_st_areas = { 40: [], 50: [], 55: [], 60: [], 65: [], 70: [], 75: [], 80: [], 85: [], 90: [], 95: []}
         area_time_zip_arr = []
-        area_time_agg_dict = { 20: [], 100: [] }
+        area_time_agg_dict = { 20: [], 100: [] } # smallest map : 100s is too coarse.
+        if smallest_map:
+            area_time_agg_dict[50] = []
         colln_count_arr = []
         time_to_areas = [] # arr of dicts
         stime_to_areas = [] # arrof dicts
@@ -899,6 +901,8 @@ for i in expts:
                 zip_at = []
                 zip_aa = []
                 zip_as = { 100: {}} # 20s RT ~100s ST.
+                if smallest_map:
+                    zip_as[50] = {}
 		run_time_to_area = {}
                 run_stime_to_area = {}
                 with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
