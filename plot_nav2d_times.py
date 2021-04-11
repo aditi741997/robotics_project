@@ -2,6 +2,7 @@
 import sys
 import matplotlib.pyplot as plt
 import numpy as np
+import random
 
 fname_pre_str = sys.argv[1]
 fname_post_str = sys.argv[2]
@@ -89,9 +90,13 @@ per_run_navp_ts = []
 per_run_drops_ratio = []
 per_run_scan_lat = []
 aggregate_navc_tput = []
-for run in range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]: 
-    print("################## DOING RUN %i"%(run) )
-    for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_plan"]:
+
+node_tputs = {} # node name -> array
+
+for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_plan"]:
+    node_tputs[fname] = []
+    for run in range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]: 
+    	print("################## DOING RUN %i"%(run) )
         times = []
         ts = []
         scan_count = []
@@ -160,13 +165,15 @@ for run in range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]:
         if len(lats) > 0:
             large_lats = filter(lambda x: x[0] > 1.0 , zip(lats, ts, wallts, times) ) 
             print("NODE ", fname, " VERY HIGH LATS: ", large_lats, " LARGEST Lat: ", sorted(zip(lats, ts, wallts, times), key=lambda x: x[0])[-1] )
-            per_run_scan_lat += zip(lats, wallts, times)
+            zip_ar = zip(lats, wallts, times)
+	    random.shuffle(zip_ar)
+	    per_run_scan_lat += zip_ar[:100] 
 
         if len(tputs) > 0:
             if "cmd" in fname:
                 aggregate_navc_tput += tputs
                 for i in range(len(tputs)):
-                    if tputs[i] > 0.03:
+                    if tputs[i] > 0.93:
                         print("FOR NAVC , LARGE tput: %f, ts: %f"%(tputs[i], ts[i]) )
             
             sorted_tput = sorted(tputs)
@@ -211,6 +218,8 @@ for run in range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]:
             per_run_mapu_time.append(times)
 	    #print("SCAN COUNTS : ", scan_count, ", TS: ", ts, "\n \n")
 
+	random.shuffle(tputs)
+	node_tputs[fname] += tputs[:100]
         '''
             plot_agg(ts[1:], tputs, start_t, 2.0, end_t, "Inter-arrival Time", fname)
             sorted_tput = sorted(tputs)
@@ -219,6 +228,10 @@ for run in range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]:
             #plot_agg(ts[1:], tputs, start_t, 10.0, end_t, "Inter-arrival Time", fname)
         '''
 print("Aggregate NC: median: %f, 75ile: %f, 95ile: %f"%(np.median(aggregate_navc_tput), np.percentile(aggregate_navc_tput, 75), np.percentile(aggregate_navc_tput, 95) ) )
+for k in node_tputs:
+	print(node_tputs[k], k)
+	print("-")
+	print("-")
 '''
 print("\n \n PER RUN SCAN CT : ", per_run_scan_ct)
 print("-")
@@ -235,6 +248,6 @@ print("-")
 print("\n \n PER RUN NAVP TS: ", per_run_navp_ts)
 print("-")
 print("-")
-print("\n \n PER RUN SCAN LATENCY AT MAPCB : ", len(per_run_scan_lat), per_run_scan_lat)
 print("PER RUN DROPS RATIO: , avg ratio : %f, median ratio : %f", per_run_drops_ratio, sum(per_run_drops_ratio)/len(per_run_drops_ratio), np.median(per_run_drops_ratio) )
 '''
+print("\n \n PER RUN SCAN LATENCY AT MAPCB : ", len(per_run_scan_lat), per_run_scan_lat)

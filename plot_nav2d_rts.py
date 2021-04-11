@@ -89,11 +89,14 @@ start_run_ind = int(sys.argv[5])
 end_run_ind = int(sys.argv[6])
 
 aggregate_chain_lats = {}
+aggregate_chain_rts = {}
+
 for run in range(start_run_ind,end_run_ind+1):
         for chain in ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]:
                 print "Starting chain", chain
                 if chain not in aggregate_chain_lats:
                     aggregate_chain_lats[chain] = []
+		    aggregate_chain_rts[chain] = []
                 rts = []
                 lats = []
                 tputs = []
@@ -115,9 +118,9 @@ for run in range(start_run_ind,end_run_ind+1):
                 # len(TS) should be = len(lat).
                 # len(TS) should be len(tput)+1.
                 aggregate_chain_lats[chain] += lats
-                print("\n \n ARR Lat FOR chain %s : %s"%( chain, str(lats) ) )
-                if "Scan_LC" in chain:
-                        print("\n \n ARR RT FOR chain %s : %s"%( chain, str(rts) ) )
+                #print("\n \n ARR Lat FOR chain %s : %s"%( chain, str(lats) ) )
+                #if "Scan_LC" in chain:
+                        #print("\n \n ARR RT FOR chain %s : %s"%( chain, str(rts) ) )
                 if len(ts) > 1:
                         '''
                         plot_smt(ts, lats, 'bo:', " Latency", chain, yls[chain])
@@ -130,19 +133,22 @@ for run in range(start_run_ind,end_run_ind+1):
 
                         #plot_smt(ts[1:], rts, 'r^:', " RT", chain, yls[chain])
                         #plot_smt(ts[1:], tputs, 'g*:', " Inter-arrival Times", chain, yls[chain])
-                        '''
                         if "Scan_LC" in chain:
-                                bad_tputs = filter(lambda x: x > 1.1*exp_cc_tput, tputs)
-                                vgood_tputs = filter(lambda x: x < 0.9*exp_cc_tput, tputs)
+                                bad_tputs = filter(lambda x: x[0] > 1.1*exp_cc_tput, zip(tputs, ts[1:]) )
+                                vgood_tputs = filter(lambda x: x[0] < 0.9*exp_cc_tput, zip(tputs, ts[1:]))
                                 print("FOR CRITICAL CHAIN, Total tputs: %i, bad_tputs: %i, vgood_tputs: %i"%(len(tputs), len(bad_tputs), len(vgood_tputs) ) )
-                                print("BAD Tputs: ", bad_tputs)
+                                print("FOR CRITICAL CHAIN, BAD Tputs: ", bad_tputs)
                         '''
+                        '''
+		random.shuffle(rts)
+		aggregate_chain_rts[chain] += rts[:100]
 
 per_chain_count = {"Scan_LC_LP": 1000}
-for ch in aggregate_chain_lats:
+for ch in per_chain_count:
     random.shuffle(aggregate_chain_lats[ch])
     lch = len(aggregate_chain_lats[ch])
+    print(ch, aggregate_chain_rts[ch])
     #print(aggregate_chain_lats[ch][:lch/5], ch)
-    print("AGGREGATE LAT for chain ", ch, " median: %f, 75ile: %f, 95ile: %f"%(np.median(aggregate_chain_lats[ch]), np.percentile(aggregate_chain_lats[ch], 75), np.percentile(aggregate_chain_lats[ch], 95) ) )
+    #print("AGGREGATE LAT for chain ", ch, " median: %f, 75ile: %f, 95ile: %f"%(np.median(aggregate_chain_lats[ch]), np.percentile(aggregate_chain_lats[ch], 75), np.percentile(aggregate_chain_lats[ch], 95) ) )
     print('-')
     print('-')
