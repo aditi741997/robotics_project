@@ -286,10 +286,26 @@ DAG::DAG(std::string fname)
 				chains.push_back(std::make_tuple(cw, ch, 0.0, chain_count) );
 				chain_count += 1;
 			}
+			else if (line_type.find("WF") != std::string::npos )
+			{
+				std::string a;
+                                ss >> a;
+				std::string b;
+				DAGNode& na = id_node_map[name_id_map[a]];
+				ss >> b;
+				
+				while (b.find("X") == std::string::npos )
+				{
+					std::cout << "NODE " << a << " waits for new/fresh output from " << b << std::endl;
+					na.wait_for_outputs.push_back( name_id_map[b] );
+					ss >> b;
+				}
+			}
 			else
 			{
 				is_constraint = (line_type.find("constr") != std::string::npos);
 			} 
+		
 		}
 		order_chains_criticality(chains);	
 	}

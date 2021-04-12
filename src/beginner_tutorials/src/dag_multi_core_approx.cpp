@@ -56,6 +56,8 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 
 		printf("STARTING adding constraints, num_subchains: %i, num_cores: %i \n", num_subchains, num_cores);
 
+		float eps = 0.01;
+
 		// sum aij for all subchains is atleast 1.
 		for (int i = 0; i < num_subchains; i++)
 		{
@@ -65,7 +67,7 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 			node_dag->print_dvec(aij_c1, "\n Constraint on aij : sum aij>0.99 for i="+std::to_string(i));
 
 			auto ac1 = new_array_ptr<double> (aij_c1);
-			mosek_model->constraint("aij_c1"+std::to_string(i), Expr::dot(ac1, aij), Domain::greaterThan(0.99) );
+			mosek_model->constraint("aij_c1"+std::to_string(i), Expr::dot(ac1, aij), Domain::greaterThan(1.0 - eps) );
 		}
 
 		// sum aij for all cores is atleast 1.
@@ -124,7 +126,7 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 				node_dag->print_dvec(yij_c, "\n ADDING constraints on yij, yij for "+ij_str);
 				auto yij_cc = new_array_ptr<double>(yij_c);
 
-				printf("\n For ij: %s, C1: yij-aij <= 0 AND C2: yij-xi <= 0 AND C3: yij-xi-aij >= -1", ij_str.c_str());
+				printf("\n For ij: %s, C1: yij-aij <= 0 AND C2: yij-xi <= 0 AND C3: yij-xi-aij >= -1 \n", ij_str.c_str());
 				mosek_model->constraint("yij_c1_"+ij_str, Expr::add( Expr::dot(ac1, aij), Expr::dot(yij, yij_cc) ), Domain::lessThan(0.0+0.01) );
 
 				mosek_model->constraint("yij_c2_"+ij_str, Expr::add( Expr::dot(xi_ic, xi), Expr::dot(yij, yij_cc) ), Domain::lessThan(0.0+0.01) );
@@ -139,18 +141,25 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 				auto ac2 = new_array_ptr<double> (aij_c2);
 
 				std::vector<double> yij_c2 (num_cores*num_subchains, 0);
-				yij_c2[i*num_cores + j] = -1.0*large_n;
+				yij_c2[i*num_cores + j] = 1.0*large_n; // -1.0*large_n;
 				auto yij_cc2 = new_array_ptr<double> (yij_c2);
-				node_dag->print_dvec(yij_c2, "Constr on yij_aij, for ij"+ij_str);
-				
-				printf("\n ADDING constr C1. aij-Myij < 1+M AND C2. aij-yij > 1-M");
+				node_dag->print_dvec(yij_c2, "ConstrC1 on yij_aij, for ij"+ij_str);
+			
+				std::vector<double> yij_c22 (num_cores*num_subchains, 0);
+				yij_c22[i*num_cores + j] = -1.0*large_n;
+				auto yij_cc22 = new_array_ptr<double> (yij_c22);
+				node_dag->print_dvec(yij_c22, "ConstrC2 on yij_aij, for ij"+ij_str);
+
+				// printf("\n ADDING constr C1. aij-Myij < 1+M AND C2. aij-yij > 1-M");
+				printf("\n MODIFIED constr C1. aij < 1+M(1-yij) AND same C2. aij-yij > 1-M");
 				mosek_model->constraint("aij_yij1_"+ij_str, Expr::add( Expr::dot(aij, ac2), Expr::dot(yij_cc2, yij) ), Domain::lessThan(1.01+large_n) );
-				mosek_model->constraint("aij_yij2_"+ij_str, Expr::add( Expr::dot(aij, ac2), Expr::dot(yij_cc2, yij) ), Domain::greaterThan(0.99-large_n) );
+				mosek_model->constraint("aij_yij2_"+ij_str, Expr::add( Expr::dot(aij, ac2), Expr::dot(yij_cc22, yij) ), Domain::greaterThan(0.99-large_n) );
 			}
 		}
 
 		// period constraints for all subchains:
 		Variable::t pi = mosek_model->variable("pi", num_subchains, Domain::greaterThan(0.0) );
+		Variable::t execi = mosek_model->variable("execi", num_subchains, Domain::greaterThan(0.0) ); // represents exectime of a SC.
 		Variable::t zij = mosek_model->variable("zij", (num_cores*num_subchains), Domain::greaterThan(0.0));
 		Variable::t wijl = mosek_model->variable("Wijl", (num_cores*num_subchains*num_subchains), Domain::binary() );
 
@@ -195,6 +204,11 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 
 			mosek_model->constraint("pi_cm"+i_str, Expr::dot(pi, pi_cm1), Domain::greaterThan(max_ci-0.01) );
 
+		// execi >= sum ci of subchain
+			std::vector<double> execi_c1 (num_subchains, 0.0);
+			execi_c1[i] = 1.0;
+			auto execi_c11 = new_array_ptr<double> (execi_c1);
+			mosek_model->constraint("execi_sumci_"+i_str, Expr::dot(execi_c11, execi), Domain::greaterThan(sum_ci-0.01) );
 
 		// pi >= sum ci of subchain/ #cores assigned, define zij
 			std::vector<double> zij_sum_c (num_cores*num_subchains, 0.0);
@@ -214,9 +228,9 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 				auto aij_c1 = new_array_ptr<double> (aij_c);
 
 				printf("\n ADDING C1. Maij-zij > 0.0, C2. pi-zij > 0.0, C3. pi+Maij-zij < M");
-				mosek_model->constraint("zij_c1"+ij_str, Expr::add( Expr::dot(zij, zij_c1), Expr::dot(aij_c1, aij) ), Domain::greaterThan(0.0-0.005) );
-				mosek_model->constraint("zij_c2"+ij_str, Expr::add( Expr::dot(pi, pi_cm1), Expr::dot(zij, zij_c1) ), Domain::greaterThan(0.0-0.005) );
-				mosek_model->constraint("zij_c3"+ij_str, Expr::add( Expr::dot(pi, pi_cm1), Expr::add( Expr::dot(zij, zij_c1), Expr::dot(aij_c1, aij) ) ), Domain::lessThan(large_n+0.005) );
+				mosek_model->constraint("zij_c1_"+ij_str, Expr::add( Expr::dot(zij, zij_c1), Expr::dot(aij_c1, aij) ), Domain::greaterThan(0.0) ); // -0.005
+				mosek_model->constraint("zij_c2_"+ij_str, Expr::add( Expr::dot(pi, pi_cm1), Expr::dot(zij, zij_c1) ), Domain::greaterThan(0.0) ); // -0.005
+				mosek_model->constraint("zij_c3_"+ij_str, Expr::add( Expr::dot(pi, pi_cm1), Expr::add( Expr::dot(zij, zij_c1), Expr::dot(aij_c1, aij) ) ), Domain::lessThan(large_n) ); // +0.005
 
 			}
 			auto zij_sum_c1 = new_array_ptr<double>(zij_sum_c);
@@ -255,14 +269,28 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 			}
 
 			auto wijl_sum_c1 = new_array_ptr<double>(wijl_sum_c);
-			node_dag->print_dvec(wijl_sum_c, "\n ADDING constr pi - sum_ci*(sum wijl) > 0.0 for i"+i_str);
-			mosek_model->constraint("pi_core_equal_share"+i_str, Expr::add( Expr::dot(wijl_sum_c1, wijl), Expr::dot(pi, pi_cm1) ), Domain::greaterThan(0.0-0.01) );
+			
+			std::vector<double> mxi_term (num_subchains, 0.0);
+			mxi_term[i] = +1.0 * large_n;
+			auto mxi_term1 = new_array_ptr<double>(mxi_term);
+			
+			printf("ADDING CONSTRAINT ON exec time of subchain: execi - pi + Mxi >= 0 \n");
+			std::vector<double> neg_pi_term(num_subchains, 0.0);
+			neg_pi_term[i] = -1.0;
+			auto neg_pi_term1 = new_array_ptr<double>(neg_pi_term);
+			mosek_model->constraint("execi_pi_"+i_str, Expr::add( Expr::add( Expr::dot(neg_pi_term1, pi), Expr::dot(execi, execi_c11) ), Expr::dot(mxi_term1, xi) ) , Domain::greaterThan(0.0-0.01) );
+
+			// node_dag->print_dvec(wijl_sum_c, "\n ADDING constr pi - sum_ci*(sum wijl) > 0.0 for i"+i_str);
+			node_dag->print_dvec(wijl_sum_c, "\n MODIFIED constr pi - sum_ci*(sum wijl) + M*xi > 0.0 for i"+i_str);
+			mosek_model->constraint("pi_core_equal_share"+i_str, Expr::add( Expr::add(Expr::dot(wijl_sum_c1, wijl), Expr::dot(mxi_term1, xi) ), Expr::dot(pi, pi_cm1) ), Domain::greaterThan(0.0-0.01) );
 		}
 
 		// TODO: Handle multi threaded nodes with the perfect scaling assumption.
 		// Make variables bi, i.e. #bins for sc i alone. 1<=bi<=sum aij.
 		// Replace constraint Pi >= Mi BY : Pi * sum aij >= Mi * bi I.E. sum zij >= Mi*bi.
-		
+		// More constraints on bi : a. if xi = 0 then bi = 1 [1-Mxi <= bi <= 1+Mxi] 
+		// b. We add this only if SC is not ||alizable [which is known at the time of adding constr here in code], then bi = sum aij.
+
 		// constraint on RT of all chains. [p0 + sum 2*pi + max(all pi)] = RT <= constr.
 		std::map<int, int> node_id_exec_order_id;
 		int num_chains = node_dag->all_chains.size();
@@ -301,7 +329,8 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 
 				std::vector<int>& ith_chain = std::get<1>(node_dag->all_chains[ch]);
 				std::vector<double> ps (num_subchains, 0.0); // all period terms in RT.
-				
+				std::vector<double> execs (num_subchains, 0.0); // all exectime terms in RT.
+
 				for (int n = 0; n < ith_chain.size(); n++)
 				{
 					// need index of a node in the exec_order [cuz thats the order of pi variables.]
@@ -315,12 +344,15 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 					}
 					int pid = node_id_exec_order_id[ith_chain[n]];
 					if (n == 0)
-						ps[pid] += 1.0;
+						execs[pid] += 1.0;
 					// note that if n, n-1 are same subchain, 
 					// then we've already added P (max wait) +P (exec time for the whole subchain) when we were processing node n-1.
 					else if (pid != node_id_exec_order_id[ith_chain[n-1]])
-						ps[pid] += 2.0; // TODO: Use sumci if a subchain is alone on >1cores, i.e. xi=1.
-					
+					{
+						// add exec time (Period or sum ci if xi=1) of subchain and wait time (period) of subchain.
+						ps[pid] += 1.0; 
+						execs[pid] += 1.0;
+					}
 
 					std::vector<double> chain_per_const (num_subchains, 0.0);
 					chain_per_const[pid] = -1.0;
@@ -332,8 +364,9 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 
 				node_dag->print_dvec(ps, "\n ADDING constr RT <= cons, RT me subchain_periods formula:");
 				auto rt_ps = new_array_ptr<double> (ps);
-				// RT : ps.pi + ith_ch_per_c.chains_pers <= cons
-				mosek_model->constraint("chain"+std::to_string(ch)+"_rt_cons", Expr::add( Expr::dot(ith_ch_per_c, chains_pers), Expr::dot(pi, rt_ps) ) , Domain::lessThan(cons) );
+				auto rt_execs = new_array_ptr<double> (execs);
+				// RT : ps.pi + execs.execi + ith_ch_per_c.chains_pers <= cons
+				mosek_model->constraint("chain"+std::to_string(ch)+"_rt_cons", Expr::add( Expr::add( Expr::dot(ith_ch_per_c, chains_pers), Expr::dot(execi, rt_execs) ) , Expr::dot(pi, rt_ps) ) , Domain::lessThan(cons) );
 				
 				// For objective: [since ch>0 here]
 				for (int i = 0; i < num_subchains; i++)
@@ -354,7 +387,7 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 		auto sum_rts_ps1 = new_array_ptr<double> (sum_rts_ps);
 
 		mosek_model->objective("Objective", ObjectiveSense::Minimize, Expr::add( Expr::dot(sum_rts_ps1, pi), Expr::dot(chain_pers_sum1, chains_pers) ) );
-
+		mosek_model->writeTask("/home/ubuntu/DagMultiCoreApproxSolver.lp");
 		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &solve_start);
 
 		try
@@ -380,6 +413,10 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 			auto opt_pi = std::make_shared<ndarray<double, 1>>(shape(num_subchains), [pi](ptrdiff_t i) {return ((*(pi->level()))[i]); } );
 			for (int i = 0; i < num_subchains; i++)
 				printf("Value of pi[%i]: %f, ", i, (*opt_pi)[i]);
+			
+			auto opt_exi = std::make_shared<ndarray<double, 1>>(shape(num_subchains), [execi](ptrdiff_t i) {return ((*(execi->level()))[i]); } );
+			for (int i = 0; i < num_subchains; i++)
+				printf("Value of execi[%i]: %f, ", i, (*opt_exi)[i]);
 
 			auto opt_zij = std::make_shared<ndarray<double, 1>>(shape(num_subchains*num_cores), [zij](ptrdiff_t i) { return ((*(zij->level()))[i]); });
 			for (int i = 0; i < num_subchains; i++)

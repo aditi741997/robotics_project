@@ -113,7 +113,7 @@ void DAGMultiCore::get_period_map_core(int i, int total_vars, std::vector<std::v
 		printf("ADDING ci for subchain id %i, sum=%f, frac var id = %i \n", scid, sumci, sc_id_frac_id[scid]);
 
 		// add a vec to ans : sumci*fi :
-		// NOT Assuming f=1 for SCid=0 i.e. CC,-> will just normalize all fracs.
+		// CHECK CC FRAC1 Assumption:NOT Assuming f=1 for SCid=0 i.e. CC,-> will just normalize all fracs.
 		std::vector<double> ai (total_vars, 0.0);
 		// if (scid > 0)
 			ai[ sc_id_frac_id[scid] ] = 1.0;
@@ -139,7 +139,8 @@ std::pair< std::vector<std::vector<double> >, std::vector<double> > DAGMultiCore
 	// multiply by 1/f to get period
 	for (int i = 0; i < ap.size(); i++)
 	{
-		// NOT assuming cc frac=1. if (node_id_sc_id[node_id] > 0)
+		// CHECK CC FRAC1 Assumption: NOT assuming cc frac=1. 
+		// if (node_id_sc_id[node_id] > 0)
 			ap[i][ sc_id_frac_id[ node_id_sc_id[node_id] ] ] -= 1.0;
 		print_dvec(ap[i], "SUBchain Period_posynomial "+ std::to_string(i)+"th term power, const: " + std::to_string(ac[i]) );
 	}
@@ -168,6 +169,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	// Period of each subchain:
 	for (int i = 0; i < exec_order.size(); i++)
 	{
+		// TODO: 2vars for mapcb.
 		printf("For subchain id %i, period varid: %i", i, global_var_count);
 		global_var_count += 1;
 		global_var_desc.push_back( std::make_tuple("period_subchain", i, "", 0) );
@@ -214,8 +216,11 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			for (int ei = 0; ei < exec_order[i].size(); ei++)
 				sumci += id_node_map[ exec_order[i][ei] ].compute;
 
-			mosek_model->constraint( Expr::dot(new_array_ptr<double>(a) , all_l_vars) , Domain::lessThan( log(sumci) ) );
-			print_dvec(a, "Adding ci*fi>=1 constr, sumci="+std::to_string(sumci) );
+			if ( sumci > 1.0 )
+			{
+				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a) , all_l_vars) , Domain::lessThan( log(sumci) ) );
+				print_dvec(a, "Adding ci*fi>=1 constr, sumci="+std::to_string(sumci) );
+			}
 		}
 
 	// hyper-period of each core as vec of vecs...
@@ -364,7 +369,8 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			else if ( (nj1_fixed_per != nj_fixed_per) && (node_id_sc_id[nj1.id] == node_id_sc_id[nj.id]) )
 			{
 
-				if ( (nj1_fixed_per > 0) ) //  || (node_id_sc_id[nj1.id] == 0)
+				// CHECK CC FRAC1 Assumption: for illixr
+				if ( (nj1_fixed_per > 0) ) // || (node_id_sc_id[nj1.id] == 0)  
 				{
 					// Add P+C1
 					// Todo:maybe, add nj fixed period if nj1 fp=0 & CC : assuming that nj period<nj1 period.
@@ -383,6 +389,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			{
 				// this can happen if both are 0.
 				// if nj1==CC, add P+CC_sumci else 2P.
+				// CHECK CC FRAC1 Assumption: for illixr
 				/*
 				if ( node_id_sc_id[nj1.id] == 0 )
 				{
