@@ -1,4 +1,3 @@
-#include <list>
 #include <iostream>
 #include <fstream>
 #include <string>
@@ -56,6 +55,8 @@ public:
 	double fixed_period = 0.0;
 	double max_period = 0.0; // Upper bounding node's rate
 	double min_period = 0.0; // Lower bounding node's rate
+
+	std::vector<int> wait_for_outputs; // set of inputs the node needs to wait for / have latest value of.
 };
 
 class Monomial
@@ -127,7 +128,7 @@ public:
 	std::map<int, int> nodes_in_most_critical_chain;
 	
 	// True : constraints, False : weights
-	bool is_constraint = false;
+	bool is_constraint;
 
 	// Fields related to mosek solver:
 	Model::t mosek_model;
