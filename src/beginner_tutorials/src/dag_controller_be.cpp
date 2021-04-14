@@ -479,7 +479,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 						node_cv_sched_thread[ lastnode_id ].wait_for(lock, boost::chrono::microseconds(i_to*2));
 					}
 					if (ct > 5)
-						printf("Monotime %f, realtime %f, Waited for %s completion, ct %i ready_sched %i [if 0, node hasnt ended!] \n", get_monotime_now(), get_realtime_now(), nodename.c_str(), ct, (bool)(node_finished[ lastnode_id ].load()) );
+						printf("Monotime %f, realtime %f, Waited for %s completion, ct %i ready_sched %i [if 0, node hasnt ended!] \n", get_monotime_now(), get_realtime_now(), lastnodename.c_str(), ct, (bool)(node_finished[ lastnode_id ].load()) );
 					// clear node_finished bool.
 					node_finished[ lastnode_id ] = false;
 				}
