@@ -284,6 +284,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			}
 			
 		}
+		printf("MonoTime: %f, RealTime: %f, SIGNING OFF startup_trigger thread!!! \n");
 	}
 
 	// FE will call this for each msg from the CC.
