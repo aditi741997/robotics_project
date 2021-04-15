@@ -310,7 +310,7 @@ namespace karto
                 boost::chrono::system_clock::duration tse = now.time_since_epoch();
 		unsigned long long ct = boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() - (1603000000000);
                 double time = ct / (double)(1000.0);
-		printf("%f Time, MapperUpdate : OccGrid::Updategrid executing... i: %i, nBytes: %i \n", time, i, nBytes);
+		// printf("%f Time, MapperUpdate : OccGrid::Updategrid executing... i: %i, nBytes: %i \n", time, i, nBytes);
 	}
     }
   }
