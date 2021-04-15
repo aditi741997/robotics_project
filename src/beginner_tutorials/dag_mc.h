@@ -50,5 +50,7 @@ class DAGMultiCore: public DAG
 		double get_fixed_period_node(int node_id);
 		std::pair< std::vector<std::vector<double> >, std::vector<double> > get_period_node(int node_id);
 
+		bool is_sc_streaming(std::vector<int>& sc);
+
 		std::vector<int> compute_rt_solve();
 };

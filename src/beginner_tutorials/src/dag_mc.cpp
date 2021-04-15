@@ -12,6 +12,15 @@ void DAGMultiCore::set_params(int numc, std::vector< std::vector<int> >& sc_core
 	sc_core_assgt = sc_core_a;
 }
 
+// see if atl one of the nodes in SC is streaming type.
+bool DAGMultiCore::is_sc_streaming(std::vector<int>& sc)
+{
+	for (auto &x : sc)
+		if (id_node_map[x].node_type.find("S") != std::string::npos )
+			return true;
+	return false;
+}
+
 void DAGMultiCore::assign_fixed_periods()
 {
 	printf("DAGMultiCore ABOUT TO assign_fixed_periods!! WILL clear global_var info first! \n");
@@ -166,13 +175,12 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 
 	std::vector<std::vector<int> > exec_order = get_exec_order();
 	int frac_var_ct = global_var_count;
-	// Period of each subchain:
+	// Period Pni of each subchain:
 	for (int i = 0; i < exec_order.size(); i++)
 	{
-		// TODO: 2vars for mapcb.
-		printf("For subchain id %i, period varid: %i", i, global_var_count);
+		printf("For subchain id %i, period Pni varid: %i", i, global_var_count);
 		global_var_count += 1;
-		global_var_desc.push_back( std::make_tuple("period_subchain", i, "", 0) );
+		global_var_desc.push_back( std::make_tuple("periodPni_subchain", i, "", 0) );
 	}
 
 	int frac_sc_var_ct = global_var_count;	
@@ -183,6 +191,15 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		global_var_count += 1;
 		global_var_desc.push_back(std::make_tuple("approx_period_chain",j,"",0));
 	}
+
+	// Period Pi of each subchain:
+	int frac_sc_c_var_ct = global_var_count;
+	for (int i = 0; i < exec_order.size(); i++)
+	{
+		printf("For subchain id %i, period STREam varid: %i", i, global_var_count);
+		global_var_count += 1;
+		global_var_desc.push_back( std::make_tuple("periodPi_subchain", i, "", 0) );
+	}
 	print_global_vars_desc();
 
 	mosek_model = new Model("multi_core_scheduler_algo");
@@ -190,18 +207,30 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	mosek_model->setSolverParam("numThreads", 1);
 	mosek_model->setSolverParam("intpntMultiThread", "off");
 
-	// num_vars: curr_count + num_chains (one approx_tput for each chain)
 	int total_vars = global_var_count+1;
 	Variable::t all_l_vars = mosek_model->variable(total_vars);
 
-	// Constraint 1 : All fi's are <= 1, i.e. all log fi's are < 0.
-	for (int i = 0; i < frac_var_ct; i++)
+	// Constraint 1 : All fi's are <= 1, i.e. all log fi's are < 0. EXCEPT for streaming nodes!
+	for (int i = 0; i < exec_order.size(); i++)
+		if (sc_id_frac_id.find(i) != sc_id_frac_id.end())
+		{
+			if (!is_sc_streaming(exec_order[i]))
+			{
+				std::vector<double> a (total_vars, 0.0);
+				a[ sc_id_frac_id[i] ]  =1;
+				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a) , all_l_vars) , Domain::lessThan(0.0) );
+				std::cout << "ADDED fi < 0 constraint for var " << sc_id_frac_id[i] << ", SC ID: " << i << std::endl;
+			}
+			else
+				printf("NOT adding fi<1 constraint for sc id %i, var id %i cuz STREAMM \n", i, sc_id_frac_id[i]);
+		}
+	/* for (int i = 0; i < frac_var_ct; i++)
 	{
 		std::vector<double> a (total_vars, 0.0);
 		a[i] = 1;
 		mosek_model->constraint( Expr::dot(new_array_ptr<double>(a) , all_l_vars) , Domain::lessThan(0.0) );
-		std::cout << "ADDED vi < 0 constraint for var " << i << std::endl;
-	}
+		std::cout << "ADDED fi < 0 constraint for var " << i << std::endl;
+	} */
 	
 	
 	// ci*fi > 1ms for all. ci: sum of ith subchain compute.
@@ -246,7 +275,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			{
 				std::vector<double> a (total_vars, 0.0);
 				a[frac_var_ct + node_id_sc_id[jnode.id] ] = -1.0;
-				printf("ADDED constraint on per of SC id %i, >= min_per: %f ", node_id_sc_id[jnode.id], jnode.min_period);
+				printf("ADDED constraint on Pni of SC id %i, >= min_per: %f ", node_id_sc_id[jnode.id], jnode.min_period);
 				print_dvec(a, "");
 				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(1.0/jnode.min_period) ) );
 			}
@@ -255,14 +284,24 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			{
 				std::vector<double> a (total_vars, 0.0);
 				a[frac_var_ct + node_id_sc_id[jnode.id] ] = 1.0;
-				printf("ADDED constraint on per of SC id %i, <= max_per: %f ", node_id_sc_id[jnode.id], jnode.max_period);
+				printf("ADDED constraint on Pni of SC id %i, <= max_per: %f ", node_id_sc_id[jnode.id], jnode.max_period);
 				print_dvec(a, "");
 				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(jnode.max_period) ) );
 			}
+
+			if (jnode.stream_minper > 0)
+			{
+				std::vector<double> a (total_vars, 0.0);
+				a[frac_sc_c_var_ct + node_id_sc_id[jnode.id] ] = -1.0;
+				printf("ADDED constraint on stream per of SC id %i, >= min_per: %f ", node_id_sc_id[jnode.id], jnode.stream_minper);
+				print_dvec(a, "");
+				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(1.0/jnode.stream_minper) ) );
+			}
+
 			if ( fixed_per > 0 )
 			{
-				// ch_i_period >= this fixed period
-				// 1/ch_i_period <= 1/fixed_period
+				// subch_i_period >= this fixed period
+				// 1/subch_i_period <= 1/fixed_period
 				
 				std::vector<double> a (total_vars, 0.0);
 				a[frac_var_ct + node_id_sc_id[jnode.id] ] = -1.0;
@@ -272,20 +311,20 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			else
 			{
 				// get period of the node's SC.
-				// 1/fi * period of that core <= ch_i_period
+				// 1/fi * period of that core <= subch_i_period
 				assert(sc_core_assgt[node_id_sc_id[jnode.id]].size() == 1);
 				
 				std::pair< std::vector<std::vector<double>>, std::vector<double> > a_p_c = get_period_node(jnode.id);
 				std::vector<std::vector<double>> ap (a_p_c.first.begin(), a_p_c.first.end());
 				std::vector<double> ac (a_p_c.second.begin(), a_p_c.second.end() );
 
-				printf("ABOUT to put constraint on period of subchain %i, var id %i using period sum_mono, its on core %i, #monos in this core's period: %lu %lu \n", node_id_sc_id[jnode.id], frac_var_ct+node_id_sc_id[jnode.id] , sc_core_assgt[node_id_sc_id[jnode.id]][0], ap.size(), ac.size() );
+				printf("ABOUT to put constraint on period Pi of subchain %i, var id %i using period sum_mono, its on core %i, #monos in this core's period: %lu %lu \n", node_id_sc_id[jnode.id], frac_var_ct+node_id_sc_id[jnode.id] , sc_core_assgt[node_id_sc_id[jnode.id]][0], ap.size(), ac.size() );
 
-				// Divide all terms by sc_frac and by ch_i_period. <= 1.
+				// Divide all terms by sc_frac and by subch_i_period. <= 1.
 				for (int api = 0; api < ap.size(); api++)
 				{
-					ap[api][ frac_var_ct + node_id_sc_id[jnode.id] ] -= 1.0;
-					print_dvec(ap[api], "In period_posynomial for sc"+std::to_string(node_id_sc_id[jnode.id])+std::to_string(api)+"ith term, const: " + std::to_string(ac[api]) );
+					ap[api][ frac_sc_c_var_ct + node_id_sc_id[jnode.id] ] -= 1.0;
+					print_dvec(ap[api], "In period_posy [Pi] for sc"+std::to_string(node_id_sc_id[jnode.id])+std::to_string(api)+"ith term, const: " + std::to_string(ac[api]) );
 				}
 
 				logsumexp(mosek_model,
@@ -300,6 +339,12 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			a[ frac_sc_var_ct + i ] = -1.0;
 			print_dvec(a, "Putting constraint Period of chain " + std::to_string(i)+" to be less than period of SC"+std::to_string(node_id_sc_id[jnode.id]));
 			mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan(0.0) );
+		
+			std::vector<double> anew (total_vars, 0.0);
+			anew[frac_var_ct + node_id_sc_id[jnode.id] ] = -1;
+			anew[frac_sc_c_var_ct + node_id_sc_id[jnode.id] ] = 1;
+			print_dvec(anew, "Putting constraint Period Pi less than Pni of SC "+std::to_string(node_id_sc_id[jnode.id]));
+			mosek_model->constraint( Expr::dot(new_array_ptr<double>(anew), all_l_vars), Domain::lessThan(0.0) );
 		}
 	}
 
@@ -339,7 +384,6 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			print_dvec(a, "ADDING period of SC"+std::to_string(node_id_sc_id[ ith_chain[0] ])+" for RT of chain"+std::to_string(i) );
 		}
 
-		
 		// Iterate over nodes in chain
 		for (int j = 0; j < (ith_chain.size()-1); j++)
 		{
@@ -347,6 +391,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			DAGNode& nj1 = id_node_map[ith_chain[j+1]];
 
 			// TODO: Differentiate bw cases where Add subchain's sum ci vs node's ci [for illixr]
+			// TODO: execi = pi, so execi can now be less than pni. e.g. mcb. use exectime+Waittime.
 
 			bool add_ci = false;
 			double p_mult_factor = -1.0; // -1: dont add period, o.w. multiply period by this.
@@ -489,6 +534,18 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			all_l_vars,
 			new_array_ptr<double>(ith_ac) );
 	}
+
+	// add 0.001*pi for streaming nodes:
+	for (int i = 0; i < exec_order.size(); i++)
+		if (is_sc_streaming(exec_order[i]))
+		{
+			std::vector<double> p_sci (total_vars, 0.0);
+			p_sci[frac_sc_c_var_ct + i] = 1;
+			double strc = log(0.5);
+
+			obj_ap.push_back(p_sci);
+			obj_ac.push_back(strc);
+		}
 
 	// Objective Function: CC RT + 0.001* (other RTs)
 	// divide all terms in obj_ap by last var [obj]
