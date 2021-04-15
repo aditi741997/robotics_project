@@ -55,7 +55,7 @@ int main(int argc, char **argv)
 
         RobotOperator robOp (&lc_pub, &pub1, &cv_robot_op_lp);
 
-	Rate loopRate(frequency);
+	WallRate loopRate(frequency);
 
 	ros::Publisher cc_end_pub = n.advertise<std_msgs::Header>("/robot_0/exec_end_lp", 1, true);
 

@@ -53,9 +53,7 @@ void publishTfLoop(int milli_sleeptime, MultiMapper* mapper)
 int main(int argc, char **argv)
 {
 	// Initialize ROS
-	
 	ros::init(argc, argv, "MultiMapper");
-
 	ros::NodeHandle node;
 
 	// Create a scan-solver
@@ -65,10 +63,8 @@ int main(int argc, char **argv)
 	ros::Publisher pub1 = node.advertise<std_msgs::Header>("/robot_0/exec_start_mapcb", 100, true);
 	MultiMapper mapper(pub1);
 	mapper.setScanSolver(solver);
-
 	
 	ROS_ERROR("Publishing mapper_extra tid %i (CBT), pmt %i , InternalCBQT %i , pid %i to controller", ::gettid(), node.getPMTId(), node.getInternalCBQTId(), ::getpid() );
-
 	std::thread pub_id_thr (publish_tids_loop, &pub1, std::vector<int> {::gettid(),node.getPMTId(),node.getInternalCBQTId()}, std::vector<std::string> {"mapcb_extra","mapupd_extra"} );
 
 	// std::thread pub_tf_thr ( publishTfLoop, 20, &mapper); // 50Hz RT ~ 10Hz ST

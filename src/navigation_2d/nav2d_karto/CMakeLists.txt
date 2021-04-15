@@ -8,6 +8,7 @@ add_compile_options(-std=c++11)
 ## is used, also find other catkin packages
 find_package(catkin REQUIRED COMPONENTS
   roscpp
+  rosbag
   tf
   nav_msgs
   geometry_msgs
@@ -124,22 +125,32 @@ add_executable(mapper
 	src/csparse.cpp
 )
 
+add_executable(postprocessmapper
+	src/PostProcessMapperNode.cpp
+        src/SpaSolver.cpp
+        src/spa2d.cpp
+        src/csparse.cpp
+)
+
 target_link_libraries(mapper MultiMapper ${CSPARSE_LIBRARY} ${catkin_LIBRARIES})
+target_link_libraries(postprocessmapper MultiMapper ${CSPARSE_LIBRARY} ${catkin_LIBRARIES})
 if(CHOLMOD_FOUND)
 	target_link_libraries(mapper ${CHOLMOD_LIBRARIES})
+	target_link_libraries(postprocessmapper ${CHOLMOD_LIBRARIES})
 endif(CHOLMOD_FOUND)
 
 ## Add cmake target dependencies of the executable/library
 ## as an example, message headers may need to be generated before nodes
 add_dependencies(MultiMapper OpenKarto SelfLocalizer)
 add_dependencies(mapper MultiMapper)
+add_dependencies(postprocessmapper MultiMapper)
 
 #############
 ## Install ##
 #############
 
 ## Mark executables and/or libraries for installation
-install(TARGETS OpenKarto MultiMapper mapper
+install(TARGETS OpenKarto MultiMapper mapper postprocessmapper
   ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
   RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}

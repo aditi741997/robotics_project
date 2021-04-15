@@ -40,6 +40,8 @@
 #include <netinet/tcp.h>
 #include <netdb.h>
 
+#include <rosbag/bag.h>
+
 void publish_tid(std::string name, int tid, ros::Publisher* pub)
 {
         std_msgs::Header hdr;
@@ -110,8 +112,9 @@ public:
 	boost::circular_buffer<sensor_msgs::LaserScan> latest_scans_recv; // this is what'll be processed by the mapScanCBLoop.
 	sensor_msgs::LaserScan latest_scan_recv;
 	void mapScanCBLoop(double freq);
-	void processLatestScans();
+	void processLatestScans(std::vector<sensor_msgs::LaserScan> scanlist = std::vector<sensor_msgs::LaserScan>(0), std::vector<tf::StampedTransform> tflist = std::vector<tf::StampedTransform>(0));
 	double mMapScanUpdateRate; // Oct: period of scanCB thread.
+	rosbag::Bag processed_scans_bag;
 
 	boost::mutex scan_lock; // to lock usage of latest_scan_recv.
 
@@ -135,10 +138,11 @@ public:
 	void socket_recv(); // does what recv_trigger_exec does when getting a trigger msg.
 	tf::TransformListener* mTransformListener;
 
+	bool sendMap();
+	void publishMap(std::string topicname);
 private:
 	// Private methods
 	bool updateMap();
-	bool sendMap();
 	void setRobotPose(double x, double y, double yaw);
 	karto::LocalizedRangeScan* createFromRosMessage(const sensor_msgs::LaserScan& scan, const karto::Identifier& robot);
 
@@ -154,7 +158,7 @@ private:
 	nav_msgs::OccupancyGrid mGridMap;
 
 	ros::ServiceServer mMapServer;
-	ros::Publisher mMapPublisher;
+	ros::Publisher mMapPublisher, mapPub;
 	ros::Publisher mScanPublisher;
 	ros::Publisher mVerticesPublisher;
 	ros::Publisher mEdgesPublisher;

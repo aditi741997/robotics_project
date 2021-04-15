@@ -67,8 +67,8 @@ public:
 
         // Need to store [the latest scan USED TS] in the last executeCmd, wrt each of the chains:
         double last_scan_lcmp_ts; // TS of [latest scan in latest LC] used by last executeCommand
-        double last_scan_mapCB_navPlan_navCmd_ts; // TS of last scan used wrt S-MapCB-LC chain
-        double last_scan_mapCB_navCmd_ts;
+        double last_scan_mapCB_navPlan_navCmd_ts, last_allscan_mapCB_navPlan_navCmd_ts; // TS of last scan used wrt S-MapCB-LC chain
+        double last_scan_mapCB_navCmd_ts, last_allscan_mapCB_navCmd_ts;
         double last_scan_mapCB_mapUpd_navPlan_navCmd_ts;
 
 	ros::Publisher* lp_pub;
@@ -79,32 +79,32 @@ public:
         double last_scan_mapCB_mapUpd_navPlan_navCmd_recv;
 
         // TS of the scan, whose TF was used by navCmd.
-        double last_scan_mapCB_navCmd_recv;
+        double last_scan_mapCB_navCmd_recv, last_allscan_mapCB_navCmd_recv;
 
         // TS of scan, whose TF was used by navPlan, used by navCmd.
-        double last_scan_mapCB_navPlan_navCmd_recv;
+        double last_scan_mapCB_navPlan_navCmd_recv, last_allscan_mapCB_navPlan_navCmd_recv;
 
         // Need to store TS of [last new output] wrt each chain
-        double last_scan_lcmp_out, last_scan_mapCB_navPlan_navCmd_out, last_scan_mapCB_navCmd_out, last_scan_mapCB_mapUpd_navPlan_navCmd_out;
+        double last_scan_lcmp_out, last_scan_mapCB_navPlan_navCmd_out, last_allscan_mapCB_navPlan_navCmd_out, last_scan_mapCB_navCmd_out, last_allscan_mapCB_navCmd_out, last_scan_mapCB_mapUpd_navPlan_navCmd_out;
 
 	double last_odom_tf_out, last_odom_tf_ts;
 	long count_odom_lp;
 	std::vector<double> lat_odom_lp_arr, tput_odom_lp_arr, rt_odom_lp_arr, ts_odom_lp_arr;
 
         // Vector of latency for [every new output] wrt each chain
-        std::vector<double> lat_scan_lcmp_arr, lat_scan_mapCB_navCmd_arr, lat_scan_mapCB_navPlan_navCmd_arr, lat_scan_mapCB_mapUpd_navPlan_navCmd_arr;
+        std::vector<double> lat_scan_lcmp_arr, lat_scan_mapCB_navCmd_arr, lat_scan_mapCB_navPlan_navCmd_arr, lat_scan_mapCB_mapUpd_navPlan_navCmd_arr, lat_allscan_mapCB_navCmd_arr, lat_allscan_mapCB_navPlan_navCmd_arr;
 
 	// Vector for tput
-        std::vector<double> tput_scan_lcmp_arr, tput_scan_mapCB_navPlan_navCmd_arr, tput_scan_mapCB_navCmd_arr, tput_scan_mapCB_mapUpd_navPlan_navCmd_arr;
+        std::vector<double> tput_scan_lcmp_arr, tput_scan_mapCB_navPlan_navCmd_arr, tput_scan_mapCB_navCmd_arr, tput_scan_mapCB_mapUpd_navPlan_navCmd_arr, tput_allscan_mapCB_navPlan_navCmd_arr, tput_allscan_mapCB_navCmd_arr;
 
         // Vector for RT
-        std::vector<double> rt_scan_lcmp_arr, rt_scan_mapCB_navCmd_arr, rt_scan_mapCB_navPlan_navCmd_arr, rt_scan_mapCB_mapUpd_navPlan_navCmd_arr;
+        std::vector<double> rt_scan_lcmp_arr, rt_scan_mapCB_navCmd_arr, rt_scan_mapCB_navPlan_navCmd_arr, rt_scan_mapCB_mapUpd_navPlan_navCmd_arr, rt_allscan_mapCB_navCmd_arr, rt_allscan_mapCB_navPlan_navCmd_arr;
 
 	// Storing the realTS of per chain outputs:
-	std::vector<double> ts_scan_lcmp_arr, ts_scan_mapCB_navCmd_arr, ts_scan_mapCB_navPlan_navCmd_arr, ts_scan_mapCB_mapUpd_navPlan_navCmd_arr;
+	std::vector<double> ts_scan_lcmp_arr, ts_scan_mapCB_navCmd_arr, ts_scan_mapCB_navPlan_navCmd_arr, ts_scan_mapCB_mapUpd_navPlan_navCmd_arr, ts_allscan_mapCB_navCmd_arr, ts_allscan_mapCB_navPlan_navCmd_arr;
 
 	double first_out_ts_scan_lcmp, first_out_ts_scan_mapCB_navCmd;
-	long count_scan_lcmp, count_scan_mapCB_navCmd, count_scan_mapCB_navPlan_navCmd, count_scan_mapCB_mapUpd_navPlan_navCmd; // total #outputs.
+	long count_scan_lcmp, count_scan_mapCB_navCmd, count_scan_mapCB_navPlan_navCmd, count_scan_mapCB_mapUpd_navPlan_navCmd, count_allscan_mapCB_navCmd, count_allscan_mapCB_navPlan_navCmd; // total #outputs.
 
 	// For publishing end of exec of CC to controller:
 	ros::Publisher exec_end_cc_pub;
