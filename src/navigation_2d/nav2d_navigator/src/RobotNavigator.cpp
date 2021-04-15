@@ -576,7 +576,8 @@ bool RobotNavigator::createPlan()
 	current_plan_last_scan_mapCB_mapUpd_used_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
 	// current_... denotes the TS for the current copy of navPlan
 	// latest_... denotes the TS for the navPlan being made, i.e. latest_ >= current_.
-	current_mapCB_tf_navPlan_scan_ts = latest_mapCB_tf_ts_rt_navp; // latest_mapCB_tf_navPlan_scan_ts;
+	current_mapCB_tf_navPlan_allScans_ts = latest_mapCB_tf_navPlan_allScans_ts;
+	current_mapCB_tf_navPlan_scan_ts = latest_mapCB_tf_navPlan_scan_ts;
 	return true;
 }
 
@@ -692,7 +693,8 @@ bool RobotNavigator::generateCommand()
 	// These 2 values are set by the planner node, 
 	// since it can run in ||al with the NavCmd node, we shoudl save these at 
 	double using_curr_plan_mapUpd_scan_ts = current_plan_last_scan_mapCB_mapUpd_used_ts;
-	double using_curr_plan_mapCB_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts; // this TS now represents all scans processed latest TS.
+	double using_curr_plan_mapCB_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts;// this represents ts for scans fully processed only. 
+	double using_curr_plan_mapCB_tf_allScan_ts = current_mapCB_tf_navPlan_allScans_ts;// this TS now represents all scans processed latest TS.
 
 	// ROS_WARN("IN RobotNavigator::generateCommand - WIll try to publish a command for the Operator to follow.");
 	// Do nothing when paused
@@ -790,8 +792,11 @@ bool RobotNavigator::generateCommand()
 	msg.LastScanTSScanMapCBMapUpdNavPlanNavCmd = using_curr_plan_mapUpd_scan_ts;
 
 	// Chains 2,3 i.e. without mapUpd, use TF with a different TS.
-	msg.LastScanTSScanMapCBNavCmd = latest_mapCB_tf_ts_rt_navc; // current_mapCB_tf_navCmd_scan_ts;// dont need to store 'using' here since NavCmd runs in the order : setCurrentPosition, stuff, generateCommand.
+	msg.LastScanTSScanMapCBNavCmd = current_mapCB_tf_navCmd_scan_ts; // dont need to store 'using' here since NavCmd runs in the order : setCurrentPosition, stuff, generateCommand.
+	msg.LastScanTSScanTFMapCBNavCmd = current_mapCB_tf_navCmd_allScans_ts; // latest_mapCB_allS_tf_ts_rt_navc;
+
 	msg.LastScanTSScanMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_scan_ts;
+	msg.LastScanTSScanTFMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_allScan_ts;
 	mCommandPublisher.publish(msg);
 	return true;
 }
@@ -1200,8 +1205,10 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		{
 			// All navP code here.
 			// Where are we now : Uses the tf output from Mapper Node.
-			latest_mapCB_tf_ts_st_navp = current_mapper_tf_allScans_ts;
-			latest_mapCB_tf_ts_rt_navp = current_mapper_tf_allScans_rt_ts;
+			// these were for implementing waitfor in navP node: Commenting now
+			// latest_mapCB_tf_ts_st_navp = current_mapper_tf_allScans_ts;
+			// latest_mapCB_tf_ts_rt_navp = current_mapper_tf_scan_ts;
+			// latest_mapCB_allS_tf_ts_rt_navp = current_mapper_tf_allScans_rt_ts;
 			mHasNewMap = false;
 			if(!setCurrentPosition(1) || (get_pos_tf_error_ct > 3) )
 			{
@@ -1323,14 +1330,10 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 						clock_gettime(CLOCK_MONOTONIC, &explore_end);
 						double explore_end_ts = get_time_now();
 						// mGoalPoint is set by findExplTarget
-						// copy mCurrentMap and set goalPoint [and ngbrs] index to 100 so it looks black?
+						// copy mCurrentMap and set goalPoint index to 100 so it looks black?
 						nav_msgs::OccupancyGrid mMap = mCurrentMap.getMap();
 						signed char curr_Goal_value = mCurrentMap.getMap().data[mGoalPoint];
 						mMap.data[mGoalPoint] = 100;
-						std::vector<unsigned int> gneighbors = mCurrentMap.getNeighbors(mGoalPoint);
-						for (auto& ni : gneighbors)
-							mMap.data[ni] = 100;
-
 						mRecvMapPublisher.publish(mMap);
 						if (mCurrentMap.getMap().data[mGoalPoint] != curr_Goal_value)
 							ROS_ERROR("DAMNNNN, DIDNT COPY PROPERLY, curr goal val : %i, currMap data: %i, mMap.data : %i", curr_Goal_value, mCurrentMap.getMap().data[mGoalPoint], mMap.data[mGoalPoint]);
@@ -1464,7 +1467,8 @@ void RobotNavigator::navGenerateCmdLoop()
 		// if ( (current_mapper_tf_allScans_ts > latest_mapCB_tf_ts_st_navc) && ( (current_mapper_tf_allScans_ts > ( (ros::Time::now().toSec() * 10) - 100) ) || ( ( get_time_now() - last_nav_cmd_out) > 0.2) ) )
 		{
 			latest_mapCB_tf_ts_st_navc = current_mapper_tf_allScans_ts;
-			latest_mapCB_tf_ts_rt_navc = current_mapper_tf_allScans_rt_ts;
+			latest_mapCB_tf_ts_rt_navc = current_mapper_tf_scan_ts;
+			latest_mapCB_allS_tf_ts_rt_navc = current_mapper_tf_allScans_rt_ts;
 			// Need to get latest position. : Uses mapcb'S TF output here.
 			if (!setCurrentPosition(0) || (get_pos_tf_error_ct > 3))
 			{
@@ -1588,9 +1592,15 @@ bool RobotNavigator::setCurrentPosition(int x)
 		spinOnce();
 		mTfListener->lookupTransform(mMapFrame, mRobotFrame, Time(0), transform);
 		if (x == 0)
+		{
 			current_mapCB_tf_navCmd_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavCmd.
+			current_mapCB_tf_navCmd_allScans_ts = current_mapper_tf_allScans_rt_ts;
+		}
 		else if (x == 1)
+		{
 			latest_mapCB_tf_navPlan_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavPlan.
+			latest_mapCB_tf_navPlan_allScans_ts = current_mapper_tf_allScans_rt_ts;
+		}
 
 		// ROS_WARN("IN ROBOTNavigator:: setCurrentPosition, TS of TF bw /map and /base_footp : %f, x: %i", current_mapper_tf_scan_ts, x);
 	}catch(TransformException ex)

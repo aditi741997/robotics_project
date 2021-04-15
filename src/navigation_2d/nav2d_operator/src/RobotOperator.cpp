@@ -138,12 +138,16 @@ RobotOperator::RobotOperator(ros::Publisher* lc_pub, ros::Publisher* lppub, std:
         last_scan_mapCB_navPlan_navCmd_ts = -1.0;
         last_scan_mapCB_mapUpd_navPlan_navCmd_ts = -1.0;
 	last_odom_tf_ts = -1.0;
+	last_allscan_mapCB_navPlan_navCmd_ts = -1.0;
+	last_allscan_mapCB_navCmd_ts = -1.0;
 
 	last_scan_lcmp_out = 0.0;
         last_scan_mapCB_navCmd_out = 0.0;
         last_scan_mapCB_navPlan_navCmd_out = 0.0;
         last_scan_mapCB_mapUpd_navPlan_navCmd_out = 0.0;
 	last_odom_tf_out = 0.0;
+	last_allscan_mapCB_navCmd_out = 0.0;
+	last_allscan_mapCB_navPlan_navCmd_out = 0.0;
 
         last_scan_mapCB_mapUpd_navPlan_navCmd_recv = -1.0;
 
@@ -155,6 +159,8 @@ RobotOperator::RobotOperator(ros::Publisher* lc_pub, ros::Publisher* lppub, std:
 	count_scan_mapCB_navPlan_navCmd = 0;
 	count_scan_mapCB_mapUpd_navPlan_navCmd = 0;
 	count_odom_lp = 0;
+	count_allscan_mapCB_navCmd = 0;
+	count_allscan_mapCB_navPlan_navCmd = 0;
 
 	ROS_ERROR("FOR robotOperator, tid for TF- CBT : %i, Publishing!", mTfListener.getTFCBTid() );
 	std::stringstream ss_tf;
@@ -317,6 +323,8 @@ void RobotOperator::receiveCommand(const nav2d_operator::cmd::ConstPtr& msg)
         last_scan_mapCB_navCmd_recv = msg->LastScanTSScanMapCBNavCmd;
         last_scan_mapCB_navPlan_navCmd_recv = msg->LastScanTSScanMapCBNavPlanNavCmd;
 
+	last_allscan_mapCB_navPlan_navCmd_recv = msg->LastScanTSScanTFMapCBNavPlanNavCmd;
+	last_allscan_mapCB_navCmd_recv = msg->LastScanTSScanTFMapCBNavCmd;
         // ROS_ERROR("NAV2D : RobotOperator got command : direction %f, velocity %f, MODE : %i, with Scan input wrt Scan-MapCB-MapU-NavP-NavC-LP TS: %f, Scan input wrt S-MapCB-NavC-LP %f, Scan input wrt S-MapCB-NavP-NavC-LP %f", mDesiredDirection, mDesiredVelocity, mDriveMode, last_scan_mapCB_mapUpd_navPlan_navCmd_recv, last_scan_mapCB_navCmd_recv, last_scan_mapCB_navPlan_navCmd_recv);
 }
 
@@ -336,6 +344,8 @@ void RobotOperator::executeCommand()
         double using_scan_mapCB_mapUpd_navPlan_navCmd_ts = last_scan_mapCB_mapUpd_navPlan_navCmd_recv;
         double using_s_mapCB_navC_ts = last_scan_mapCB_navCmd_recv;
         double using_s_mapCB_navP_navC_ts = last_scan_mapCB_navPlan_navCmd_recv;
+	double using_alls_mapCB_navC_ts = last_allscan_mapCB_navCmd_recv;
+	double using_alls_mapCB_navP_navC_ts = last_allscan_mapCB_navPlan_navCmd_recv;
 
 	// 2. Set velocity and direction depending on drive mode
 	switch(mDriveMode)
@@ -522,6 +532,8 @@ void RobotOperator::executeCommand()
 	double lat_scan_mapCB_navCmd = time_now - using_s_mapCB_navC_ts; 
 	double lat_scan_mapCB_navPlan_navCmd = time_now - using_s_mapCB_navP_navC_ts;
 	double lat_scan_mapCB_mapUpd_navPlan_navCmd = time_now - using_scan_mapCB_mapUpd_navPlan_navCmd_ts;
+	double lat_allscan_mapCB_navPlan_navCmd = time_now - using_alls_mapCB_navP_navC_ts;
+	double lat_allscan_mapCB_navCmd = time_now - using_alls_mapCB_navC_ts;
 
 	double lat_odom_lp = time_now - using_odom_tf_ts;
 
@@ -629,6 +641,34 @@ void RobotOperator::executeCommand()
                 last_scan_mapCB_navCmd_out = time_now;
         }
 
+	if ( (using_alls_mapCB_navC_ts > last_allscan_mapCB_navCmd_ts) && (lat_allscan_mapCB_navCmd < 100.0) )
+        {
+                lat_allscan_mapCB_navCmd_arr.push_back(lat_allscan_mapCB_navCmd);
+		ts_allscan_mapCB_navCmd_arr.push_back(time_now);
+		count_allscan_mapCB_navCmd += 1;
+
+                ROS_ERROR("Adding Latency wrt S-ALLMapCB-NavC-LP chain!! Using scanTS %f, Lat %f", using_alls_mapCB_navC_ts, lat_allscan_mapCB_navCmd);
+
+                if (last_allscan_mapCB_navCmd_out > 0.0)
+                {
+                        double tput = time_now - last_allscan_mapCB_navCmd_out;
+                        tput_allscan_mapCB_navCmd_arr.push_back(tput);
+                        ROS_ERROR("Adding tput wrt S-ALLMapCB-NavC-LP!!, Last out %f, Tput %f", last_allscan_mapCB_navCmd_out, tput);
+                }
+
+                // if (tput_scan_mapCB_navCmd_arr.size() > 2)
+                if (count_allscan_mapCB_navCmd > 1)
+		{
+                        // RT
+                        double rt = time_now - last_allscan_mapCB_navCmd_ts;
+                        rt_allscan_mapCB_navCmd_arr.push_back(rt);
+                }
+
+                last_allscan_mapCB_navCmd_ts = using_alls_mapCB_navC_ts;
+                last_allscan_mapCB_navCmd_out = time_now;
+        }
+
+
 	if ( (using_s_mapCB_navP_navC_ts > last_scan_mapCB_navPlan_navCmd_ts) & (lat_scan_mapCB_navPlan_navCmd < 100.0) )
         {
                 lat_scan_mapCB_navPlan_navCmd_arr.push_back(lat_scan_mapCB_navPlan_navCmd);
@@ -655,6 +695,34 @@ void RobotOperator::executeCommand()
                 last_scan_mapCB_navPlan_navCmd_ts = using_s_mapCB_navP_navC_ts;
                 last_scan_mapCB_navPlan_navCmd_out = time_now;
         }
+
+	if ( (using_alls_mapCB_navP_navC_ts > last_allscan_mapCB_navPlan_navCmd_ts) & (lat_allscan_mapCB_navPlan_navCmd < 100.0) )
+        {
+                lat_allscan_mapCB_navPlan_navCmd_arr.push_back(lat_allscan_mapCB_navPlan_navCmd);
+                ts_allscan_mapCB_navPlan_navCmd_arr.push_back(time_now);
+		count_allscan_mapCB_navPlan_navCmd += 1;
+
+		ROS_ERROR("Adding Latency wrt S-ALLMapCB-NavP-NavC-LP!! Using scanTS %f, Lat %f", using_alls_mapCB_navP_navC_ts, lat_allscan_mapCB_navPlan_navCmd);
+
+                if (last_allscan_mapCB_navPlan_navCmd_out > 0.0)
+                {
+                        double tput = time_now - last_allscan_mapCB_navPlan_navCmd_out;
+                        tput_allscan_mapCB_navPlan_navCmd_arr.push_back(tput);
+                        ROS_ERROR("Adding tput wrt S-ALLMapCB-NavP-NavC-LP!!, Last out %f, Tput %f", last_allscan_mapCB_navPlan_navCmd_out, tput);
+                }
+
+                // if (tput_scan_mapCB_navPlan_navCmd_arr.size() > 2)
+                if (count_allscan_mapCB_navPlan_navCmd > 1)
+		{
+                        // RT
+                        double rt = time_now - last_allscan_mapCB_navPlan_navCmd_ts;
+                        rt_allscan_mapCB_navPlan_navCmd_arr.push_back(rt);
+                }
+
+                last_allscan_mapCB_navPlan_navCmd_ts = using_alls_mapCB_navP_navC_ts;
+                last_allscan_mapCB_navPlan_navCmd_out = time_now;
+        }
+
 
 	if (operator_loop_times.size() % 200 == 150)
         {
@@ -700,6 +768,7 @@ void RobotOperator::executeCommand()
 
 	if (operator_loop_times.size() % 200 == 90)
 	{
+                print_arr(lat_allscan_mapCB_navCmd_arr, "Latency wrt Scan-ALLMapCB-NavCmd-LP chain");
                 print_arr(lat_scan_mapCB_navCmd_arr, "Latency wrt Scan-MapCB-NavCmd-LP chain");
                 print_arr(tput_scan_mapCB_navCmd_arr, "Tput wrt Scan-MapCB-NavCmd-LP");
                 print_arr(rt_scan_mapCB_navCmd_arr, "RT wrt S-MapCB-NavC-LP chain");
@@ -709,11 +778,17 @@ void RobotOperator::executeCommand()
                 write_arr_to_file(rt_scan_mapCB_navCmd_arr, "RT_Scan_MapCB_NavCmd_LP");
 		write_arr_to_file(ts_scan_mapCB_navCmd_arr, "TS_Scan_MapCB_NavCmd_LP");
 
+		write_arr_to_file(lat_allscan_mapCB_navCmd_arr, "Latency_Scan_All_MapCB_NavCmd_LP");
+                write_arr_to_file(tput_allscan_mapCB_navCmd_arr, "Tput_Scan_All_MapCB_NavCmd_LP");
+                write_arr_to_file(rt_allscan_mapCB_navCmd_arr, "RT_Scan_All_MapCB_NavCmd_LP");
+		write_arr_to_file(ts_allscan_mapCB_navCmd_arr, "TS_Scan_All_MapCB_NavCmd_LP");
+
 	}
 
 	if (operator_loop_times.size() % 200 == 120)
 	{
 	        print_arr(lat_scan_mapCB_navPlan_navCmd_arr, "Latency wrt Scan-MapCB-NavP-NavC-LP chain");
+	        print_arr(lat_allscan_mapCB_navPlan_navCmd_arr, "Latency wrt Scan-All-MapCB-NavP-NavC-LP chain");
                 print_arr(tput_scan_mapCB_navPlan_navCmd_arr, "Tput wrt Scan-MapCB-NavP-NavC-LP chain");
                 print_arr(rt_scan_mapCB_navPlan_navCmd_arr, "RT wrt S-MapCB-NavP-NavC-LP chain");
 
@@ -721,7 +796,13 @@ void RobotOperator::executeCommand()
                 write_arr_to_file(tput_scan_mapCB_navPlan_navCmd_arr, "Tput_Scan_MapCB_NavPlan_NavCmd_LP");
                 write_arr_to_file(rt_scan_mapCB_navPlan_navCmd_arr, "RT_Scan_MapCB_NavPlan_NavCmd_LP");
 		write_arr_to_file(ts_scan_mapCB_navPlan_navCmd_arr, "TS_Scan_MapCB_NavPlan_NavCmd_LP");
-        }
+        
+		write_arr_to_file(lat_allscan_mapCB_navPlan_navCmd_arr, "Latency_Scan_All_MapCB_NavPlan_NavCmd_LP");
+                write_arr_to_file(tput_allscan_mapCB_navPlan_navCmd_arr, "Tput_Scan_All_MapCB_NavPlan_NavCmd_LP");
+                write_arr_to_file(rt_allscan_mapCB_navPlan_navCmd_arr, "RT_Scan_All_MapCB_NavPlan_NavCmd_LP");
+		write_arr_to_file(ts_allscan_mapCB_navPlan_navCmd_arr, "TS_Scan_All_MapCB_NavPlan_NavCmd_LP");
+
+	}
 	std_msgs::Header hdr;
 	// Send t_ci_lp as well.
 	hdr.frame_id = std::to_string(t_ci_lp);
