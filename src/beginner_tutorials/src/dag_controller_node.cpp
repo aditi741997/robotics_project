@@ -212,8 +212,6 @@ public:
 		double ci;
 		std::string n_name;
 		ss >> ci >> n_name;
-		controller->update_ci(n_name, ci);
-		controller->notify_node_exec_end(n_name);
 		// TODO: get TS for all nodes. Getting for just mapcb for now:
 		if ( (n_name.find("mapcb") != std::string::npos) || (n_name.find("navc") != std::string::npos) || (n_name.find("navp") != std::string::npos) || (n_name.find("mapupd") != std::string::npos))
 		{
@@ -221,6 +219,10 @@ public:
 			ss >> ts;
 			controller->update_latest_sensor_ts(n_name, ts);
 		}
+		int mode = 0;
+		if (n_name.find("mapcb") != std::string::npos)
+			ss >> mode;
+		controller->update_ci(n_name, ci, mode);
 	}
 
 
@@ -229,7 +231,7 @@ public:
 	{
 		// ROS_WARN("GOT exec_end msg from cc!!! Calling the BE.");
 		controller->recv_critical_exec_end();
-		controller->update_ci(last_node_cc_name, stod(msg->frame_id) );
+		controller->update_ci(last_node_cc_name, stod(msg->frame_id),0 );
 		/*
 		// Oct: shouldnt we start with ind=1, since ind=0 is the CC.
 		int ind = 1;
