@@ -55,6 +55,8 @@ public:
 	double fixed_period = 0.0;
 	double max_period = 0.0; // Upper bounding node's rate
 	double min_period = 0.0; // Lower bounding node's rate
+	std::string node_type; // streaming vs normal node
+	float stream_minper = 0.0;
 
 	std::vector<int> wait_for_outputs; // set of inputs the node needs to wait for / have latest value of.
 };
@@ -167,7 +169,7 @@ public:
 
 	// Useful for re solving the OPT with varying ci:
 	void clear_old_data(int frac_var_count);
-	void update_cis(std::map<std::string, boost::circular_buffer<double> >& node_ci_arr);
+	void update_cis(std::map<std::string, boost::circular_buffer<double> > node_ci_arr, std::map<std::string, boost::circular_buffer<double> > node_ci2_arr, std::map<std::string, boost::circular_buffer<int> > mode_ct);
 	void scale_nc_constraints(double f);
 
 	// Helper functions:

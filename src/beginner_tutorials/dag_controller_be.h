@@ -63,7 +63,9 @@ public:
 	// Store tid, pid for each node:
         std::map<std::string, int> node_pid;
         std::map<std::string, int> node_tid; // id of the thread which executes the main cb for a node. 
-	
+	std::map<std::string, std::atomic<int> > node_skip_ct, node_latest_sensor_ts; // for nodes which wanna give resrc to its input nodes, #times its been skipped.
+	std::map<std::string, int> node_max_skips;
+
 	// includes under_the_hood threads such as PMT,CBT associated with each node.
 	std::map<std::string, std::set<int> > node_extra_tids; 
 	std::map<std::string, int> node_curr_prio;
@@ -76,7 +78,8 @@ public:
         // DAG data structure : to be used by the scheduling algorithm
         std::map<std::string, int> node_ci, node_fi;
 
-	std::map<std::string, boost::circular_buffer<double> > node_ci_arr;
+	std::map<std::string, boost::circular_buffer<double> > node_ci_arr, node_ci2_arr;
+	std::map<std::string, boost::circular_buffer<int> > node_ci_mode_arr;
 
         std::vector<std::vector<int> > exec_order; // Output from sched algo: vector of subchains.
 	double curr_cc_period = 0.0;
@@ -127,10 +130,8 @@ public:
 	void recv_node_info(std::string node_name, int tid, int pid=0);
 
 	std::string get_last_node_cc_name();
-	void update_ci(std::string node_name, double ci);
-	void update_latest_sensor_ts(std::string node_name, int sensor_ts);
-	std::map<std::string, int> node_latest_sensor_ts;
-	void notify_node_exec_end(std::string node_name);
+	void update_ci(std::string node_name, double ci, int mode);
+	void update_latest_sensor_ts(std::string node_name, int sensor_ts); // node's latest output's sensor TS
 
 	// Helper functions:
 	bool changePriorityThread(std::string nname, int tid, int prio);
@@ -146,7 +147,7 @@ private:
 	bool got_all_info();
 	
 	// void checkTriggerExec(int ind);
-	void checkTriggerExec(std::vector<int>& sci, int core_id = 0, double frac=1.0);
+	bool checkTriggerExec(std::vector<int>& sci, int core_id = 0, double frac=1.0);
 
 	boost::thread* timer_thread;
 	void timer_thread_func(double timeout);
@@ -157,10 +158,6 @@ private:
 	std::atomic<bool> cc_end, ready_sched;
 	boost::condition_variable cv_sched_thread; // this is just for the core with CC in it.
 	void thread_custom_sleep_for(int microsec); // to be used if need quick exit at shutdown.
-	
-	std::map<int, boost::mutex> node_sched_thread_mutex; // might wanna wait for completion of multiple nodes.
-	std::map<int, std::atomic<bool> > node_finished; // node's completion notification
-	std::map<int, boost::condition_variable> node_cv_sched_thread; // cv to be notified when a node completion is recvd.
 
 	// For multi-core scheduling:
 	std::vector< std::vector<int> > curr_sc_core_assgt;

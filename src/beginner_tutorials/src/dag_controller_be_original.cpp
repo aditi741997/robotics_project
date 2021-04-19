@@ -197,8 +197,12 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		for (auto const& x : node_dag_mc.id_name_map)
 		{
 			node_ci_arr[x.second] = boost::circular_buffer<double> (50);
+			node_ci_mode_arr[x.second] = boost::circular_buffer<int> (250); // store ci mode for past 250vals. for wtd sum. 
+			node_ci2_arr[x.second] = boost::circular_buffer<double> (50);
 			// node_extra_tids[x.second] = std::vector<int> ();
 			last_trig_ts[x.second] = 0.0;
+			// add 2nd arr if streaming type:
+		
 		}
 
 		sched_started = false;
@@ -776,7 +780,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			{
 			offline_fracs_mtx.lock();
 			// update compute times to be 75ile of recent data.
-			node_dag_mc.update_cis(node_ci_arr);
+			node_dag_mc.update_cis(node_ci_arr, node_ci2_arr, node_ci_mode_arr);
 			offline_fracs_mtx.unlock();
 			printf("DONE Updating all cis! Will start solving now: ");
 				
@@ -829,11 +833,15 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	
 	}
 
-	void DAGControllerBE::update_ci(std::string node_name, double ci)
+	void DAGControllerBE::update_ci(std::string node_name, double ci, int mode)
 	{
 		// Done: Add some extra time based on #Extra threads.
 		double e_ci = 0.001*0.5*(node_extra_tids[node_name].size()); // in seconds.
-		node_ci_arr[node_name].push_back(ci + e_ci );
+		if (mode == 0)
+			node_ci_arr[node_name].push_back(ci + e_ci );
+		else
+			node_ci2_arr[node_name].push_back(ci + e_ci );
+		node_ci_mode_arr[node_name].push_back(mode);
 	}
 
 	void DAGControllerBE::update_latest_sensor_ts(std::string node_name, int sensor_ts)
