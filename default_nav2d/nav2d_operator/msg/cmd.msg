@@ -4,3 +4,5 @@ int8    Mode
 float64 LastScanTSScanMapCBMapUpdNavPlanNavCmd
 float64 LastScanTSScanMapCBNavCmd
 float64 LastScanTSScanMapCBNavPlanNavCmd
+float64 LastScanTSScanTFMapCBNavCmd
+float64 LastScanTSScanTFMapCBNavPlanNavCmd

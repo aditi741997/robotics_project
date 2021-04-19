@@ -17,6 +17,7 @@
 #include <string>
 #include <map>
 #include <fstream>
+#include <rosbag/bag.h>
 
 #define ST_WAITING_FOR_MAP  10
 #define ST_LOCALIZING       20
@@ -40,11 +41,13 @@ public:
 	void publishTransform();
 	void setScanSolver(karto::ScanSolver* scanSolver);
 
+	void processLatestScans(std::vector<sensor_msgs::LaserScan> scanlist = std::vector<sensor_msgs::LaserScan>(0), std::vector<tf::StampedTransform> tflist = std::vector<tf::StampedTransform>(0)); // for processing scans saved.
+
 	// TS of last scan processed by mapCB.
         double last_scan_mapCB_processed_ST;
 
         // TSS of last scan used in generating the mapToOdom TF.
-        double last_scan_mapCB_tf_processed;
+        double last_scan_mapCB_tf_processed, last_scan_mapCB_processed_all_RT;
 
         // For measuring Tput of subchains MapCB and MapUpdate:
         std::vector<double> tput_map_cb, tput_map_update;
@@ -54,11 +57,14 @@ public:
 	
 	ros::Publisher mScanTSPublisher;
 	std::ofstream tf_publish_ts_log; 
+	bool sendMap();
+	void publishMap(std::string topicname);
 
 private:
+	rosbag::Bag processed_scans_bag;
+	
 	// Private methods
 	bool updateMap();
-	bool sendMap();
 	void setRobotPose(double x, double y, double yaw);
 	karto::LocalizedRangeScan* createFromRosMessage(const sensor_msgs::LaserScan& scan, const karto::Identifier& robot);
 
@@ -74,7 +80,7 @@ private:
 	nav_msgs::OccupancyGrid mGridMap;
 
 	ros::ServiceServer mMapServer;
-	ros::Publisher mMapPublisher;
+	ros::Publisher mMapPublisher, mapPub;
 	ros::Publisher mScanPublisher;
 	ros::Publisher mVerticesPublisher;
 	ros::Publisher mEdgesPublisher;
@@ -122,6 +128,8 @@ private:
 
         std::vector<int> map_update_scan_count;
 	std::vector<bool> scan_pose_ts;
+	
+	std::vector<double> scan_lat, scan_wall_time;
 };
 
 #endif
