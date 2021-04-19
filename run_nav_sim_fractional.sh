@@ -20,7 +20,7 @@ do
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in {40..50} #54 57 58 67 77 {98..101} 
+						for run in 6 8 12 33 #54 57 58 67 77 {98..101} 
 						do
 							rosclean purge -y
 							rm ../robot_nav2d_obstacleDist_logs_.txt
@@ -32,7 +32,6 @@ do
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
 							rm "../robot_nav2d_${ename}_rt_stats.txt"
 							mapcb_procscans_name="../MCB_ProcScans_${ename}.bag"
-							rm $mapcb_procscans_name 
 							for thing in local_map navigator_plan navigator_cmd mapper_mapUpdate mapper_scanCB operator_loop
 							do
 								rm "../robot_nav2d_${thing}_stats_${ename}.txt"
@@ -109,7 +108,7 @@ do
 							do
 								mapi="${ename}_i${t}"
 								taskset -a -c 14 rosrun map_server map_saver -f $mapi map:=/robot_0/map &
-								sleep 10s
+								sleep 20s
 								j=`grep "Exploration has finished." $robofname | wc -l`
 								if [ $j -lt 2 ]; then
 									j=`grep "Exploration has failed." $robofname | wc -l`
@@ -130,7 +129,7 @@ do
 									echo "Something DIED in SOME node!!", $xnav, $xmap, $xdag
 								fi
 								echo "j&t: ", $j, $t
-								timelimit=35 # divide timelimit=800s by sleeptime=5s.
+								timelimit=16 # divide timelimit=800s by sleeptime=5s.
 								if [ $t = $timelimit ]; then
 									j=2
 									echo "!!!!!~~~%%% EXPLORATION DIDNT FINISH EVEN IN ", $timelimit, "For: ", $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
@@ -163,6 +162,7 @@ do
 								kill -15 $(ps -ef | grep $pname | grep -v grep | awk '{print $2}')
 							done
 							sleep 2s
+							rm $mapcb_procscans_name 
 						done					
 						ccid=$((ccid+1))
 					fi
