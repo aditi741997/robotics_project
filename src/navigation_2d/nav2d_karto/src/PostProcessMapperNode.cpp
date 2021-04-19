@@ -40,10 +40,10 @@ int main(int argc, char **argv)
 
 		// first get all the times when mapU ran, with the TS of last scan it used:
 		std::ifstream old_mu_log (argv[1]);
-		std::ofstream new_mu_log (argv[2]);
-
+		// std::ofstream new_mu_log (argv[2]); Now taking ScanBag name as input:
+		
 		rosbag::Bag bag;
-		bag.open("/home/ubuntu/MapCB_ProcessedScans.bag", rosbag::bagmode::Read);
+		bag.open(argv[2], rosbag::bagmode::Read);
 
 		std::vector<sensor_msgs::LaserScan> scans;
 		// store all TS for which there is a scan, so we can store corresponding posn.

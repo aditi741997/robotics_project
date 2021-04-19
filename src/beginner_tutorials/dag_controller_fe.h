@@ -16,4 +16,6 @@ public:
 	DAGControllerFE() {};
 	
 	virtual void trigger_node(std::string name, bool reset) {};
+
+	virtual int get_sim_time() { return 0; };
 };

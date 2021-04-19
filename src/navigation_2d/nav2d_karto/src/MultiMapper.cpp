@@ -822,6 +822,7 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 		double wall_scan_start = get_time_now();
 	double wall_scan_end = 0.0;
 	bool succ_processed_scan_i = false;
+	bool save_scan = false;
 
 		publishTransform();
 		// process latest_scan_recv.
@@ -845,7 +846,8 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 
 				ROS_ERROR("Created mLaser.");
 				// processed_scans_bag.write("/robot_0/processed_scans", scans[i].header.stamp, scans[i]);
-				save_scans.push_back(scans[i]);
+				save_scan = true;
+				// save_scans.push_back(scans[i]);
 			}
 			catch(karto::Exception e)
 			{
@@ -868,7 +870,8 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 				setRobotPose(p.getOrigin().getX(), p.getOrigin().getY(), tf::getYaw(p.getRotation()));
 			}
 			// processed_scans_bag.write("/robot_0/processed_scans", scans[i].header.stamp, scans[i]);
-			save_scans.push_back(scans[i]);
+			save_scan = true;
+			// save_scans.push_back(scans[i]);
 		}else
 		if(mState == ST_MAPPING)
 		{
@@ -925,7 +928,8 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 			if(success)
 			{
 				// processed_scans_bag.write("/robot_0/processed_scans", scans[i].header.stamp, scans[i]);
-				save_scans.push_back(scans[i]);
+				save_scan = true;
+				// save_scans.push_back(scans[i]);
 				
 				// Compute the map->odom transform
 				karto::Pose2 corrected_pose = laserScan->GetCorrectedPose();
@@ -1038,20 +1042,26 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 
 		// for cleaner logging: 
 		scan_processed_log << last_scan_mapCB_processed_ST << ", " << (wall_scan_start-5000.0) << ", " << (wall_scan_end-5000.0) << ", " << get_time_diff(cb_start, cb_end) << "\n";
+	
+		if (save_scan)
+			save_scans.push_back(scans[i]);
 	}
 
 	// save scans & timing info only if we're running the expt [input_data means offline run.]
 	if ((save_scans.size() > 0) && !use_input_data)
 	{
+		std::string ename;
+		ros::NodeHandle nh;
+	        nh.param<std::string>("/expt_name", ename, "");
 		struct stat buffer;
-		std::string fname = "/home/ubuntu/MapCB_ProcessedScans.bag";
+		std::string fname = "/home/ubuntu/MCB_ProcScans_"+ename+".bag";
 		if (stat (fname.c_str(), &buffer) == 0)
 		{
-			processed_scans_bag.open("/home/ubuntu/MapCB_ProcessedScans.bag", rosbag::bagmode::Append);
+			processed_scans_bag.open(fname, rosbag::bagmode::Append);
 		}
 		else	
 		{
-			processed_scans_bag.open("/home/ubuntu/MapCB_ProcessedScans.bag", rosbag::bagmode::Write);
+			processed_scans_bag.open(fname, rosbag::bagmode::Write);
 		}
 		for (auto &ssi : save_scans)
 			processed_scans_bag.write("/robot_0/processed_scans", ssi.header.stamp, ssi);
