@@ -1,0 +1,52 @@
+include "p3at.inc"
+include "floorplan.inc"
+
+ # interval_sim is time in ms bw 2 world updates AND sensor publishes.
+name                    "Navigation-2D Multi-Robot Tutorial"
+interval_sim            100
+interval_real		100
+quit_time                 0
+resolution                0.025
+show_clock                0
+show_clock_interval     100
+threads                 12
+speedup                 5
+
+window
+(
+size [900 620]
+show_grid               0
+)
+
+# Load an environment bitmap
+floorplan
+( 
+  name "tutorial"
+  bitmap "smallMap5.png"
+  size [30 17 1.0]
+  pose [0 0 0 0]
+)
+
+# Put two robots into the world
+pioneer3at
+(
+  name "robot_0"
+  pose [-5 -5 0 45]
+)
+
+pioneer3at
+(
+  name "robot_1"
+  pose [3.5 0.75 0 90]
+  color "blue"
+)
+
+pioneer3at
+(
+  name "robot_2"
+  pose [3.5 5.6 0 90]
+  color "blue"
+)
+
+
+

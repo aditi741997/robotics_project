@@ -119,11 +119,11 @@ private:
 	// For measuring RT:
         double current_plan_last_scan_mapCB_mapUpd_used_ts;
         double current_mapCB_tf_navCmd_scan_ts; // current Cmd - Transform's TS wrt latest scan used by mapper.
-        double current_mapCB_tf_navPlan_scan_ts;
+        double current_mapCB_tf_navPlan_scan_ts, current_mapCB_tf_navPlan_allScans_ts;
 	
 	ros::Subscriber mScanUsedTSTFSubscriber;
-        double current_mapper_tf_scan_ts, latest_mapper_tf_scan_used_ts; // latest transform's - scan used TS.
+        double current_mapper_tf_scan_ts, current_mapper_tf_allScans_rt_ts, latest_mapper_tf_scan_used_ts, latest_mapCB_tf_allScans_ts; // latest transform's - scan used TS.
         void updateMapperScanTSUsedTF(const std_msgs::Header& hdr);
 
-
+	ros::Publisher mRecvMapOPublisher, mRecvMapPublisher, mRecvMappingPublisher; // to publish the map received and being used by navigator.
 };

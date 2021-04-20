@@ -11,7 +11,7 @@
 #include <numeric>
 
 #define PI 3.14159265
-#define FREQUENCY 5.0
+#define FREQUENCY 5
 
 using namespace ros;
 using namespace tf;
@@ -160,7 +160,13 @@ RobotNavigator::RobotNavigator()
 	total_nav_plan_ct = 0;
 	total_nc_ct = 0;	
 
+	current_mapper_tf_allScans_rt_ts = 0.0;
+
 	mScanUsedTSTFSubscriber = navigatorNode.subscribe("/robot_0/mapper_scan_ts_used_TF", 1, &RobotNavigator::updateMapperScanTSUsedTF, this, ros::TransportHints().tcpNoDelay());
+
+	mRecvMapPublisher = navigatorNode.advertise<nav_msgs::OccupancyGrid>("/robot_0/nav_recv_map", 1, true);
+        mRecvMapOPublisher = navigatorNode.advertise<nav_msgs::OccupancyGrid>("/robot_0/nav_recv_mapO", 1, true);
+        mRecvMappingPublisher = navigatorNode.advertise<nav_msgs::OccupancyGrid>("/robot_0/nav_recv_mapping", 1, true);
 }
 
 RobotNavigator::~RobotNavigator()
@@ -177,7 +183,12 @@ RobotNavigator::~RobotNavigator()
 void RobotNavigator::updateMapperScanTSUsedTF(const std_msgs::Header& hdr)
 {
         current_mapper_tf_scan_ts = hdr.stamp.toSec();
-        ROS_WARN("In ROBOTNavigator::updateMapperScanTSUsedTF : Mapper's TF TS is now %f", current_mapper_tf_scan_ts);
+	std::stringstream ss;
+        ss << hdr.frame_id;
+        float a;
+        ss >> a >> current_mapper_tf_allScans_rt_ts;
+        // current_mapper_tf_allScans_ts = a;        
+	// ROS_WARN("In ROBOTNavigator::updateMapperScanTSUsedTF : Mapper's TF TS is now %f", current_mapper_tf_scan_ts);
 }
 
 bool RobotNavigator::getMap()
@@ -197,6 +208,7 @@ bool RobotNavigator::getMap()
 		return false;
 	}
 	mCurrentMap.update(srv.response.map);
+	mRecvMapOPublisher.publish(mCurrentMap.getMap());
 	
 	if(mCurrentPlan) delete[] mCurrentPlan;
 	mCurrentPlan = new double[mCurrentMap.getSize()];
@@ -384,6 +396,7 @@ bool RobotNavigator::createPlan()
 	// For measuring RT: 
         current_plan_last_scan_mapCB_mapUpd_used_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
 	current_mapCB_tf_navPlan_scan_ts = latest_mapper_tf_scan_used_ts;
+	current_mapCB_tf_navPlan_allScans_ts = latest_mapCB_tf_allScans_ts;
 	return true;
 }
 
@@ -498,6 +511,7 @@ bool RobotNavigator::generateCommand()
 {
 	double using_curr_plan_mapUpd_scan_ts = current_plan_last_scan_mapCB_mapUpd_used_ts;
         double using_curr_plan_mapCB_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts;
+	double using_curr_plan_mapCB_tf_allScan_ts = current_mapCB_tf_navPlan_allScans_ts;
 
 	// Do nothing when paused
 	if(mIsPaused)
@@ -570,6 +584,9 @@ bool RobotNavigator::generateCommand()
         msg.LastScanTSScanMapCBMapUpdNavPlanNavCmd = using_curr_plan_mapUpd_scan_ts;
         msg.LastScanTSScanMapCBNavCmd = latest_mapper_tf_scan_used_ts;// dont need to store 'using' here since NavCmd runs in the order : setCurrentPosition, stuff, generateCommand.
         msg.LastScanTSScanMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_scan_ts;
+
+	msg.LastScanTSScanTFMapCBNavCmd = latest_mapCB_tf_allScans_ts;
+	msg.LastScanTSScanTFMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_allScan_ts;
 
 	mCommandPublisher.publish(msg);
 
@@ -674,6 +691,7 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 	if(getMap() && setCurrentPosition())
 	{
 		ROS_ERROR("MAPPING Successful!!!!");
+		mRecvMappingPublisher.publish(mCurrentMap.getMap());
 		mGetMapActionServer->setSucceeded();
 	}else
 	{
@@ -984,6 +1002,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 					}
 					stop();
 					clock_gettime(CLOCK_MONOTONIC, &explore_end);
+					mRecvMapPublisher.publish(mCurrentMap.getMap());
                                         ROS_ERROR("Exploration has finished. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
 					return;
 				case EXPL_WAITING:
@@ -1031,6 +1050,18 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 					clock_gettime(CLOCK_MONOTONIC, &explore_end);
 					explore_end_clk = clock();
 					double explore_end_ts = get_time_now();
+					
+					// mGoalPoint is set by findExplTarget
+					// copy mCurrentMap and set goalPoint [and ngbrs] index to 100 so it looks black?
+					nav_msgs::OccupancyGrid mMap = mCurrentMap.getMap();
+					signed char curr_Goal_value = mCurrentMap.getMap().data[mGoalPoint];
+					mMap.data[mGoalPoint] = 100;
+					std::vector<unsigned int> gneighbors = mCurrentMap.getNeighbors(mGoalPoint);
+					for (auto& ni : gneighbors)
+						mMap.data[ni] = 100;
+
+					mRecvMapPublisher.publish(mMap);
+					
 					ROS_ERROR("Exploration has failed. Total_Time_Taken_Clk: %f, Time of finish : %f #", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC, explore_end_ts);
                                         ROS_ERROR("Exploration has failed. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
 					return;
@@ -1097,6 +1128,7 @@ bool RobotNavigator::setCurrentPosition()
                 spinOnce();
 		mTfListener->lookupTransform(mMapFrame, mRobotFrame, Time(0), transform);
 		// CHECK THE current TF TS value.
+		latest_mapCB_tf_allScans_ts = current_mapper_tf_allScans_rt_ts; // when np runs next, it'll use this latest TS of scans
 		latest_mapper_tf_scan_used_ts = current_mapper_tf_scan_ts; // whenever this is called in receiveExplore, the output is used by genCmd, since ALL in order.
 
 	}catch(TransformException ex)
