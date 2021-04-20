@@ -92,7 +92,7 @@ aggregate_chain_lats = {}
 aggregate_chain_rts = {}
 
 for run in range(start_run_ind,end_run_ind+1):
-        for chain in ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]:
+        for chain in ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP", "Scan_All_MapCB_NavCmd_LP", "Scan_All_MapCB_NavPlan_NavCmd_LP"]:
                 print "Starting chain", chain
                 if chain not in aggregate_chain_lats:
                     aggregate_chain_lats[chain] = []
@@ -117,7 +117,6 @@ for run in range(start_run_ind,end_run_ind+1):
                                         #print "Chain not in Line", l
                 # len(TS) should be = len(lat).
                 # len(TS) should be len(tput)+1.
-                aggregate_chain_lats[chain] += lats
                 #print("\n \n ARR Lat FOR chain %s : %s"%( chain, str(lats) ) )
                 #if "Scan_LC" in chain:
                         #print("\n \n ARR RT FOR chain %s : %s"%( chain, str(rts) ) )
@@ -142,12 +141,17 @@ for run in range(start_run_ind,end_run_ind+1):
                         '''
 		random.shuffle(rts)
 		aggregate_chain_rts[chain] += rts[:100]
+		random.shuffle(lats)
+		aggregate_chain_lats[chain] += lats[:100]
 
-per_chain_count = {"Scan_LC_LP": 1000}
+per_chain_count = {"Scan_LC_LP": 1000, "Scan_MapCB_MapU_NavP_NavC_LP": 1000, "Scan_MapCB_NavCmd_LP": 10, "Scan_MapCB_NavPlan_NavCmd_LP": 10, "Scan_All_MapCB_NavCmd_LP": 10, "Scan_All_MapCB_NavPlan_NavCmd_LP": 10}
 for ch in per_chain_count:
     random.shuffle(aggregate_chain_lats[ch])
     lch = len(aggregate_chain_lats[ch])
-    print(ch, aggregate_chain_rts[ch])
+    if ch == "Scan_LC_LP":
+	print(ch, "RT: ", aggregate_chain_rts[ch])
+    else:
+	print(ch, "LAT: ", aggregate_chain_lats[ch])
     #print(aggregate_chain_lats[ch][:lch/5], ch)
     #print("AGGREGATE LAT for chain ", ch, " median: %f, 75ile: %f, 95ile: %f"%(np.median(aggregate_chain_lats[ch]), np.percentile(aggregate_chain_lats[ch], 75), np.percentile(aggregate_chain_lats[ch], 95) ) )
     print('-')
