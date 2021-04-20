@@ -5,28 +5,28 @@ source devel/setup.bash
 sleep 2s
 ct=7
 ccid=2
-td="nono"
-for navpF in 1.0 #1.056 #5.0 #1.0 0.2
+td="yesyess"
+for navpF in 100.0 #1.056 #5.0 #1.0 0.2
 do
 	for mcbF in 100.0 #1.107 #10.0 7.0 4.0 1.0 0.4 0.16 
 	do
-		for muF in 1.0 #1.928 #1.056 #10.0 #5.0 1.0 0.4
+		for muF in 100.0 #1.928 #1.056 #10.0 #5.0 1.0 0.4
 		do
-			for navcF in 5.0 #9.0 #5.8125 #20.0 #10.0 5.0 1.0
+			for navcF in 100.0 #9.0 #5.8125 #20.0 #10.0 5.0 1.0
 			do
-				for ccF in 10.0 #100.0 50.0 
+				for ccF in 100.0 #100.0 50.0 
 				do
 					div=0
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in 6 8 12 33 #54 57 58 67 77 {98..101} 
+						for run in {18..30} #54 57 58 67 77 {98..101} 
 						do
 							rosclean purge -y
 							rm ../robot_nav2d_obstacleDist_logs_.txt
 							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage_noobst.launch &
 							sleep 27s
-							ename="Static3NOA_1c_run$run"
+							ename="AllHighQNO_1c_run$run"
 							
 							echo "DELETING OLD LOGFILES For this expt:"
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
@@ -50,7 +50,6 @@ do
 							dagcontEname="dag_contBE_${ename}.err"
 							dagcontOname="dag_contBE_${ename}.out"
 							#For slowing down navp: 
-							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_75p_smallnavp" $td "no" 16 63 3 63 1 1 1 0 > $dagcontOname 2> $dagcontEname &
 							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_95p_smallest" $td "no" 74 98 1 74 1 1 1 0 > $dagcontOname 2> $dagcontEname &
 							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_95p_small" $td "no" 2 76 3 48 1 1 1 0 > $dagcontOname 2> $dagcontEname & 
 							sleep 4s
@@ -89,6 +88,10 @@ do
 								if [ $failct -gt 2 ]; then
 									echo "MAPPING DIDNT WORK EVEN AFTER 3 TRIES!!! For ", $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
 									success="1"
+								fi
+								if [ $iter -gt 15 ]; then
+									success="1"
+									echo "MAPPING DIDNT WORK EVEN AFTER iter=", $iter, $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
 								fi
 								sleep 2s
 								echo "iter: ", $iter
