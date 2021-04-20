@@ -32,6 +32,7 @@ do
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
 							rm "../robot_nav2d_${ename}_rt_stats.txt"
 							mapcb_procscans_name="../MCB_ProcScans_${ename}.bag"
+							rm $mapcb_procscans_name 
 							for thing in local_map navigator_plan navigator_cmd mapper_mapUpdate mapper_scanCB operator_loop
 							do
 								rm "../robot_nav2d_${thing}_stats_${ename}.txt"
