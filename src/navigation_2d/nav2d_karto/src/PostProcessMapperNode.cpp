@@ -82,7 +82,7 @@ int main(int argc, char **argv)
 			
 			int int_ts = (int)(10*latest_scan_recv.header.stamp.toSec());
 			ts_ind[int_ts] = scans.size() - 1;
-			std::cout << scan->header.stamp.toSec() << ", " << int_ts << ", " << ts_ind[int_ts] << std::endl;
+			// std::cout << scan->header.stamp.toSec() << ", " << int_ts << ", " << ts_ind[int_ts] << std::endl;
 		}
 		bag.close();
 
@@ -141,8 +141,8 @@ int main(int argc, char **argv)
 				gtPos *= rotate;
 				// print_tf(gtPos, "gt pos after rotating orientation by -45deg");
 
-				double newx = ((rx-startx)*sqrt(0.5) + (ry+starty)*sqrt(0.5)) + 0.2;
-				double newy = ((rx-startx)*sqrt(0.5)*-1.0 + (ry+starty)*sqrt(0.5));
+				double newx = ((rx-startx)*sqrt(0.5) + (ry-starty)*sqrt(0.5)) + 0.2;
+				double newy = ((rx-startx)*sqrt(0.5)*-1.0 + (ry-starty)*sqrt(0.5));
 				double newz = 0.0 + 0.2;
 
 				gtPos.setOrigin(tf::Vector3(newx,newy,newz));

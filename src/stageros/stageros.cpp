@@ -621,7 +621,7 @@ StageNode::WorldCallback()
 			ROS_ERROR("Just published scan msg, scantime: %f, boost time: %f", msg.scan_time, rt_boost);
             	}
 
-		if (r < 1 && (world_update_count % 2 == 1) ) // save scans at 25Hz.
+		if (r < 1 && (world_update_count % 5 == 1) ) // save scans at 10Hz.
 			robo0_last_five_scans.push_back(msg);
 	    }
 

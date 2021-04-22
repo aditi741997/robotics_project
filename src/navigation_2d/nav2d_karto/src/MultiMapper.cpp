@@ -352,7 +352,7 @@ void MultiMapper::processTrigger(std::string msg)
 	if (msg.find("cb") != std::string::npos)
 	{
 		// its the mapcb trigger.
-		ROS_ERROR("Got a trigger for mapcb, %s curr count: %i", msg.c_str(), mapcb_trigger_count);
+		// ROS_ERROR("Got a trigger for mapcb, %s curr count: %i", msg.c_str(), mapcb_trigger_count);
 		boost::unique_lock<boost::mutex> lock(mapcb_trigger_mutex);
 		/*
 		if (msg.find("RESETCOUNT") != std::string::npos)
@@ -882,7 +882,7 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 				try
 				{
 					mTransformListener->lookupTransform(mOdometryFrame/*mOffsetFrame*/, mLaserFrame, scans[i].header.stamp, tfPose);
-					// ROS_ERROR("GOT TF TS: %f odom-last_link : x: %f, y: %f, z: %f [R] x: %f, y: %f, z: %f, w: %f", scans[i].header.stamp.toSec(), tfPose.getOrigin().x(), tfPose.getOrigin().y(), tfPose.getOrigin().z(), tfPose.getRotation().x(), tfPose.getRotation().y(), tfPose.getRotation().z(), tfPose.getRotation().w() );
+					ROS_ERROR("GOT TF TS: %f odom-last_link : x: %f, y: %f, z: %f [R] x: %f, y: %f, z: %f, w: %f", scans[i].header.stamp.toSec(), tfPose.getOrigin().x(), tfPose.getOrigin().y(), tfPose.getOrigin().z(), tfPose.getRotation().x(), tfPose.getRotation().y(), tfPose.getRotation().z(), tfPose.getRotation().w() );
 					scan_pose_ts.push_back(true);
 				}
 				catch(tf::TransformException e)
@@ -913,7 +913,6 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 			// using real TS:
 			laserScan->setScanTimeStamp(scans[i].scan_time);
 			
-
 			bool success;
 			try
 			{
@@ -969,8 +968,9 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 				mMapChanged = true;
 
 				succ_processed_scan_i = true;
+				geometry_msgs::Quaternion corrected_pose_q = tf::createQuaternionMsgFromYaw(corrected_pose.GetHeading());
 				ROS_ERROR("robot %d : IN nav2d_Mapper scanCB : SUCCESSFULLY processed scan rosTS %f  realTS%f, arr len %i, mNodesAdded: %i", mRobotID, scans[i].header.stamp.toSec(), scans[i].scan_time, scan_cb_times.size(), mNodesAdded);
-				ROS_ERROR("robot %d : IN nav2d_Mapper scanCB : scan rosTS %f  realTS%f, pose x: %f, y: %f, z: %f | R x: %f, y: %f, z: %f, w: %f", mRobotID, scans[i].header.stamp.toSec(), scans[i].scan_time, corrected_pose.GetX(), corrected_pose.GetY() );
+				ROS_ERROR("robot %d : IN nav2d_Mapper scanCB : scan rosTS %f  realTS%f, pose x: %f, y: %f, z: %f | R yaw: %f", mRobotID, scans[i].header.stamp.toSec(), scans[i].scan_time, corrected_pose.GetX(), corrected_pose.GetY(), 0.0, corrected_pose.GetHeading() );
 					// Scan CB Times : Exclude map Update time.
 					clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
 					double t = get_time_diff(cb_start, cb_end);
@@ -1203,7 +1203,7 @@ void MultiMapper::publishMap(std::string topicname)
 
 bool MultiMapper::sendMap()
 {
-	ROS_ERROR("MultiMapper::sendMap CALLED!! with mLastMapUpdate %f", mLastMapUpdate);
+	// ROS_ERROR("MultiMapper::sendMap CALLED!! with mLastMapUpdate %f", mLastMapUpdate);
 	if(!updateMap()) return false;
 	// updateMap returns true if 1. map wasnt changed, i.e. no new scans or 2. map was updated successfully.
 	// need to distinguish bw these two.
