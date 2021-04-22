@@ -970,6 +970,7 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 
 				succ_processed_scan_i = true;
 				ROS_ERROR("robot %d : IN nav2d_Mapper scanCB : SUCCESSFULLY processed scan rosTS %f  realTS%f, arr len %i, mNodesAdded: %i", mRobotID, scans[i].header.stamp.toSec(), scans[i].scan_time, scan_cb_times.size(), mNodesAdded);
+				ROS_ERROR("robot %d : IN nav2d_Mapper scanCB : scan rosTS %f  realTS%f, pose x: %f, y: %f, z: %f | R x: %f, y: %f, z: %f, w: %f", mRobotID, scans[i].header.stamp.toSec(), scans[i].scan_time, corrected_pose.GetX(), corrected_pose.GetY() );
 					// Scan CB Times : Exclude map Update time.
 					clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
 					double t = get_time_diff(cb_start, cb_end);
@@ -1048,6 +1049,7 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 	}
 
 	// save scans & timing info only if we're running the expt [input_data means offline run.]
+	/*
 	if ((save_scans.size() > 0) && !use_input_data)
 	{
 		std::string ename;
@@ -1067,7 +1069,7 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 			processed_scans_bag.write("/robot_0/processed_scans", ssi.header.stamp, ssi);
 		processed_scans_bag.close();
 	}
-
+	*/
 	if ( (scan_cb_times.size()%20 == 3) && !use_input_data)
 	{
 		// std::ofstream of;
@@ -1285,6 +1287,24 @@ bool MultiMapper::updateMap()
 
 	int latest_scan_st_ts_processed_by_mcb = last_scan_mapCB_processed_ST;
 	const karto::LocalizedLaserScanList allScans = mMapper->GetAllProcessedScans();
+
+	// save scans' corrected poses to file.
+	double timenow = get_time_now();
+	if ((timenow - last_scans_pose_save_ts) > 10.0)
+	{
+		std::string ename;
+		ros::NodeHandle nh;
+	        nh.param<std::string>("/expt_name", ename, "");
+		std::ofstream of;
+		of.open( ("/home/ubuntu/mapper_scansPose_" + ename + ".txt").c_str(), std::ios_base::app);
+		of << ros::Time::now().toSec() << " MU \n";
+		for (int i = 0; i < allScans.Size(); i++)
+		{
+			karto::Pose2 pi = allScans[i]->GetCorrectedPose();
+			of << allScans[i]->getScanSTTimeStamp() << " " << pi.GetX() << " " << pi.GetY() << " " << pi.GetHeading() << " \n";
+		}
+		last_scans_pose_save_ts = timenow;
+	}
 
 	// can we get some TS from allScans itself?
 	double using_scan_mapCB_ts = allScans[allScans.Size()-1]->getScanTimeStamp();

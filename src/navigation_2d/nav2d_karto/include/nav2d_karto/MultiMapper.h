@@ -210,6 +210,7 @@ private:
 	std::ofstream scan_processed_log;
 	std::vector<int> scan_st_processed;
 	std::vector<double> scan_when_process_start_rt, scan_when_process_end_rt, scan_exec_time;
+	double last_scans_pose_save_ts = 0.0;
 };
 
 #endif

@@ -5,33 +5,35 @@ source devel/setup.bash
 sleep 2s
 ct=7
 ccid=2
-td="yesyess"
-for navpF in 100.0 #1.056 #5.0 #1.0 0.2
+td="nono"
+for navpF in 1.0 #1.056 #5.0 #1.0 0.2
 do
 	for mcbF in 100.0 #1.107 #10.0 7.0 4.0 1.0 0.4 0.16 
 	do
-		for muF in 100.0 #1.928 #1.056 #10.0 #5.0 1.0 0.4
+		for muF in 1.0 #1.928 #1.056 #10.0 #5.0 1.0 0.4
 		do
-			for navcF in 100.0 #9.0 #5.8125 #20.0 #10.0 5.0 1.0
+			for navcF in 5.0 #9.0 #5.8125 #20.0 #10.0 5.0 1.0
 			do
-				for ccF in 100.0 #100.0 50.0 
+				for ccF in 10.0 #100.0 50.0 
 				do
 					div=0
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in {18..30} #54 57 58 67 77 {98..101} 
+						for run in 1 #54 57 58 67 77 {98..101} 
 						do
 							rosclean purge -y
 							rm ../robot_nav2d_obstacleDist_logs_.txt
+							rm ../mapper_scansPose_.txt
 							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage_noobst.launch &
 							sleep 27s
-							ename="AllHighQNO_1c_run$run"
+							ename="StaticQNO1_1c_run$run"
 							
 							echo "DELETING OLD LOGFILES For this expt:"
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
 							rm "../robot_nav2d_${ename}_rt_stats.txt"
-							mapcb_procscans_name="../MCB_ProcScans_${ename}.bag"
+							rm "../mapper_scansPose_${ename}.txt"
+							mapcb_procscans_name="../nav2d_stage_scans_${ename}.bag"
 							rm $mapcb_procscans_name 
 							for thing in local_map navigator_plan navigator_cmd mapper_mapUpdate mapper_scanCB operator_loop
 							do
@@ -50,8 +52,9 @@ do
 							dagcontEname="dag_contBE_${ename}.err"
 							dagcontOname="dag_contBE_${ename}.out"
 							#For slowing down navp: 
+							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_75p_smallnavp" $td "no" 16 63 3 63 1 1 1 0 > $dagcontOname 2> $dagcontEname &
 							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_95p_smallest" $td "no" 74 98 1 74 1 1 1 0 > $dagcontOname 2> $dagcontEname &
-							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_95p_small" $td "no" 2 76 3 48 1 1 1 0 > $dagcontOname 2> $dagcontEname & 
+							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_final_small" $td "no" 2 100 1 86 1 1 1 0 > $dagcontOname 2> $dagcontEname & 
 							sleep 4s
 							taskset -a -c 1 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" $td > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
 							
@@ -90,8 +93,8 @@ do
 									success="1"
 								fi
 								if [ $iter -gt 15 ]; then
-									success="1"
 									echo "MAPPING DIDNT WORK EVEN AFTER iter=", $iter, $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
+									success="1"
 								fi
 								sleep 2s
 								echo "iter: ", $iter

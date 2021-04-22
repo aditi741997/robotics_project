@@ -70,7 +70,8 @@
 #define CMD_VEL "cmd_vel"
 
 #include <ros/console.h>
-#include <math.h>
+
+#include <rosbag/bag.h>
 
 // Our node
 class StageNode
@@ -105,8 +106,8 @@ private:
         std::vector<ros::Publisher> depth_pubs; //multiple depths
         std::vector<ros::Publisher> camera_pubs; //multiple cameras
         std::vector<ros::Publisher> laser_pubs; //multiple lasers
-
         ros::Subscriber cmdvel_sub; //one cmd_vel subscriber
+	
     };
 
     std::vector<StageRobot const *> robotmodels_;
@@ -179,6 +180,8 @@ public:
     Stg::World* world;
 
     // For nav2d scheduling experiments:
+    rosbag::Bag robo0_scans_bag;
+    std::vector<sensor_msgs::LaserScan> robo0_last_five_scans; // store last 5scans published, to be written to bagfile.
     std::vector<std::string> stalled_robos; // to see if robo collided with one of the moving robots.
     std::vector<double > all_robos_pose_x;
     std::vector<double > all_robos_pose_y;
@@ -186,7 +189,6 @@ public:
     bool rob0_stalled = false;
     std::string expt_name;
     int world_update_count;
-    std::ofstream odom_gt_log;
 };
 
 // since stageros is single-threaded, this is OK. revisit if that changes!
@@ -449,17 +451,7 @@ StageNode::WorldCallback()
     this->world->QuitAll();
     return;
   }
- 
-
-  // open odom_gt_log if not opened yet, and if /expt_name is not empty.
-  ros::NodeHandle nh_;
-  nh_.param<std::string>("/expt_name", expt_name, "");
-  if (expt_name.compare("") != 0 && !odom_gt_log.is_open())
-  {
-  	ROS_ERROR("STAGE Opening Log file, exptname: %s for odom_gt", expt_name.c_str());
-	  odom_gt_log.open(("/home/ubuntu/nav2d_odom_gt_" + expt_name + ".txt").c_str() , std::ios_base::app);
-  }
-
+  
     world_update_count += 1;
     boost::mutex::scoped_lock lock(msg_lock);
 
@@ -504,11 +496,7 @@ StageNode::WorldCallback()
 
         // Get latest odometry data
         // Translate into ROS message format and publish
-        float est_origin_x, est_origin_y;
-	est_origin_x = robotmodel->positionmodel->est_origin.x;
-	est_origin_y = robotmodel->positionmodel->est_origin.y;
-
-	nav_msgs::Odometry odom_msg;
+        nav_msgs::Odometry odom_msg;
         odom_msg.pose.pose.position.x = robotmodel->positionmodel->est_pose.x;
         odom_msg.pose.pose.position.y = robotmodel->positionmodel->est_pose.y;
         odom_msg.pose.pose.orientation = tf::createQuaternionMsgFromYaw(robotmodel->positionmodel->est_pose.a);
@@ -540,14 +528,6 @@ StageNode::WorldCallback()
         tf.sendTransform(tf::StampedTransform(txOdom, sim_time,
                                               mapName("odom", r, static_cast<Stg::Model*>(robotmodel->positionmodel)),
                                               mapName("base_footprint", r, static_cast<Stg::Model*>(robotmodel->positionmodel))));
-
-	// caching gt pose here to check if it changes within WorldCallback:
-	/*
-	float gt_x = gt.getOrigin().x();
-	float gt_y = gt.getOrigin().y();
-	float gt_oz = gt.getRotation().z();
-	float gt_ow = gt.getRotation().w(); 
-	*/
 
         //loop on the laser devices for the current robot
         for (size_t s = 0; s < robotmodel->lasermodels.size(); ++s)
@@ -640,9 +620,13 @@ StageNode::WorldCallback()
 			// std::cerr << " scanTime: " << msg.scan_time << " " << boost::chrono::duration_cast<boost::chrono::milliseconds>(tse).count() << " ct:" << ct << std::endl;
 			ROS_ERROR("Just published scan msg, scantime: %f, boost time: %f", msg.scan_time, rt_boost);
             	}
+
+		if (r < 1 && (world_update_count % 2 == 1) ) // save scans at 25Hz.
+			robo0_last_five_scans.push_back(msg);
 	    }
 
         }
+
 
         // Also publish the ground truth pose and velocity
         Stg::Pose gpose = robotmodel->positionmodel->GetGlobalPose();
@@ -683,31 +667,25 @@ StageNode::WorldCallback()
 
         robotmodel->ground_truth_pub.publish(ground_truth_msg);
 
+	/*
 	if ( std::string( this->robotmodels_[r]->positionmodel->Token() ).find("0") != std::string::npos && (odom_gt_log.is_open()) )
 	{
-		// using the fact that robot starts at x=0,y=-2 posn and at 45 deg angle wrt gloabl x-y coord
 		float odom_actual_x = odom_msg.pose.pose.position.x/sqrt(2) - odom_msg.pose.pose.position.y/sqrt(2) + est_origin_x;
-		float odom_actual_y = odom_msg.pose.pose.position.x/sqrt(2) + odom_msg.pose.pose.position.y/sqrt(2) + est_origin_y;
-
+                float odom_actual_y = odom_msg.pose.pose.position.x/sqrt(2) + odom_msg.pose.pose.position.y/sqrt(2) + est_origin_y;
 		tf::Transform txGT(gt.getRotation(), tf::Point(0.0, 0.0, 0.0));
 
 		tf::Quaternion odomQ1;
-		tf::quaternionMsgToTF(odom_msg.pose.pose.orientation, odomQ1);
-		tf::Transform txOdom1(odomQ1, tf::Point(0.0, 0.0, 0.0));
-
-		tf::Transform pose_diff = txGT.inverseTimes(txOdom1);
-		tf::Quaternion diffQ = pose_diff.getRotation();
-		if (world_update_count % 100 == 8)
-		{
-			ROS_ERROR("ORIENT: odom x: %f, y: %f, z: %f, w: %f | gt x: %f, y: %f, z: %f, w: %f | poseDIFF: angle: %f, axis: %f, %f, %f", odom_msg.pose.pose.orientation.x, odom_msg.pose.pose.orientation.y, odom_msg.pose.pose.orientation.z, odom_msg.pose.pose.orientation.w, ground_truth_msg.pose.pose.orientation.x, ground_truth_msg.pose.pose.orientation.y, ground_truth_msg.pose.pose.orientation.z, ground_truth_msg.pose.pose.orientation.w, float(diffQ.getAngle()) , diffQ.getAxis().getX(), diffQ.getAxis().getY(), diffQ.getAxis().getZ() );
+                tf::quaternionMsgToTF(odom_msg.pose.pose.orientation, odomQ1);
+                tf::Transform txOdom1(odomQ1, tf::Point(0.0, 0.0, 0.0));
 		
-			ROS_ERROR("POS: odom x: %f, y: %f, est_origin: x: %f, y: %f, globalODOM x: %f, y: %f, GT: x: %f, y: %f", odom_msg.pose.pose.position.x, odom_msg.pose.pose.position.y, est_origin_x, est_origin_y, odom_actual_x, odom_actual_y, gt.getOrigin().x(), gt.getOrigin().y());
-		}
+		tf::Transform pose_diff = txGT.inverseTimes(txOdom1);
+	        tf::Quaternion diffQ = pose_diff.getRotation();
 		
 		odom_gt_log << (odom_actual_x - gt.getOrigin().x()) << ", ";
-		odom_gt_log << (odom_actual_y - gt.getOrigin().y()) << ", ";
+                odom_gt_log << (odom_actual_y - gt.getOrigin().y()) << ", ";
 		odom_gt_log << float(diffQ.getAngle()) << " \n";
 	}
+	odom vs GT published by stage. */
 
         // for nav2d scheduling expts:
         all_robos_pose_x.push_back(gt.getOrigin().x());
@@ -726,6 +704,23 @@ StageNode::WorldCallback()
 	else if (this->positionmodels[r]->Stalled())
 		stalled_robos.push_back( std::string( this->robotmodels_[r]->positionmodel->Token() ) );
 	
+
+	if (robo0_last_five_scans.size() > 5)
+	{
+		std::string ename;
+                ros::NodeHandle nh;
+		nh.param<std::string>("/expt_name", ename, "");
+		struct stat buffer;
+                std::string fname = "/home/ubuntu/nav2d_stage_scans_"+ename+".bag";
+		if (stat (fname.c_str(), &buffer) == 0)
+			robo0_scans_bag.open(fname, rosbag::bagmode::Append);
+		else
+			robo0_scans_bag.open(fname, rosbag::bagmode::Write);
+		for (int ssi = 0; ssi < robo0_last_five_scans.size(); ssi++)
+			robo0_scans_bag.write("/robot_0/scans", robo0_last_five_scans[ssi].header.stamp, robo0_last_five_scans[ssi]);
+		robo0_last_five_scans.clear();
+		robo0_scans_bag.close();
+	}
 
 	//cameras
         for (size_t s = 0; s < robotmodel->cameramodels.size(); ++s)
