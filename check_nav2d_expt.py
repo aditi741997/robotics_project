@@ -10,7 +10,7 @@ efails = {-1}
 smallest_map = (sys.argv[4] == "smallest")
 
 run_txt = "_r" if smallest_map else "_run"
-
+run_txt = "_run"
 # check NEG lat at shim
 if "Default" not in ename:
 	for r in runs:
@@ -110,8 +110,8 @@ for r in runs:
                         if ("| STartPOint :" in l):
                                 goal = (int(l.split(' ')[-8]), int(l.split(' ')[-7]))
                                 if (are_goals_equal(goal, goali1)):
-                                        if count_goali1%80 == 5:
-                                                print "RUN", r, "same goal", goal, goali1, "ct: ", count_goali1
+                                        #if count_goali1%80 == 5:
+                                                #print "RUN", r, "same goal", goal, goali1, "ct: ", count_goali1
                                         count_goali1 += 1
                                 elif ( not are_goals_equal(goal, goali1) and are_goals_equal(goal, goali) ):
                                     print("################### Ename: %s, run: %i, HAS thrash!!"%(ename, r) , goal, goali1, goali, count_goali1)
@@ -157,6 +157,14 @@ for r in runs:
 			print("Ename: %s, run: %i, HAS TF error %i EFail: %i / Mapping failed ct: %i"%(ename, r, tf_err, efail, map_fail_ct) )
 		if (efail):
 			efails.add(r)
+
+# check for WEIRD prints in PPMap logs.
+for r in runs:
+    with open("nav2d_PPMap_"  + ename + run_txt + str(r) + ".out", 'r') as f:
+        for l in f.readlines():
+            if "WEIRD" in l:
+                print("Ename: %s, run: %i, HAS WEIRD PP error: %s"%(ename, r, l) )
+
 
 print("FINAL Set of bad runs: ", bad_runs, "#BadRuns: ", len(bad_runs) )
 print("#E Fails: ", len(efails), efails)

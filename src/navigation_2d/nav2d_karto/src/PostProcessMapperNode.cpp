@@ -81,6 +81,8 @@ int main(int argc, char **argv)
 			scans.push_back(latest_scan_recv);
 			
 			int int_ts = (int)(10*latest_scan_recv.header.stamp.toSec());
+			if (ts_ind.find(int_ts) != ts_ind.end() )
+				printf("WEIRDDDDD: REPEATED SCAN TS: %i current index: %i \n", int_ts, ts_ind[int_ts]);
 			ts_ind[int_ts] = scans.size() - 1;
 			// std::cout << scan->header.stamp.toSec() << ", " << int_ts << ", " << ts_ind[int_ts] << std::endl;
 		}
@@ -91,6 +93,8 @@ int main(int argc, char **argv)
 
 		std::vector<tf::StampedTransform> gtposes; // pose corresponding to each scan.
 		std::vector<sensor_msgs::LaserScan> scans2; // store the scans for which we do have a pose.
+
+		std::map<int,int> ts_final_ind;
 
 		std::string txto;
 		std::ifstream stg_gt_log (argv[3]);
@@ -116,6 +120,9 @@ int main(int argc, char **argv)
 			int scaled_ts = 10*st_ts;
 			if (ts_ind.find(scaled_ts) != ts_ind.end())
 			{
+				if (ts_final_ind.find(scaled_ts) != ts_final_ind.end())
+					printf("WEIRDDDD!!!!! FINAL Ind ALREADY HAS TS %i, current final ind: %i \n", scaled_ts, ts_final_ind[scaled_ts]);
+
 				if (ts_ind[scaled_ts] > ind)
 					printf("WEIRD, Missed ind %i, current ind %i", ind, ts_ind[scaled_ts]);
 				// get x,y pos
@@ -148,6 +155,7 @@ int main(int argc, char **argv)
 				gtPos.setOrigin(tf::Vector3(newx,newy,newz));
 				print_tf(gtPos, "FINAL gtPos");
 
+				ts_final_ind[scaled_ts] = scans2.size();
 				gtposes.push_back( tf::StampedTransform(gtPos, ros::Time(st_ts), "/robot_0/odom", "/robot_0/base_laser_link" ) );
 				scans2.push_back(scans[ts_ind[scaled_ts]]);
 				ind = ts_ind[scaled_ts] + 1;
@@ -178,7 +186,7 @@ int main(int argc, char **argv)
 				
 				// printf("\n MU Exec at TS: %f, used scans with latestTS: %i, will processScans frm ind %i to %i [vec sz: %i]", mu_ts, last_scan_ts, start_ind, copy_until_ind, scans_i.size());
 				
-				printf("\n PROCESSING scans from ind %i to %i (TS: %f), vec size: %i", start_ind, copy_until_ind, scans[copy_until_ind].header.stamp.toSec(), scans_i.size() );
+				printf("\n PROCESSING scans from ind %i to %i (TS: %f), vec size: %i", start_ind, copy_until_ind, scans2[copy_until_ind].header.stamp.toSec(), scans_i.size() );
 				// process scans : mcb code
 				mapper.processLatestScans( scans_i, gtposes_i );
 				// generate map : mu code

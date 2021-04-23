@@ -9,6 +9,8 @@
 #include <map>
 #include <ctime>
 #include <chrono>
+#include <cmath>
+#include<iomanip>
 
 #include <fstream>
 #include <sstream>
@@ -75,6 +77,27 @@ void write_arr_to_file(std::vector<double>& tput, std::string s)
         	ROS_ERROR("Nav2d Navigator %s, Median, 95ile TPUT %f %f", s.c_str(), tput[sz/2], tput[(95*sz)/100]);
         	tput.clear();
 	}
+}
+
+void write_rt_arr_to_file(std::vector<float>& arr, std::string s)
+{
+	int sz = arr.size();
+	if (sz > 0)
+	{
+		std::string ename;
+		ros::NodeHandle nh;
+		nh.param<std::string>("/expt_name", ename, "");
+
+		std::ofstream of;
+		of.open("/home/ubuntu/robot_nav2d_" + ename + "_nav_rt_stats.txt", std::ios_base::app);
+
+		of << s << ": ";
+		for (int i = 0; i < arr.size(); i++)
+			of << std::fixed<<std::setprecision(2)<< arr[i] << " ";
+		of << "\n";
+		arr.clear();
+	}
+	
 }
 
 RobotNavigator::RobotNavigator(ros::Publisher& nc_pub)
@@ -421,6 +444,8 @@ bool RobotNavigator::preparePlan()
 
 	// Where am I?
 	if(!setCurrentPosition(1) || (get_pos_tf_error_ct>3)) return false;
+
+	np_odom_st_lat.push_back( (ros::Time::now() - current_np_st_ts).toSec() );
 
 	// Clear robot footprint in map
 	unsigned int x = 0, y = 0;
@@ -1411,6 +1436,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 			{
 				write_arrs_to_file(explore_cb_plan_times, explore_cb_plan_ts, "nav2d_navigator_plan");
 				write_arr_to_file(tput_nav_plan, "nav2d_navigator_plan");
+				write_rt_arr_to_file(np_odom_st_lat, "Lat_Odom_NP");
 			}
 		}
 		/*
@@ -1496,6 +1522,8 @@ void RobotNavigator::navGenerateCmdLoop()
 					mExploreActionServer->publishFeedback(fb);
 				}
 
+				nc_odom_st_lat.push_back( (ros::Time::now() - current_nc_st_ts).toSec() );
+				
 				// Create a new command and send it to Operator
 				generateCommand();
 				// ROS_ERROR("Generated command!");
@@ -1507,7 +1535,8 @@ void RobotNavigator::navGenerateCmdLoop()
 
 				explore_cb_cmd_times.push_back(cmd_t);
 				explore_cb_cmd_ts.push_back(exec_rt_end);
-			
+		
+
 				std_msgs::Header nc_ee;
 				nc_ee.frame_id = std::to_string(cmd_t) + " navc " + std::to_string(latest_mapCB_tf_ts_st_navc);
 				navc_exec_end_pub.publish(nc_ee);
@@ -1552,6 +1581,7 @@ void RobotNavigator::navGenerateCmdLoop()
 			{
 				write_arrs_to_file(explore_cb_cmd_times, explore_cb_cmd_ts, "nav2d_navigator_cmd");
 				write_arr_to_file(tput_nav_cmd, "nav2d_navigator_cmd");
+				write_rt_arr_to_file(nc_odom_st_lat, "Lat_Odom_NC");
 			}
 
 		}
@@ -1591,15 +1621,19 @@ bool RobotNavigator::setCurrentPosition(int x)
 		// Spinning here to get the latest tf's TS.
 		spinOnce();
 		mTfListener->lookupTransform(mMapFrame, mRobotFrame, Time(0), transform);
+		ros::Time t = transform.stamp_;
+		
 		if (x == 0)
 		{
 			current_mapCB_tf_navCmd_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavCmd.
 			current_mapCB_tf_navCmd_allScans_ts = current_mapper_tf_allScans_rt_ts;
+			current_nc_st_ts = transform.stamp_;
 		}
 		else if (x == 1)
 		{
 			latest_mapCB_tf_navPlan_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavPlan.
 			latest_mapCB_tf_navPlan_allScans_ts = current_mapper_tf_allScans_rt_ts;
+			current_np_st_ts = transform.stamp_;
 		}
 
 		// ROS_WARN("IN ROBOTNavigator:: setCurrentPosition, TS of TF bw /map and /base_footp : %f, x: %i", current_mapper_tf_scan_ts, x);

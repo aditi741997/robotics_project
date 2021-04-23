@@ -170,4 +170,9 @@ private:
 	int latest_mapCB_tf_ts_st_navc = 0; // comes with the hdr published along with the tf 
 	double latest_mapCB_allS_tf_ts_rt_navp, latest_mapCB_allS_tf_ts_rt_navc, latest_mapCB_tf_ts_rt_navp, latest_mapCB_tf_ts_rt_navc; // RT TS of latest scan processed before navc,navp fetch tf [wrt allscans processed vs only scans processed fully]
 	bool need_to_replan = true;
+
+	// Saving the latency wrt odom at NP,NC
+	std::vector<float> nc_odom_st_lat;
+	std::vector<float> np_odom_st_lat;
+	ros::Time current_nc_st_ts, current_np_st_ts;
 };
