@@ -72,7 +72,7 @@ public:
 
     // freq at which to publish.
     int total_recv_ct = 0;
-    std::atomic_int drop_fraction; // 1: dont drop anything.
+    std::atomic_int accept_ct, out_of_ct; // accept X out of X 1: dont drop anything.
 
     // Publisher, thread that'll publish.
     ros::Publisher sensor_pub;
@@ -101,7 +101,7 @@ public:
     void printVecStats(std::vector<double> v, std::string s);
 
     // ShimStreamNode();
-    ShimStreamNode(int f, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string subDF_topic);
+    ShimStreamNode(int accept_ct, int out_of_ct, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string subDF_topic);
 
 	std::ofstream pub_scan_ts_log;
 
@@ -120,10 +120,12 @@ protected:
 	void socket_recv();
 };
 
-ShimStreamNode::ShimStreamNode(int f, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string subDF_topic)
+ShimStreamNode::ShimStreamNode(int accept, int out_of, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string subDF_topic)
 {
 	// pub_scan_ts_log.open("shq_pubScan_log.csv");
-    drop_fraction = f;
+
+	accept_ct = accept;
+	out_of_ct = out_of;
 
     // dyn_f = boost::bind(&ShimStreamNode::callback, this, _1, _2);
     // dyn_server.setCallback(dyn_f);
@@ -182,9 +184,10 @@ void ShimStreamNode::callback(beginner_tutorials::cc_freqConfig &config, uint32_
 
 void ShimStreamNode::dropFCallback(const std_msgs::Header::ConstPtr& msg)
 {
-	ROS_ERROR("DROP FRACTION Changed from %i to %s", drop_fraction.load(), msg->frame_id.c_str());
+	// ROS_ERROR("DROP FRACTION Changed from %i to %s", drop_fraction.load(), msg->frame_id.c_str());
+	// TODO: Take accept/out_of params.
 	int x = std::atoi(msg->frame_id.c_str());
-	drop_fraction = x; // (int) std::atoi(msg->frame_id.c_str());
+	// drop_fraction = x; // (int) std::atoi(msg->frame_id.c_str());
 }
 
 void ShimStreamNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
@@ -268,7 +271,7 @@ void ShimStreamNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& ms
             latest_scan.intensities.push_back(msg->intensities[i]);
 
     }
-    if (total_recv_ct % drop_fraction == 0)
+    if (total_recv_ct % out_of_ct < accept_ct)
 	publishLatestData();
 
 	total_recv_ct += 1;
@@ -340,7 +343,7 @@ void ShimStreamNode::publishLatestDataMsg(const std_msgs::Header::ConstPtr& msg 
 int main(int argc, char **argv)
 {
     ros::init(argc, argv, "shim_STReam_node");
-    ShimStreamNode sfn( atof(argv[1]), argv[2], argv[3], argv[4], argv[5] );
+    ShimStreamNode sfn( atof(argv[1]), atof(argv[2]), argv[3], argv[4], argv[5], argv[6] );
     ros::spin();
     return 0;
 }
