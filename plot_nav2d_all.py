@@ -67,7 +67,8 @@ def get_num_collisions_run(ts_arr, ts_colln_arr, start_ts):
 
 def get_GTarea_time_data(exp_id):
 	# read OpeMap file: index by last_scan_ts.
-	arr = []
+        '''
+        arr = []
 	with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
                 for l in f.readlines():
                 	if 'ratio of unknown/total area' in l:
@@ -76,9 +77,14 @@ def get_GTarea_time_data(exp_id):
                                 known = mpsz - unk
 				scan_used_ts = int(l.split(' ')[6])
 				st_ts = float(l.split(' ')[2][:-2] )
-				arr.append( (known, scan_used_ts, st_ts) )
+                                #if ( (len(arr) == 0) or (arr[-1][1] < scan_used_ts) ):
+                                arr.append( (known, scan_used_ts, st_ts) )
+				#print("OPEMAP ARR: line: %s, appening: %i, %i, %f"%(l, known, scan_used_ts, st_ts) )
 	# read PPMap file, update known based on GTarea:
-	aind = 0
+	'''
+        pparr = []
+	last_used_tss = {}
+        # for each OpeMap val, we need the latest PPMap with scants <= val[scants].
 	with open("nav2d_PPMap_" + exp_id + ".err", 'r') as f:
 		for l in f.readlines():
 			if 'ratio of unknown/total area' in l:
@@ -86,15 +92,37 @@ def get_GTarea_time_data(exp_id):
                                 unk = float(l.split(' ')[-3])
                                 known = mpsz - unk
                                 scan_used_ts = int(l.split(' ')[5])							
-				if (scan_used_ts == arr[aind][1]):
+                                if scan_used_ts in last_used_tss:
+                                    print("WEIRDDDD!!!! Repeated last_Scan_used TS!!! ", known, scan_used_ts, " last known area:", last_used_tss[scan_used_ts])
+				
+                                pparr.append((known, scan_used_ts))
+                                last_used_tss[scan_used_ts] = known
+				
+                                '''
+				if (scan_used_ts <= arr[aind][1]):
 					ithlist = list(arr[aind])
 					ithlist[0] = known
 					arr[aind] = tuple(ithlist)
-					print("MODIFYING MapperMap ts %i, ST TS %f, new known ar: %i %i"%(scan_used_ts, arr[aind][2], arr[aind][0], known) )
-					aind += 1
+					#print("MODIFYING MapperMap ts %i, ST TS %f, new known ar: %i %i"%(scan_used_ts, arr[aind][2], arr[aind][0], known) )
 				else:
-					print("WEIRD!!!!! GTMap TS %i and MapperMap %i TS dont match!"%(scan_used_ts, arr[aind][1]) )
-	return arr
+					aind += 1
+				#else:
+					#print("WEIRD!!!!! GTMap TS %i and MapperMap %i TS dont match! aind %i, len(opeMapArr) %i "%(scan_used_ts, arr[aind][1], aind, len(arr) ) )
+				'''
+	'''
+        aind = 0
+	pind = 0
+	while aind < len(arr):
+		# find the latest for aind
+		while pind < len(pparr) and pparr[pind][1] <= arr[aind][1]:
+			ithlist = list(arr[aind])
+			ithlist[0] = known
+			arr[aind] = tuple(ithlist)
+			pind += 1
+		print("foR aind %i last scan ts: %i, PP index: %i last scan ts: %i"%(aind, arr[aind][1], pind-1, pparr[pind-1][1]))
+		aind += 1
+	'''
+        return pparr
 
 import math
 small_map = ((sys.argv[1]) == "small" ) # whether its the small map
@@ -528,11 +556,11 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = [ "DefaultQNO_1c" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
+expts = [ "StaticQNO1_1c" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
 
 #runs = range(5, 8) + range(31,48)
-runs = range(1,11)
-for badr in []: #57,89]: #[3,20,25,28,31,40,51,55]:
+runs = range(1,4)
+for badr in [2]: #[2,5,8,15,17]: #57,89]: #[3,20,25,28,31,40,51,55]:
     runs.remove(badr)
 print(runs, len(runs))
 
@@ -981,7 +1009,8 @@ for i in expts:
                 zip_at = [] # time arr same for GT and mapper area.
 		zip_aa = []
                 zip_aGTa = []
-		zip_as = { 100: {}} # 20s RT ~100s ST.
+		zip_aGTt = []
+                zip_as = { 100: {}} # 20s RT ~100s ST.
                 zip_GTas = { 100: {}}
 		if smallest_map:
                     zip_as[50] = {}
@@ -990,9 +1019,13 @@ for i in expts:
                 run_stime_to_area = {}
 		run_stime_to_gt_area = {}
 
+		# returns (known, last scan used TS)
 		gt_known_scants_ts_arr = get_GTarea_time_data(exp_id) #(gt_known_arr, scan_ts_used_arr, gt_st_arr) 
                 gt_ind = 0
 		last_known_gt_area = 0.0
+		zip_aGTa = [x[0] for x in gt_known_scants_ts_arr]
+		zip_aGTt = [x[1]/10.0 for x in gt_known_scants_ts_arr]
+		
 		with open("nav2d_robot_logs_OpeMap_" + exp_id + ".err", 'r') as f:
 			for l in f.readlines():
 				if 'ratio of unknown/total area' in l:
@@ -1010,10 +1043,8 @@ for i in expts:
                                         except:
 						print("ERROR in line %s in getting area stuff!!"%(l) )
                                                 raise
-                                   	gt_known = gt_known_scants_ts_arr[gt_ind][0]
-					zip_aGTa.append(gt_known)
-					if ( gt_known_scants_ts_arr[gt_ind][2] != float(l.split(' ')[2][:-2]) ):
-						print("ERROR IN GT AREA %f | AREA %f : wrong TS:", gt_known_scants_ts_arr[gt_ind][2], float(l.split(' ')[4]))
+					#if ( gt_known_scants_ts_arr[gt_ind][2] != float(l.split(' ')[2][:-2]) ):
+                                            #print("ERROR IN GT AREA %f | AREA %f : wrong TS:", gt_known_scants_ts_arr[gt_ind][2], float(l.split(' ')[2][:-2]))
 
 					if ( (known >= 0.8*opt_total_Area) and (last_known_area < 0.8*opt_total_Area) ):
                                             time_80area.append( float(l.split(' ')[4]) - start_i )
@@ -1031,12 +1062,17 @@ for i in expts:
                                                 run_stime_to_area[k] = round( float(l.split(' ')[2][:-2]) - start_st_i, 3 )
                                                 if ratio > 0.6:
 							print("Adding line %s to ratio %f"%(l, ratio) )
-					    if ( (gt_known >= ratio*opt_total_gtArea) and (last_known_gt_area < ratio*opt_total_gtArea) ):
-						time_st_gt_areas[k].append(round(gt_known_scants_ts_arr[gt_ind][2] - start_st_i,3) )
-						run_stime_to_gt_area[k] = round(gt_known_scants_ts_arr[gt_ind][2] - start_st_i,3)
 					last_known_area = known
-					last_known_gt_area = gt_known
 					gt_ind += 1
+                
+                for gti in gt_known_scants_ts_arr:
+                    for k in time_st_areas.keys():
+                        ratio = float(k)/100.0
+                        if ( (gti[0] >= ratio*opt_total_gtArea) and (last_known_gt_area < ratio*opt_total_gtArea) ):
+                            time_st_gt_areas[k].append( round(gti[1]/10.0 - start_st_i,3) )
+                            run_stime_to_gt_area[k] = round(gti[1]/10.0 - start_st_i,3)
+                    last_known_gt_area = gti[0]
+                
                 time_to_areas.append( run_time_to_area )
                 stime_to_areas.append( run_stime_to_area )
                 stime_to_gt_areas.append( run_stime_to_gt_area )
@@ -1047,7 +1083,7 @@ for i in expts:
                         zip_as[zk][si] = agg_timearea[si][-1] # last area val covered in each timeslot.
                     area_time_agg_dict[zk].append( zip_as[zk] )
 
-		    agg_timeGTarea = aggregate_over_time(zip_aGTa, zip_at, start_st_i, zk, end_st_i)
+		    agg_timeGTarea = aggregate_over_time(zip_aGTa, zip_aGTt, start_st_i, zk, end_st_i)
 		    for si in agg_timeGTarea.keys():
 			zip_GTas[zk][si] = agg_timeGTarea[si][-1]
 		    gt_area_time_agg_dict[zk].append( zip_GTas[zk] )			
@@ -1055,9 +1091,11 @@ for i in expts:
                 for rx in added_to_area_times.keys():
 			if (last_known_area < (rx*opt_total_Area)):
 				print("WEIRDDD!!! Final area %f < %f * opt!!!"%(last_known_area, rx) )
+		
+                run_total_gtareas.append(last_known_gt_area)
+                
                 runlevel_total_area_expl[exp_id] = last_known_area
 		run_totalareas.append(last_known_area)
-		run_total_gtareas.append(last_known_gt_area)
 		new_area_cov_Agg = aggregate_over_time(new_area_covered, new_area_covered_ts, start_i, slot, end_i)
 		sum_new_area_cov_agg = {}
 		for k in new_area_cov_Agg.keys():
@@ -1101,6 +1139,7 @@ for i in expts:
 	#print("NEW Area Agg array across runs: ", new_area_agg)
 	run_level_total_times.append(run_total_times)
         print("For i= ", i, ", run-TotalArea Explored:", run_totalareas)
+        print("-")
         print("For i= ", i, ", run-TotalGROUNDTRUTHArea Explored:", run_total_gtareas)
 	
 	runlevel_med_totalarea.append( (sorted(run_totalareas)[ numrun ])/opt_total_Area ) #median over all runs.
@@ -1164,14 +1203,21 @@ for i in expts:
 
         print("FOR expt %s, area-time zip arr : %s"%( i, str(area_time_zip_arr) ))
         print("FOR expt %s, area-time slot-wise agg : %s" %(i, str(area_time_agg_dict) ) )
-        print("FOR expt %s, GROUNDTRUTH area-time slot-wise agg : %s" %(i, str(gt_area_time_agg_dict) ) )
+        print("-")
+	print("FOR expt %s, GROUNDTRUTH area-time slot-wise agg : %s" %(i, str(gt_area_time_agg_dict) ) )
+        print("-")
         print("FOR expt %s, colln array : %s"%(i, str(colln_count_arr) ) )
+        print("-")
         #print("Time to cover Xp area : ", time_to_areas)
         print("SimTime to cover Xp area : ", stime_to_areas)
+        print("-")
         print("SimTime to cover Xp GROUNDTRUTH area : ", stime_to_gt_areas)
+        print("-")
 	#print("SimTime to cover #blocks PHYArea", run_time_phyarea)
         print("FOR expt %s, clean finish arr : %s"%(i, clean_finish_arr) )
+        print("-")
 	print("for EXPT %s, run_expl_finished ARR: %s"%(i, str(run_finish_arr) ) )
+        print("-")
 	print("FOR EXPT %s, runs_colln_end_arr : %s "%(i, str(runs_colln_end_arr)) )
 
         counts_80area.append( len(time_80area) )
