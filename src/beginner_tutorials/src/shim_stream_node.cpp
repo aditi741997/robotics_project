@@ -37,6 +37,8 @@
 #include <netinet/tcp.h>
 #include <netdb.h>
 
+#include <atomic>
+
 double get_time_now()
 {
 	/*
@@ -57,7 +59,7 @@ double get_time_now()
 	return time_now;
 }
 
-class ShimFreqNode
+class ShimStreamNode
 {
 public:
     // subscribe to and store latest sensor data.
@@ -66,20 +68,22 @@ public:
     void scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg);
     // can add a separate func. for each msg type....
     
+    void dropFCallback(const  std_msgs::Header::ConstPtr& msg);
+
     // freq at which to publish.
-    double freq;
+    int total_recv_ct = 0;
+    std::atomic_int drop_fraction; // 1: dont drop anything.
 
     // Publisher, thread that'll publish.
     ros::Publisher sensor_pub;
     void publishLatestDataMsg(const std_msgs::Header::ConstPtr& msg);
-    void publishLatestDataTimer(const ros::WallTimerEvent& event);
     void publishLatestData();
 
     ros::Publisher thread_exec_info_pub, s_exec_end_pub;
 
     bool use_td;
-    ros::Subscriber trigger_cc_sub; // publish on getting trigger from scheduler.
-    ros::WallTimer sensor_data_publish_thread;
+    // ros::Subscriber trigger_cc_sub; // publish on getting trigger from scheduler.
+	ros::Subscriber dropf_sub; // get drop fraction from scheduler.
 
     ros::NodeHandle nh;
 
@@ -96,8 +100,8 @@ public:
 
     void printVecStats(std::vector<double> v, std::string s);
 
-    // ShimFreqNode();
-    ShimFreqNode(double f, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string use_td_s);
+    // ShimStreamNode();
+    ShimStreamNode(int f, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string subDF_topic);
 
 	std::ofstream pub_scan_ts_log;
 
@@ -116,72 +120,30 @@ protected:
 	void socket_recv();
 };
 
-ShimFreqNode::ShimFreqNode(double f, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string use_td_s)
+ShimStreamNode::ShimStreamNode(int f, std::string sub_topic, std::string pub_topic, std::string msg_type, std::string subDF_topic)
 {
-	pub_scan_ts_log.open("shq_pubScan_log.csv");
-    freq = f;
+	// pub_scan_ts_log.open("shq_pubScan_log.csv");
+    drop_fraction = f;
 
-    // dyn_f = boost::bind(&ShimFreqNode::callback, this, _1, _2);
+    // dyn_f = boost::bind(&ShimStreamNode::callback, this, _1, _2);
     // dyn_server.setCallback(dyn_f);
 
     if (msg_type.compare("scan") == 0)
     {
 	// queue len : 1.
-        sensor_sub = nh.subscribe(sub_topic, 1, &ShimFreqNode::scanDataCallback, this, ros::TransportHints().tcpNoDelay() );
+        sensor_sub = nh.subscribe(sub_topic, 1, &ShimStreamNode::scanDataCallback, this, ros::TransportHints().tcpNoDelay() );
         
         sensor_pub = nh.advertise<sensor_msgs::LaserScan> (pub_topic, 1);
         ROS_WARN("SHIM Node for type scan, Subscribed to topic %s, Will publish to topic %s", sub_topic.c_str(), pub_topic.c_str());
     }
+    dropf_sub = nh.subscribe(subDF_topic, 1, &ShimStreamNode::dropFCallback, this, ros::TransportHints().tcpNoDelay() );
 
     ros_last_recv_ts = 0.0;
     real_last_recv_ts = 0.0;
 
-    thread_exec_info_pub = nh.advertise<std_msgs::Header>("/robot_0/exec_start_s", 100, true);
-    s_exec_end_pub = nh.advertise<std_msgs::Header>("/robot_0/exec_end_s", 1, false);
-
-    // start thread for publishing :
-    // Dont need this thread if Scheduler triggers CC:
-    
-    // publishing based on DAGController's msgs:
-    // trigger_cc_sub = nh.subscribe("/robot_0/trigger_exec_s" , 1, &ShimFreqNode::publishLatestData, this, ros::TransportHints().tcpNoDelay());
-
-
-    use_td = (use_td_s.find("yes") != std::string::npos );
-    ROS_ERROR("VALUE of use_td : %i, string : %s", use_td, use_td_s.c_str());
-
-    if (use_td)
-    	sensor_data_publish_thread = nh.createWallTimer(ros::WallDuration(1.0/freq), &ShimFreqNode::publishLatestDataTimer, this);
-    else
-    {
-	    // for getting triggers via socket:
-	errno = 0; // resetting before starting socket stuff.
-	client_sock_fd = socket(AF_INET, SOCK_STREAM, 0);
-	// if (client_sock_fd < 0)
-		ROS_ERROR("SHIMFreqNode:: SOCKET: client_sock_fd is %i !", client_sock_fd);
-	
-	struct sockaddr_in serv_addr;
-	serv_addr.sin_family = AF_INET;
-	serv_addr.sin_port = htons(5327);
-
-	int pton_ret = inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr);
-	// if ( pton_ret <= 0 )
-		ROS_ERROR("SHIMFreqNode:: SOCKET: in inet_pton %i", pton_ret);
-
-	int con_ret = connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr));
-	// if ( connect(client_sock_fd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0 )
-	// if (con_ret < 0)
-	{
-		 ROS_ERROR("SHIMFreqNode:: SOCKET: Done with connecting, retval: %i, errno: %i, err str: %s !!!", con_ret, errno, std::strerror(errno) );
-		std::cerr << std::strerror(errno) << std::endl;
-	}
-
-	sock_recv_thread = boost::thread(&ShimFreqNode::socket_recv, this);
-
-    }
-
    }
 
-void ShimFreqNode::socket_recv()
+void ShimStreamNode::socket_recv()
 {
 	std::string s = "s\n";
 	char smsg[1+s.length()];
@@ -192,7 +154,7 @@ void ShimFreqNode::socket_recv()
 	int ret = 7;
 	struct sched_param sp = { .sched_priority = 3,};
 	ret = sched_setscheduler(::gettid(), SCHED_FIFO, &sp);
-	ROS_ERROR("ShimFreqNode Socket_recv thread set priority to 3, retval: %i, tid: %i", ret, ::gettid());
+	ROS_ERROR("ShimStreamNode Socket_recv thread set priority to 3, retval: %i, tid: %i", ret, ::gettid());
 
 	int read_size;
 	char msg [2048];
@@ -205,20 +167,27 @@ void ShimFreqNode::socket_recv()
 		publishLatestData();
 	}
 	if(read_size == 0)
-		ROS_ERROR("ShimFreqNode::socket_recv THREAD: Client disconnected!!");
+		ROS_ERROR("ShimStreamNode::socket_recv THREAD: Client disconnected!!");
 	else if(read_size == -1)
-		ROS_ERROR("ShimFreqNode::socket_recv THREAD: Client read error!!");
+		ROS_ERROR("ShimStreamNode::socket_recv THREAD: Client read error!!");
 }
 
 /*
-void ShimFreqNode::callback(beginner_tutorials::cc_freqConfig &config, uint32_t level) {
+void ShimStreamNode::callback(beginner_tutorials::cc_freqConfig &config, uint32_t level) {
 	// config.cc_freq
 	ROS_WARN("RECEIVED NEW config!! NEW freq: %f", config.cc_freq);
-	// sensor_data_publish_thread = nh.createWallTimer(ros::WallDuration(1.0/config.cc_freq), &ShimFreqNode::publishLatestData, this);
+	// sensor_data_publish_thread = nh.createWallTimer(ros::WallDuration(1.0/config.cc_freq), &ShimStreamNode::publishLatestData, this);
 }
 */
 
-void ShimFreqNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
+void ShimStreamNode::dropFCallback(const std_msgs::Header::ConstPtr& msg)
+{
+	ROS_ERROR("DROP FRACTION Changed from %i to %s", drop_fraction.load(), msg->frame_id.c_str());
+	int x = std::atoi(msg->frame_id.c_str());
+	drop_fraction = x; // (int) std::atoi(msg->frame_id.c_str());
+}
+
+void ShimStreamNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
 {
 	if (ros_recv_deltas.size() < 7)
 	{
@@ -299,9 +268,14 @@ void ShimFreqNode::scanDataCallback(const sensor_msgs::LaserScan::ConstPtr& msg)
             latest_scan.intensities.push_back(msg->intensities[i]);
 
     }
+    if (total_recv_ct % drop_fraction == 0)
+	publishLatestData();
+
+	total_recv_ct += 1;
+
 }
 
-void ShimFreqNode::printVecStats(std::vector<double> v, std::string st)
+void ShimStreamNode::printVecStats(std::vector<double> v, std::string st)
 {
     std::sort(v.begin(), v.end());
     if (v.size() > 0)
@@ -311,7 +285,7 @@ void ShimFreqNode::printVecStats(std::vector<double> v, std::string st)
     }
 }
 
-void ShimFreqNode::publishLatestData()
+void ShimStreamNode::publishLatestData()
 {
 	struct timespec exec_start, exec_end;
 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &exec_start);
@@ -319,6 +293,7 @@ void ShimFreqNode::publishLatestData()
 	double time_now = get_time_now();
 	
 	//publish thread id info.
+	/*
 	if (pub_count < 91)
 	{
 		ROS_INFO("SHQ:: PUBLISHING s TID: %i", ::gettid());
@@ -328,13 +303,13 @@ void ShimFreqNode::publishLatestData()
         	hdr.frame_id = ss_e.str();
 		thread_exec_info_pub.publish(hdr);
 	}
-
+	*/
         pub_count += 1;
         
         if (scan_pub_tput.size()%500 == 111)
 	{
 		ROS_WARN("NEGATIVE LATENCY Ratio: %f", (float)neg_lat_count/pub_count);
-		printVecStats(scan_pub_tput, "SHQ:ScanPubTput");
+		printVecStats(scan_pub_tput, "ShimStream:ScanPubTput");
 	}
 	
 	{
@@ -342,11 +317,11 @@ void ShimFreqNode::publishLatestData()
 		if ( (time_now - latest_scan.scan_time) < -0.004)
 		{
 			neg_lat_count += 1;
-			ROS_ERROR("-VE LAT: ShimFreqNode: Publishing scan!!!! with realTS %f, time_now: %f", latest_scan.scan_time, time_now);
+			ROS_ERROR("-VE LAT: ShimStreamNode: Publishing scan!!!! with realTS %f, time_now: %f", latest_scan.scan_time, time_now);
 		}
 		// else
-			// ROS_WARN("ShimFreqNode: Publishing scan!!!! with realTS %f", latest_scan.scan_time);
-		pub_scan_ts_log << latest_scan.scan_time << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
+			// ROS_WARN("ShimStreamNode: Publishing scan!!!! with realTS %f", latest_scan.scan_time);
+		// pub_scan_ts_log << latest_scan.scan_time << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
 
 		// publish latest_scan...
 		sensor_pub.publish(latest_scan);
@@ -354,28 +329,18 @@ void ShimFreqNode::publishLatestData()
 		if (pub_count > 1)
                 	scan_pub_tput.push_back(time_now - last_pub_ts);
         	last_pub_ts = time_now;
-
-		clock_gettime(CLOCK_THREAD_CPUTIME_ID, &exec_end);
-		std_msgs::Header s_exec_time;
-		s_exec_time.frame_id = std::to_string( (exec_end.tv_sec + 1e-9*exec_end.tv_nsec ) - ( exec_start.tv_sec + 1e-9*exec_start.tv_nsec ) ) + " s";
-		s_exec_end_pub.publish(s_exec_time);
 	}
 }
 
-void ShimFreqNode::publishLatestDataMsg(const std_msgs::Header::ConstPtr& msg ) //ros::WallTimerEvent& event
+void ShimStreamNode::publishLatestDataMsg(const std_msgs::Header::ConstPtr& msg ) //ros::WallTimerEvent& event
 {
 	publishLatestData();	
 }
 
-void ShimFreqNode::publishLatestDataTimer(const ros::WallTimerEvent& event)
-{
-	publishLatestData();
-}
-
 int main(int argc, char **argv)
 {
-    ros::init(argc, argv, "shim_freq_node");
-    ShimFreqNode sfn( atof(argv[1]), argv[2], argv[3], argv[4], argv[5] );
+    ros::init(argc, argv, "shim_STReam_node");
+    ShimStreamNode sfn( atof(argv[1]), argv[2], argv[3], argv[4], argv[5] );
     ros::spin();
     return 0;
 }
