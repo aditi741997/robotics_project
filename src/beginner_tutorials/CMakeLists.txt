@@ -3,13 +3,18 @@ SET(CMAKE_CXX_FLAGS "-O2 -std=c++11")
 project(beginner_tutorials)
 
 ## Find catkin and any catkin packages
-find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs cv_bridge sensor_msgs genmsg)
+find_package(catkin REQUIRED COMPONENTS roscpp rospy std_msgs cv_bridge sensor_msgs genmsg dynamic_reconfigure)
 
 find_package(OpenCV REQUIRED)
 find_package(PythonLibs REQUIRED)
 
 ## Generate added messages and services
 generate_messages(DEPENDENCIES std_msgs sensor_msgs)
+
+##generate_dynamic_reconfigure_options(
+  ##cfg/cc_freq.cfg
+##)
+
 
 ## Declare a catkin package
 catkin_package(INCLUDE_DIRS include)
@@ -32,8 +37,10 @@ set(MOSEK_LIB_SRC
 
 add_library(${PROJECT_NAME}
         src/dag.cpp
-	src/dag_controller_node.cpp
-        ${MOSEK_LIB_SRC})
+	src/dag_controller_be.cpp
+	src/dag_multi_core_approx.cpp
+	src/dag_mc.cpp
+	${MOSEK_LIB_SRC})
 
 add_executable(publisher src/publisher.cpp)
 target_link_libraries(publisher ${catkin_LIBRARIES})
@@ -65,6 +72,11 @@ add_executable(shimfreqnode src/shim_freq_node.cpp)
 target_link_libraries(shimfreqnode ${catkin_LIBRARIES})
 add_dependencies(shimfreqnode beginner_tutorials_generate_messages_cpp)
 
-add_executable(dag_controller src/dag_controller_node.cpp src/dag_controller_be.cpp src/dag.cpp ${MOSEK_LIB_SRC})
+add_executable(shimstreamnode src/shim_stream_node.cpp)
+target_link_libraries(shimstreamnode ${catkin_LIBRARIES})
+add_dependencies(shimstreamnode beginner_tutorials_generate_messages_cpp)
+
+
+add_executable(dag_controller src/dag_controller_node.cpp src/dag_controller_be.cpp src/dag_mc.cpp src/dag_multi_core_approx.cpp src/dag.cpp ${MOSEK_LIB_SRC})
 target_link_libraries(dag_controller ${catkin_LIBRARIES} ${MOSEK_LIBRARY})
 add_dependencies(dag_controller beginner_tutorials_generate_messages_cpp)
