@@ -91,6 +91,7 @@ per_run_drops_ratio = []
 per_run_scan_lat = []
 aggregate_navc_tput = []
 
+per_run_navc_ts = []
 node_tputs = {} # node name -> array
 
 for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_plan"]:
@@ -200,7 +201,11 @@ for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_p
         if ("_plan" in fname and (len(ts) > 0) ):
 		per_run_navp_ts.append(get_rel_ts_arr(ts))
 		per_run_navp_time.append(times)
-	if len(scan_count) > 0:
+
+        if ("_cmd" in fname  and (len(ts) > 0) ):
+                per_run_navc_ts.append(get_rel_ts_arr(ts))
+
+        if len(scan_count) > 0:
             msc = max(scan_count)
             # scan_count = [ (x*0.1/msc) for x in scan_count]
             print("Scan ct 1st: %i, last: %i"%(scan_count[0], scan_count[-1]) )
@@ -245,9 +250,10 @@ print("-")
 print("\n \n PER RUN NAVP CI : ", per_run_navp_time, '\n')
 print("-")
 print("-")
-print("\n \n PER RUN NAVP TS: ", per_run_navp_ts)
 print("-")
 print("-")
 print("PER RUN DROPS RATIO: , avg ratio : %f, median ratio : %f", per_run_drops_ratio, sum(per_run_drops_ratio)/len(per_run_drops_ratio), np.median(per_run_drops_ratio) )
 '''
+print("\n \n PER RUN NAVP TS: ", per_run_navp_ts)
+print("\n \n PER RUN NAVC TS: ", per_run_navc_ts)
 print("\n \n PER RUN SCAN LATENCY AT MAPCB : ", len(per_run_scan_lat), per_run_scan_lat)

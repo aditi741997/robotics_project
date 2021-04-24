@@ -91,22 +91,34 @@ end_run_ind = int(sys.argv[6])
 aggregate_chain_lats = {}
 aggregate_chain_rts = {}
 
+per_run_chain_lats = {}
+
+nav_chains = int(sys.argv[7])
+
+arr_chains = ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"] if (nav_chains==0) else ["Odom_NC", "Odom_NP"]
+
+fname_append = "_nav" if nav_chains else ""
+
 for run in range(start_run_ind,end_run_ind+1):
-        for chain in ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP", "Scan_All_MapCB_NavCmd_LP", "Scan_All_MapCB_NavPlan_NavCmd_LP"]:
+        #for chain in ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]:
+	for chain in arr_chains:
                 print "Starting chain", chain
                 if chain not in aggregate_chain_lats:
                     aggregate_chain_lats[chain] = []
 		    aggregate_chain_rts[chain] = []
+                    per_run_chain_lats[chain] = []
                 rts = []
                 lats = []
                 tputs = []
                 ts = []
-                with open(rt_fname_pre + "_run" + str(run) + "_rt_stats.txt", 'r') as f:
+                lat_txt = "Lat_" if nav_chains else "Latency"
+                with open(rt_fname_pre + "_run" + str(run) + fname_append + "_rt_stats.txt", 'r') as f:
                         fl = f.readlines()
                         for l in fl:
                                 if chain in l:
-                                        if "Latency" in l:
-                                                lats += [ float(x) for x in l.split(' ')[1:-1] ]
+                                        #if "Latency" in l:
+                                        if lat_txt in l:
+					        lats += [ float(x) for x in l.split(' ')[1:-1] ]
                                         elif "Tput" in l:
                                                 tputs += [ float(x) for x in l.split(' ')[1:-1] ]
                                         elif "RT_" in l:
@@ -120,6 +132,8 @@ for run in range(start_run_ind,end_run_ind+1):
                 #print("\n \n ARR Lat FOR chain %s : %s"%( chain, str(lats) ) )
                 #if "Scan_LC" in chain:
                         #print("\n \n ARR RT FOR chain %s : %s"%( chain, str(rts) ) )
+                print(chain, len(lats))
+                per_run_chain_lats[chain].append(lats)
                 if len(ts) > 1:
                         '''
                         plot_smt(ts, lats, 'bo:', " Latency", chain, yls[chain])
@@ -141,17 +155,23 @@ for run in range(start_run_ind,end_run_ind+1):
                         '''
 		random.shuffle(rts)
 		aggregate_chain_rts[chain] += rts[:100]
-		random.shuffle(lats)
-		aggregate_chain_lats[chain] += lats[:100]
+                random.shuffle(lats)
+		aggregate_chain_lats[chain] += lats[:200]
 
-per_chain_count = {"Scan_LC_LP": 1000, "Scan_MapCB_MapU_NavP_NavC_LP": 1000, "Scan_MapCB_NavCmd_LP": 10, "Scan_MapCB_NavPlan_NavCmd_LP": 10, "Scan_All_MapCB_NavCmd_LP": 10, "Scan_All_MapCB_NavPlan_NavCmd_LP": 10}
+
+#per_chain_count = {"Scan_LC_LP": 1000, "Scan_MapCB_MapU_NavP_NavC_LP": 1000, "Scan_MapCB_NavCmd_LP": 10, "Scan_MapCB_NavPlan_NavCmd_LP": 10}
+per_chain_count = {}
+for ch in arr_chains:
+    per_chain_count[ch] = 1
+
+for k in per_run_chain_lats:
+    print(k, "LAT ORDERED WRT TIME:", per_run_chain_lats[k])
+    print('---')
+
 for ch in per_chain_count:
     random.shuffle(aggregate_chain_lats[ch])
     lch = len(aggregate_chain_lats[ch])
-    if ch == "Scan_LC_LP":
-	print(ch, "RT: ", aggregate_chain_rts[ch])
-    else:
-	print(ch, "LAT: ", aggregate_chain_lats[ch])
+    print("RANDOM SUBSET: ", ch, aggregate_chain_lats[ch])
     #print(aggregate_chain_lats[ch][:lch/5], ch)
     #print("AGGREGATE LAT for chain ", ch, " median: %f, 75ile: %f, 95ile: %f"%(np.median(aggregate_chain_lats[ch]), np.percentile(aggregate_chain_lats[ch], 75), np.percentile(aggregate_chain_lats[ch], 95) ) )
     print('-')
