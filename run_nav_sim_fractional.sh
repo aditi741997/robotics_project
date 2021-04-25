@@ -20,18 +20,19 @@ do
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in 1 #54 57 58 67 77 {98..101} 
+						for run in {1..3} #54 57 58 67 77 {98..101} 
 						do
 							rosclean purge -y
 							rm ../robot_nav2d_obstacleDist_logs_.txt
 							rm ../mapper_scansPose_.txt
 							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage_noobst.launch &
 							sleep 27s
-							ename="StaticQNO1_1c_run$run"
+							ename="StaticQNO4d_1c_run$run"
 							
 							echo "DELETING OLD LOGFILES For this expt:"
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
 							rm "../robot_nav2d_${ename}_rt_stats.txt"
+							rm "../robot_nav2d_${ename}_nav_rt_stats.txt"
 							rm "../mapper_scansPose_${ename}.txt"
 							mapcb_procscans_name="../nav2d_stage_scans_${ename}.bag"
 							rm $mapcb_procscans_name 
@@ -54,10 +55,11 @@ do
 							#For slowing down navp: 
 							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_75p_smallnavp" $td "no" 16 63 3 63 1 1 1 0 > $dagcontOname 2> $dagcontEname &
 							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_95p_smallest" $td "no" 74 98 1 74 1 1 1 0 > $dagcontOname 2> $dagcontEname &
-							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_final_small" $td "no" 2 100 1 86 1 1 1 0 > $dagcontOname 2> $dagcontEname & 
+							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_95p_small" $td "no" 2 56 1 50 1 1 1 0 > $dagcontOname 2> $dagcontEname & 
 							sleep 4s
 							taskset -a -c 1 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" $td > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
 							
+							taskset -a -c 1 rosrun beginner_tutorials shimstreamnode 3 5 "/robot_0/base_scan1" "/robot_0/base_scan2" "scan" "/robot_0/mcb_scan_dropF" > "nav2d_shimstream_logs_${ename}.out" 2> "nav2d_shimstream_logs_${ename}.out" &
 							# Start evt with prio=1, in any core.
 							sleep 2s
 							taskset -a -c 0 roslaunch nav2d_tutorials tutorial4_robot.launch 2> $opeMapFname &
@@ -136,7 +138,7 @@ do
 									echo "Something DIED in SOME node!!", $xnav, $xmap, $xdag
 								fi
 								echo "j&t: ", $j, $t
-								timelimit=16 # divide timelimit=800s by sleeptime=5s.
+								timelimit=17 # divide timelimit=800s by sleeptime=5s.
 								if [ $t = $timelimit ]; then
 									j=2
 									echo "!!!!!~~~%%% EXPLORATION DIDNT FINISH EVEN IN ", $timelimit, "For: ", $ename, $td, $ccF, $mcbF, $muF, $navcF, $navpF
@@ -149,7 +151,7 @@ do
 							rosrun map_server map_saver -f $ename map:=/robot_0/map &
 							sleep 5s
 							echo "Killing all procs now!"
-							for pname in measure_cpu dag_controller operator map_saver navigator mapper joy_node shimfreqnode rviz remote_joy stage get_map_client explore_client set_goal_client move_dynamic_obst
+							for pname in shimstream measure_cpu dag_controller operator map_saver navigator mapper joy_node shimfreqnode rviz remote_joy stage get_map_client explore_client set_goal_client move_dynamic_obst
 							do
 							    echo "Killing_$pname"
 							    kill -15 $(ps -ef | grep $pname | grep -v grep | awk '{print $2}') #| xargs kill -15
