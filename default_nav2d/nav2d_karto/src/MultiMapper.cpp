@@ -653,6 +653,7 @@ MultiMapper::MultiMapper()
 			write_arr_to_file<double>(scan_lat, ss, "lat");
 		}
 
+		/*
 		if (save_scan)
 		{
 			ROS_ERROR("SUCCESSFULLY Processed scan with ST TS: %f, RT TS: %f", scan->header.stamp.toSec(), scan->scan_time);
@@ -693,6 +694,7 @@ MultiMapper::MultiMapper()
 			processed_scans_bag.write("/robot_0/processed_scans", scan->header.stamp, latest_scan_recv);
 			processed_scans_bag.close();
 		}
+		*/
 	}
 
 	bool MultiMapper::getMap(nav_msgs::GetMap::Request  &req, nav_msgs::GetMap::Response &res)
@@ -807,6 +809,23 @@ MultiMapper::MultiMapper()
 		const karto::LocalizedLaserScanList allScans = mMapper->GetAllProcessedScans();
 		double using_scan_mapCB_ts = allScans[allScans.Size()-1]->getScanTimeStamp();
 		ros::Time ts_rost = ros::Time(using_scan_mapCB_ts);
+
+		double timenow = get_time_now();
+        	if ((timenow - last_scans_pose_save_ts) > 10.0)
+		{
+			std::string ename;
+			ros::NodeHandle nh;
+			nh.param<std::string>("/expt_name", ename, "");
+			std::ofstream of;
+			of.open( ("/home/ubuntu/mapper_scansPose_" + ename + ".txt").c_str(), std::ios_base::app);
+			of << ros::Time::now().toSec() << " MU \n";
+			for (int i = 0; i < allScans.Size(); i++)
+			{
+				karto::Pose2 pi = allScans[i]->GetCorrectedPose();
+				of << allScans[i]->getScanSTTimeStamp() << " " << pi.GetX() << " " << pi.GetY() << " " << pi.GetHeading() << " \n";
+			}
+			last_scans_pose_save_ts = timenow;
+		}
 
 		int using_scan_mapCB_st_ts = allScans[allScans.Size()-1]->getScanSTTimeStamp();
 

@@ -130,6 +130,8 @@ private:
 	std::vector<bool> scan_pose_ts;
 	
 	std::vector<double> scan_lat, scan_wall_time;
+
+	double last_scans_pose_save_ts = 0.0; // for saving pose of processed scans.
 };
 
 #endif
