@@ -29,6 +29,7 @@
 #define RENDER_PLUGIN_NAME "5"
 #define IMU_PLUGIN_NAME "7"
 #define CAM_PLUGIN_NAME "8"
+#define INT_PLUGIN_NAME "3"
 
 int sched_setattr(pid_t pid, const struct sched_attr *attr, unsigned int flags)
 {
@@ -607,11 +608,17 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			printf("ERROR!!! Monotime %f, realtime %f, Node %s tid=0!!! \n", get_monotime_now(), get_realtime_now(), nname.c_str() );
 			return 1;
 		}
-		struct sched_param sp = { .sched_priority = prio,};
-		int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
-		if (ret != 0)
-			std::cout << "WEIRD-" << nname << " Changing prio to " << prio << ", tid: " << tid << ", RETVAL: " << ret << std::endl;
-		return (ret); // ret=0 : successful.
+		if (nname.find(INT_PLUGIN_NAME) == std::string::npos && nname.find(IMU_PLUGIN_NAME) == std::string::npos )
+		{
+			struct sched_param sp = { .sched_priority = prio,};
+			int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
+			if (ret != 0)
+				std::cout << "WEIRD-" << nname << " Changing prio to " << prio << ", tid: " << tid << ", RETVAL: " << ret << std::endl;
+			return (ret); // ret=0 : successful.
+
+		}
+		else
+			return 0;
 	}
 
 	// checks if all nodes' tid/pid info has been received.
