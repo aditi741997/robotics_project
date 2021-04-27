@@ -126,4 +126,8 @@ private:
         void updateMapperScanTSUsedTF(const std_msgs::Header& hdr);
 
 	ros::Publisher mRecvMapOPublisher, mRecvMapPublisher, mRecvMappingPublisher; // to publish the map received and being used by navigator.
+
+	std::vector<float> nc_odom_st_lat;
+        std::vector<float> np_odom_st_lat;
+        ros::Time current_nc_st_ts, current_np_st_ts;
 };
