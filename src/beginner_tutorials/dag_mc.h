@@ -52,5 +52,5 @@ class DAGMultiCore: public DAG
 
 		bool is_sc_streaming(std::vector<int>& sc);
 
-		std::vector<int> compute_rt_solve();
+		std::vector<float> compute_rt_solve();
 };

@@ -63,8 +63,11 @@ public:
 	// Store tid, pid for each node:
         std::map<std::string, int> node_pid;
         std::map<std::string, int> node_tid; // id of the thread which executes the main cb for a node. 
-	std::map<std::string, std::atomic<int> > node_skip_ct, node_latest_sensor_ts; // for nodes which wanna give resrc to its input nodes, #times its been skipped.
+	std::map<std::string, std::atomic<int> > node_skip_ct;
+	std::map<std::string, float> node_latest_sensor_ts; // for nodes which wanna give resrc to its input nodes, #times its been skipped.
 	std::map<std::string, int> node_max_skips;
+
+	std::map<int, std::ofstream > wait_for_logs;
 
 	// includes under_the_hood threads such as PMT,CBT associated with each node.
 	std::map<std::string, std::set<int> > node_extra_tids; 
@@ -84,7 +87,7 @@ public:
         std::vector<std::vector<int> > exec_order; // Output from sched algo: vector of subchains.
 	double curr_cc_period = 0.0;
         std::map<int, std::vector<int>> period_map;
-        std::vector<int> all_frac_values;
+        std::vector<float> all_frac_values;
         // int curr_exec_index;
 
         // Oct: just for offline expts:
@@ -123,15 +126,20 @@ public:
 	// void changePriority(int ind); change ind of iexec_order to p2, others to p1
 	void changePriority(std::vector<std::vector<int>>& iexec_order, int ind, int core_id = 0);
 
+	// if ind need to wait for B, changePrio to B,wait,changePrio to ind.
+	bool checkWaitFor(std::vector<std::vector<int>>& iexec_order, int ind, long ind_to, int core_id, std::map<int, int>& core_node_exec_order_id, double core_per); 
+
 	// int changePrioritySubChain(int ind, int prio);
 	int changePrioritySubChain(std::vector<int>& sc, int prio);
 
 
+	void notify_node_exec_end(std::string nname); // node nname has finished.
 	void recv_node_info(std::string node_name, int tid, int pid=0);
 
 	std::string get_last_node_cc_name();
 	void update_ci(std::string node_name, double ci, int mode);
-	void update_latest_sensor_ts(std::string node_name, int sensor_ts); // node's latest output's sensor TS
+	void update_latest_sensor_ts(std::string node_name, float sensor_ts); // node's latest output's sensor TS
+	void update_stream_periods();
 
 	// Helper functions:
 	bool changePriorityThread(std::string nname, int tid, int prio);
@@ -158,6 +166,11 @@ private:
 	std::atomic<bool> cc_end, ready_sched;
 	boost::condition_variable cv_sched_thread; // this is just for the core with CC in it.
 	void thread_custom_sleep_for(int microsec); // to be used if need quick exit at shutdown.
+
+	std::map<int, boost::condition_variable> node_cv_sched_thread;
+	std::map<int, boost::mutex> node_sched_thread_mutex;
+	std::map<int, bool> node_finished;
+
 
 	// For multi-core scheduling:
 	std::vector< std::vector<int> > curr_sc_core_assgt;
@@ -187,5 +200,9 @@ private:
 
 	double last_mc_reopt_ts = 0.0;
 	struct timespec controller_start_ts;
+
+	bool shutdown_fake = false;
+	boost::thread fakenode_thread;
+	void fakenode_work();
 };
 

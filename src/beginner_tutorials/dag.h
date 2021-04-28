@@ -58,6 +58,7 @@ public:
 	std::string node_type; // streaming vs normal node
 	float stream_minper = 0.0;
 
+	std::vector<int> tput_slower_than; // this node's tput should be slower than which nodes?
 	std::vector<int> wait_for_outputs; // set of inputs the node needs to wait for / have latest value of.
 };
 
@@ -180,7 +181,15 @@ public:
 	std::map<std::string, Monomial> convert_period_to_monos(std::map<int, std::vector<int>>& period_map, int total_vars);
 	void multiply_monos_with_period(std::map<std::string, Monomial>& period_mono_set);
 	Monomial multiply_monos(Monomial m1, Monomial m2);
-	void print_vec(std::vector<int>& v, std::string s);
+	
+	template <class T>
+	void print_vec(std::vector<T>& v, std::string s) { 
+		std::cout << s;
+		for (int i = 0; i < v.size(); i++)
+			std::cout << " " << v[i];
+		std::cout << "\n";
+	};
+	
 	void print_dvec(std::vector<double>& v, std::string s);
 	void print_global_vars_desc();
 	void print_mono_map(std::map<std::string, Monomial>& s);
