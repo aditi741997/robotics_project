@@ -250,6 +250,11 @@ std::vector<float> DAGMultiCore::compute_rt_solve()
 				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a) , all_l_vars) , Domain::lessThan( log(sumci) ) );
 				print_dvec(a, "Adding ci*fi>=1 constr, sumci="+std::to_string(sumci) );
 			}
+			else
+			{
+				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a) , all_l_vars) , Domain::lessThan( log(1.0) ) );
+				print_dvec(a, "Adding fi>=1 constr cuz ci < 1");
+			}
 		}
 
 	// hyper-period of each core as vec of vecs...
