@@ -5,14 +5,27 @@
 #include "common/debug.hpp"
 #include "../src/beginner_tutorials/dag_controller_be.h"
 
+#define DEBUG2(x1, x2) std::cerr << __FILE__ << ':' << __LINE__ << ": " << #x1 << "=" << x1 << ", " << #x2 << "=" << x2 << std::endl;
+#define DEBUG(x) std::cerr << __FILE__ << ':' << __LINE__ << ": " << #x << "=" << x << std::endl;
+
 using namespace ILLIXR;
+
+static size_t read_int_file(std::string path) {
+	auto file = std::ifstream{path};
+	size_t result;
+	file >> result;
+	return result;
+}
 
 // Inherit from `plugin` if you don't need the threadloop
 class scheduler_plugin : public plugin, public DAGControllerFE {
 public:
     scheduler_plugin(std::string name_, phonebook* pb_)
         : plugin{name_, pb_}
-		, controller{std::make_unique<DAGControllerBE>("../robotics_project/illixr_dag.txt", this, false, "no", "no", 1, 3, 3, 4, 5, 6, 7, 1)}
+		, cpu_freq{read_int_file("/sys/devices/system/cpu/cpu0/cpufreq/scaling_max_freq") / 1000}
+		, root{std::string{"../robotics_project/"}}
+		, fc{read_int_file(root + "illixr_fc_" + std::to_string(cpu_freq) + ".txt")}
+		, controller{std::make_unique<DAGControllerBE>(root + "illixr_dag_" + std::to_string(cpu_freq) + ".txt", this, false, "no", "no", 1, fc, 3, 4, 5, 6, 7, 1)}
 		, sb{pb->lookup_impl<switchboard>()}
 	{
 		if (!is_scheduler()) { abort(); }
@@ -54,6 +67,7 @@ public:
 
 	virtual void trigger_node(std::string name, bool reset) {
 		// CPU_TIMER_TIME_FUNCTION_INFO(cpu_timer::make_type_eraser<FrameInfo>(std::to_string(id), "", 0));
+		// DEBUG2(name, ::gettid())
 		triggers.at(name).put(new (triggers.at(name).allocate()) switchboard::event_wrapper<bool> {true});
 	}
 
@@ -65,6 +79,9 @@ public:
 
 private:
 	const std::shared_ptr<switchboard> sb;
+	size_t cpu_freq;
+	std::string root;
+	size_t fc;
 	std::mutex mutex;
 	std::unordered_map<std::string, switchboard::writer<switchboard::event_wrapper<bool>>> triggers;
 	std::unique_ptr<DAGControllerBE> controller;
