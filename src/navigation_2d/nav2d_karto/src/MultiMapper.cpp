@@ -1038,7 +1038,10 @@ void MultiMapper::processLatestScans(std::vector<sensor_msgs::LaserScan> scanlis
 		last_scan_mapCB_processed_all_RT = scans[i].scan_time;
 
 		std_msgs::Header mcb_ee;
-		mcb_ee.frame_id = std::to_string(get_time_diff(cb_start, cb_end)) + " mapcb " + std::to_string(last_scan_mapCB_processed_ST) + " " + std::to_string(succ_processed_scan_i);
+		// mARCH - Old WaitFor logic - check for scan TS used by mapcb & other nodes [nc,np,mu]
+		// mcb_ee.frame_id = std::to_string(get_time_diff(cb_start, cb_end)) + " mapcb " + std::to_string(last_scan_mapCB_processed_ST) + " " + std::to_string(succ_processed_scan_i);
+		// Apr27 - New waitfor logic: MCB should produce one output per Period.
+		mcb_ee.frame_id = std::to_string(get_time_diff(cb_start, cb_end)) + " mapcb " + std::to_string(wall_scan_end) + " " + std::to_string(succ_processed_scan_i);
 		map_cb_exec_end_pub.publish(mcb_ee);
 
 		// for cleaner logging: 
