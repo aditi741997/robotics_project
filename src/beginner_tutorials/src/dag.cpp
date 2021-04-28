@@ -307,6 +307,19 @@ DAG::DAG(std::string fname)
 					ss >> b;
 				}
 			}
+			else if (line_type.find("T") != std::string::npos )
+			{
+				std::string a,b;
+				ss >> a >> b;
+				// node a should be slower than node b
+				DAGNode& na = id_node_map[name_id_map[a]];
+				while (b.find("X") == std::string::npos )
+				{
+					std::cout << "NODE " << a << " should be slower than " << b << std::endl;
+					na.tput_slower_than.push_back( name_id_map[b] );
+					ss >> b;
+				}
+			}
 			else
 			{
 				is_constraint = (line_type.find("constr") != std::string::npos);
@@ -319,13 +332,7 @@ DAG::DAG(std::string fname)
 	
 }
 
-void DAG::print_vec(std::vector<int>& v, std::string s)
-{
-	std::cout << s;
-	for (int i = 0; i < v.size(); i++)
-		std::cout << " " << v[i];
-	std::cout << "\n";
-}
+
 
 void DAG::print_dvec(std::vector<double>& v, std::string s)
 {
@@ -376,7 +383,7 @@ bool DAG::order_chains_criticality(std::vector<std::tuple<float, std::vector<int
 
 	double cons0 = std::get<0>(all_chains[0]);
 	
-	all_chains_rel_weights = std::vector<double> {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
+	all_chains_rel_weights = std::vector<double> {1.0, 0.005, 0.005, 0.005, 0.0000001, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
 	print_dvec(all_chains_rel_weights, "All Chains Rel Weights:");
 
 	return ret;	
@@ -1083,7 +1090,7 @@ void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> > node
 				ct++;
 				it++;
 			}
-			printf("Arr sz for %s, %i, last elem: %f, first elem : %f", x.first.c_str(), cis.size(),  cis[cis.size()-1], cis[0] );
+			printf("Arr sz for %s, %i, avg: %f , last elem: %f, first elem : %f", x.first.c_str(), cis.size(),  std::accumulate(cis.begin(), cis.end(),0.0)/cis.size(), cis[cis.size()-1], cis[0] );
 			std::sort(cis.begin(), cis.end());
 		}
 		if ( (node_ci2_arr.find(x.first) != node_ci2_arr.end()) && (node_ci2_arr[x.first].size() > 0) )
@@ -1095,7 +1102,7 @@ void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> > node
 				it++;
 			}
 			std::sort(ci2s.begin(), ci2s.end());
-			printf("CI2S Arr sz for %s, %i, last elem: %f, first elem : %f, 95ile: %f", x.first.c_str(), ci2s.size(), ci2s[ci2s.size()-1], ci2s[0], ci2s[(95*ci2s.size())/100]);
+			printf("CI2S Arr sz for %s, %i, last elem: %f, first elem : %f, 95ile: %f, avg: %f", x.first.c_str(), ci2s.size(), ci2s[ci2s.size()-1], ci2s[0], ci2s[(95*ci2s.size())/100], (std::accumulate(ci2s.begin(), ci2s.end(),0.0))/ci2s.size() );
 		}
 		// count mode from mode_ct:
 		for (auto &mx : mode_ct[x.first])
@@ -1108,7 +1115,7 @@ void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> > node
 		if (cis.size() > 0)
 		{
 			printf("normalct: %i, totalct: %i, ci len: %i [95ile: %f], ci2 len: %i \n", normal_ct, total_ct, cis.size(), cis[(95*cis.size())/100], ci2s.size());
-			double new_ci = (ci2s.size()==0) ? (cis[(95*cis.size())/100]) : ( ( (cis[(95*cis.size())/100] * normal_ct)/total_ct ) + ( (ci2s[(95*ci2s.size())/100]  * (total_ct-normal_ct)) /total_ct  ) ); 
+			double new_ci = (ci2s.size()==0) ? (cis[(95*cis.size())/100]) : ( ( (std::accumulate(cis.begin(), cis.end(),0.0) * normal_ct)/(total_ct*cis.size()) ) + ( (std::accumulate(ci2s.begin(), ci2s.end(),0.0)  * (total_ct-normal_ct)) / (total_ct*ci2s.size())  ) ); 
 			new_ci *= 1000.0;
 			std::cout << "UPDATED Compute time of node " << x.first << " from " << id_node_map [ name_id_map [ x.first ] ].compute << " TO " << new_ci << std::endl;
 			id_node_map [ name_id_map [ x.first ] ].compute = new_ci; // Nodes publish time in sec, DAG operates in ms.

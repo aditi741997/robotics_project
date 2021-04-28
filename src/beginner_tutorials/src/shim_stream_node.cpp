@@ -184,9 +184,14 @@ void ShimStreamNode::callback(beginner_tutorials::cc_freqConfig &config, uint32_
 
 void ShimStreamNode::dropFCallback(const std_msgs::Header::ConstPtr& msg)
 {
-	// ROS_ERROR("DROP FRACTION Changed from %i to %s", drop_fraction.load(), msg->frame_id.c_str());
+	ROS_ERROR("ACCEPT FRACTION Changed from %i / %i to %s", accept_ct.load(), out_of_ct.load(), msg->frame_id.c_str());
 	// TODO: Take accept/out_of params.
-	int x = std::atoi(msg->frame_id.c_str());
+	std::stringstream ss(msg->frame_id);
+	int a, o;
+	ss >> a >> o;
+	accept_ct = a;
+	out_of_ct = o;
+	// int x = std::atoi(msg->frame_id.c_str());
 	// drop_fraction = x; // (int) std::atoi(msg->frame_id.c_str());
 }
 

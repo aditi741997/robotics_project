@@ -41,7 +41,7 @@ void DAGMultiCore::assign_fixed_periods()
 	}
 	std::cout << "Filled the list of subchains for each core. \n";
 	for (int i = 0; i < num_cores; i++)
-		print_vec(core_sc_list[i], "List of subchain ids on core"+std::to_string(i));
+		print_vec<int>(core_sc_list[i], "List of subchain ids on core"+std::to_string(i));
 
 	// for subchains alone on >=1 cores
 	for (int i = 0; i < exec_order.size(); i++)
@@ -167,7 +167,7 @@ double DAGMultiCore::get_fixed_period_node(int nid)
 	return fixed_per;
 }
 
-std::vector<int> DAGMultiCore::compute_rt_solve()
+std::vector<float> DAGMultiCore::compute_rt_solve()
 {
 	std::cout << "IN DAGMultiCore: ##### STARTING Step5 : computing RT for each chain" << std::endl;
 	struct timespec solve_start, solve_end;
@@ -298,6 +298,19 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(1.0/jnode.stream_minper) ) );
 			}
 
+			if (jnode.tput_slower_than.size() > 0)
+			{
+				for (auto &st: jnode.tput_slower_than)
+				{
+					std::vector<double> a (total_vars, 0.0);
+					a[frac_var_ct + node_id_sc_id[jnode.id] ] = -1.0;
+					// Pni jnode_sc >= Pni st_sc
+					a[frac_var_ct + node_id_sc_id[st] ] = 1.0;
+					print_dvec(a, "ADDED SlowerThan: constraint on Pni of " + std::to_string(node_id_sc_id[jnode.id]) + " to be atleast Pni of " + std::to_string(node_id_sc_id[st]) );
+					mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan(0.0));
+				}
+			}
+
 			if ( fixed_per > 0 )
 			{
 				// subch_i_period >= this fixed period
@@ -337,7 +350,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			std::vector<double> a (total_vars, 0.0);
 			a[frac_var_ct + node_id_sc_id[jnode.id] ] = 1.0;
 			a[ frac_sc_var_ct + i ] = -1.0;
-			print_dvec(a, "Putting constraint Period of chain " + std::to_string(i)+" to be less than period of SC"+std::to_string(node_id_sc_id[jnode.id]));
+			print_dvec(a, "Putting constraint Period of chain " + std::to_string(i)+" to be atleast Pni of SC"+std::to_string(node_id_sc_id[jnode.id]));
 			mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan(0.0) );
 		
 			std::vector<double> anew (total_vars, 0.0);
@@ -535,14 +548,14 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			new_array_ptr<double>(ith_ac) );
 	}
 
-	// add 0.001*pi for streaming nodes:
+	// add 0.5*pi for streaming node[SC]s 
 	for (int i = 0; i < exec_order.size(); i++)
 		if (is_sc_streaming(exec_order[i]))
 		{
 			std::vector<double> p_sci (total_vars, 0.0);
 			p_sci[frac_sc_c_var_ct + i] = 1;
-			double strc = log(0.5);
-
+			double strc = log(0.00000001); 
+				strc = log(0.5);
 			obj_ap.push_back(p_sci);
 			obj_ac.push_back(strc);
 		}
@@ -564,8 +577,9 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 	std::vector<double> a (total_vars, 0.0);
 	a[total_vars-1] = 1;
 	mosek_model->objective("Objective", ObjectiveSense::Minimize, Expr::dot(new_array_ptr<double> (a), all_l_vars) );	
+	mosek_model->writeTask("/home/ubuntu/DagMCFractionalSolver.gp");
 
-	std::vector<int> all_frac_vals = std::vector<int> (total_vars, 0.0);
+	std::vector<float> all_frac_vals = std::vector<float> (total_vars, 0.0);
 	try
 	{
 		mosek_model->setLogHandler([](const std::string & msg) { std::cout << msg << std::flush; } );
@@ -588,14 +602,16 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 			{
 				double max_frac = 0.0;
 				for (int si = 0; si < core_sc_list[i].size(); si++ )
-					max_frac = std::max( max_frac, (*opt_ans)[ sc_id_frac_id[ core_sc_list[i][si] ] ] );
-				printf("MAX_FRAC val for core %i : %f || ", i, max_frac);
+					if ( (*opt_ans)[ sc_id_frac_id[ core_sc_list[i][si] ] ] < 1.0 ) 
+						max_frac = std::max( max_frac, (*opt_ans)[ sc_id_frac_id[ core_sc_list[i][si] ] ] );
+				printf("MAX_FRAC val for core %i : %f [ignoring fi>1s] || ", i, max_frac);
 				for (int si = 0; si < core_sc_list[i].size(); si++ )
 				{
 					auto& sid = core_sc_list[i][si];
 					double f_norm = max_frac/( (*opt_ans)[ sc_id_frac_id[sid] ] );
-					int rf_norm = (int) round(f_norm);
-					printf("SC ID %i, orig frac: %f, f_norm: %f, frac val (round): %i", sid, (*opt_ans)[ sc_id_frac_id[sid] ], f_norm, rf_norm);
+					
+					float rf_norm = (f_norm > 1.0) ? round(f_norm) : (f_norm) ;
+					printf("SC ID %i, orig frac: %f, f_norm: %f, frac val (round): %f [can be<1 for S nodes] ", sid, (*opt_ans)[ sc_id_frac_id[sid] ], f_norm, rf_norm);
 					all_frac_vals[sid] = rf_norm;
 				}
 
@@ -620,7 +636,7 @@ std::vector<int> DAGMultiCore::compute_rt_solve()
 		
 		printf("cputIME TAKEN TO solve: %f", (solve_end.tv_sec + solve_end.tv_nsec*1e-9) - (solve_start.tv_sec + 1e-9*solve_start.tv_nsec));
 
-		print_vec(all_frac_vals, "final FRAC Answers from DAGMC");
+		print_vec<float>(all_frac_vals, "final FRAC Answers from DAGMC");
 	}
 	catch (const OptimizeError& e)
 	{

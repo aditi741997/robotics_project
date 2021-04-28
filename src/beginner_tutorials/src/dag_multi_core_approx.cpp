@@ -36,6 +36,18 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 	std::vector<std::vector<int> > list_subchains = node_dag->get_exec_order();
 	int num_subchains = list_subchains.size();
 
+	std::map<int, int> node_id_exec_order_id;
+	for (int nsi = 0; nsi < num_subchains; nsi++)
+	// if (node_id_exec_order_id.find(ith_chain[n]) == node_id_exec_order_id.end())
+	{
+		for (int eo = 0; eo < list_subchains[nsi].size(); eo++)
+		{
+			node_id_exec_order_id[ list_subchains[nsi][eo] ] = nsi;
+			printf("\n Found node %i in exec_order at index %i", list_subchains[nsi][eo], node_id_exec_order_id[ list_subchains[nsi][eo] ]);
+		}
+			//if (find(list_subchains[eo].begin(), list_subchains[eo].end(), ith_chain[n]) != list_subchains[eo].end())
+	}
+	
 	std::vector<std::vector<int>> core_assgt (num_subchains, std::vector<int>() );
 	
 	if (num_cores>1)
@@ -196,6 +208,22 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 					printf("ADDING Constraint for streaming period PI of subchain %i, with min period %f of node %i \n", i, stream_minper, list_subchains[i][j] );
 					mosek_model->constraint("pi_minper"+std::to_string(i), Expr::dot(pi, pi_cm1) , Domain::lessThan(-1.0*stream_minper) );
 				}
+				
+				std::vector<int> slower_thans = node_dag->id_node_map[ list_subchains[i][j] ].tput_slower_than;
+				if (slower_thans.size() > 0)
+				{
+					for (auto &sti : slower_thans)
+					{
+						int scid = node_id_exec_order_id[sti];
+						// pni [i] >= pni [scid]
+						std::vector<double> starr (num_subchains, 0.0);
+						starr[scid] = -1.0;
+			                        auto starr1 = new_array_ptr<double> (starr);
+						node_dag->print_dvec(starr, "Putting constraint that period of sc"+std::to_string(i)+"atleast per of "+std::to_string(scid));
+						mosek_model->constraint("pni_"+std::to_string(i)+"atleast_"+std::to_string(scid), Expr::add(Expr::dot(pni, pni_cm1), Expr::dot( starr1, pni ) ), Domain::greaterThan(-0.01) );
+					}
+					// find which SC is this node in.
+				}
 			}
 			// pni >= pi
 			printf("ADDING Constraint that pni >= pi subchain %i \n", i);
@@ -315,7 +343,6 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 
 		// Apr2021: Replacing pi by pni in all chain-level metrics [cuz pni is the actual period wrt chains [=pi for normal and >= pi for stream nodes]]
 		// constraint on RT of all chains. [p0 + sum 2*pi + max(all pi)] = RT <= constr.
-		std::map<int, int> node_id_exec_order_id;
 		int num_chains = node_dag->all_chains.size();
 		Variable::t chains_pers =  mosek_model->variable("chains_pers", num_chains, Domain::greaterThan(0.0) );
 		printf("\n MAKING chains_approx_period variable, sz: %i", num_chains);
@@ -359,13 +386,7 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 				{
 					// need index of a node in the exec_order [cuz thats the order of pi variables.]
 					//Note that node_id_exec_order_id is same as node_id_sc_id in node_dag_mc.
-					if (node_id_exec_order_id.find(ith_chain[n]) == node_id_exec_order_id.end())
-					{
-						for (int eo = 0; eo < list_subchains.size(); eo++)
-							if (find(list_subchains[eo].begin(), list_subchains[eo].end(), ith_chain[n]) != list_subchains[eo].end())
-								node_id_exec_order_id[ith_chain[n]] = eo;
-						printf("\n Found node %i in exec_order at index %i", ith_chain[n], node_id_exec_order_id[ith_chain[n]]);
-					}
+					
 					int pid = node_id_exec_order_id[ith_chain[n]];
 					if (n == 0)
 						execs[pid] += 1.0;
