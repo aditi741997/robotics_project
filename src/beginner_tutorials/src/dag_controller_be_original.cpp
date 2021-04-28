@@ -936,7 +936,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				wn_sc = core_node_exec_order_id[wnid];
 				wn_sc_n0 = iexec_order[wn_sc][0];
 				// threshold for one output = nid's current period = SC[nid]'s current period * 1.05 [scaled for slack].
-				per_output_thresh = 1.05 * 0.001 * core_per / offline_fracs[ node_dag_mc.id_name_map[wn_sc_n0] ];
+				per_output_thresh = 1.05 * 0.001 * std::max( core_per / offline_fracs[ node_dag_mc.id_name_map[wn_sc_n0] ], (double) node_dag_mc.id_node_map[wn_sc_n0].stream_minper );
 				curr_out_ts = node_latest_sensor_ts[node_dag_mc.id_name_map[wnid]];
 				if (per_core_period_counts[core_id]%50 == 17)
 					printf("MT: %f NODE scid %i, waitfor node %i with per_output_thresh: %f, latest outTS %f", timenow, ind, wnid, per_output_thresh, curr_out_ts);
