@@ -51,7 +51,9 @@ class DAGController: public DAGControllerFE
 	// Store tid, pid for each node:
         std::map<std::string, int> node_pid;
         std::map<std::string, int> node_tid; // id of the thread which executes the main cb for a node. 
-        
+       
+	ros::Publisher mcb_dfpub;
+
 	// DAG data structure : to be used by the scheduling algorithm
 	std::map<std::string, int> node_ci, node_fi;
         std::vector<ros::Subscriber> exec_start_subs;
@@ -118,6 +120,8 @@ public:
 			}	
 		}
 		ROS_INFO("DAGController: PMT Id: %i, InternalCBQTID: %i", nh.getPMTId(), nh.getInternalCBQTId() );
+		
+		mcb_dfpub = nh.advertise <std_msgs::Header> ("/robot_0/mcb_scan_dropF", 1, true);
 		
 		// Nov: for IPC with navigator node:
 		srv_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -215,7 +219,7 @@ public:
 		// TODO: get TS for all nodes. Getting for just mapcb for now:
 		if ( (n_name.find("mapcb") != std::string::npos) || (n_name.find("navc") != std::string::npos) || (n_name.find("navp") != std::string::npos) || (n_name.find("mapupd") != std::string::npos))
 		{
-			int ts;
+			float ts;
 			ss >> ts;
 			controller->update_latest_sensor_ts(n_name, ts);
 		}
@@ -223,8 +227,24 @@ public:
 		if (n_name.find("mapcb") != std::string::npos)
 			ss >> mode;
 		controller->update_ci(n_name, ci, mode);
+		controller->notify_node_exec_end(n_name);
 	}
 
+
+	void update_speriod(double s, std::string nname)
+	{
+		if (nname.find("mapc") != std::string::npos)
+		{
+			// HARDCODED: MAPCB scan incoming freq: 50Hz -> 20ms.
+			std_msgs::Header hdr;
+			int num,den; // express drop as a/b.
+			den = 50;
+			num = (int) 1000.0/s; 
+			hdr.frame_id = std::to_string(num) + " " + std::to_string(den); // ( std::max((int)( s / 20.0), 1) );
+			printf("UPDATING DROP FRACTION OF MCB TO %s (accept/out_of)", hdr.frame_id.c_str());
+			mcb_dfpub.publish(hdr);
+		}
+	}
 
 	// Cb to handle end of critical chain exec. Need to start dynamic sched stuff:
 	void critical_exec_end_cb(const std_msgs::Header::ConstPtr& msg)
@@ -393,7 +413,7 @@ public:
                                 strcpy(msg, hdr.frame_id.c_str());
 				send(trigger_socks[name], msg, strlen(msg), 0);
 			}
-			else
+			else if (name.find("fakenode") == std::string::npos) // no problem if its a fakenode.
 				ROS_ERROR("trigger_socks_conn SOCKET NOT connected for %s IS false!!! Nav-DAGController SOCKET NOT connected!!", name.c_str());
 		}
 	}
