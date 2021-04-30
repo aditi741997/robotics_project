@@ -324,6 +324,7 @@ std::vector<float> DAGMultiCore::compute_rt_solve()
 				std::vector<double> a (total_vars, 0.0);
 				a[frac_var_ct + node_id_sc_id[jnode.id] ] = -1.0;
 				// log (approx_per) >= log(fixed_per)
+				print_dvec(a, "ADDED Pni >= fixed_per ");
 				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(1.0/fixed_per) ) ); 
 			}
 			else
@@ -547,10 +548,17 @@ std::vector<float> DAGMultiCore::compute_rt_solve()
 		print_dvec(ith_ac, "New const vec");
 
 		// Constraint:
-		logsumexp(mosek_model,
-			new_array_ptr<double>(ith_ap),
-			all_l_vars,
-			new_array_ptr<double>(ith_ac) );
+		if (is_constraint)
+		{
+			printf("ADDING CONSTRAINT TO GP!!!! is_constraint \n");
+			logsumexp(mosek_model,
+				new_array_ptr<double>(ith_ap),
+				all_l_vars,
+				new_array_ptr<double>(ith_ac) );
+		}
+		else
+			printf("NOT ADDING CONSTRAINT TO GP!!!! NOT is_constraint \n");
+	
 	}
 
 	// add 0.5*pi for streaming node[SC]s 
@@ -607,7 +615,7 @@ std::vector<float> DAGMultiCore::compute_rt_solve()
 			{
 				double max_frac = 0.0;
 				for (int si = 0; si < core_sc_list[i].size(); si++ )
-					if ( (*opt_ans)[ sc_id_frac_id[ core_sc_list[i][si] ] ] < 1.0 ) 
+					if ( (*opt_ans)[ sc_id_frac_id[ core_sc_list[i][si] ] ] <= 1.0001 ) 
 						max_frac = std::max( max_frac, (*opt_ans)[ sc_id_frac_id[ core_sc_list[i][si] ] ] );
 				printf("MAX_FRAC val for core %i : %f [ignoring fi>1s] || ", i, max_frac);
 				for (int si = 0; si < core_sc_list[i].size(); si++ )

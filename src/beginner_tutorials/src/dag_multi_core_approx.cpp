@@ -411,7 +411,13 @@ std::vector< std::vector<int> > MultiCoreApproxSolver::solve()
 				auto rt_ps = new_array_ptr<double> (ps);
 				auto rt_execs = new_array_ptr<double> (execs);
 				// RT : ps.pi + execs.execi + ith_ch_per_c.chains_pers <= cons
-				mosek_model->constraint("chain"+std::to_string(ch)+"_rt_cons", Expr::add( Expr::add( Expr::dot(ith_ch_per_c, chains_pers), Expr::dot(execi, rt_execs) ) , Expr::dot(pni, rt_ps) ) , Domain::lessThan(cons) );
+				if (node_dag->is_constraint)
+				{
+					mosek_model->constraint("chain"+std::to_string(ch)+"_rt_cons", Expr::add( Expr::add( Expr::dot(ith_ch_per_c, chains_pers), Expr::dot(execi, rt_execs) ) , Expr::dot(pni, rt_ps) ) , Domain::lessThan(cons) );
+					printf("DAGMULTICORE: ADDING CONSTRAINT ON CHAIN RT!!! \n");
+				}
+				else
+					printf("DAGMULTICORE: NOT ADDING CONSTRAINT ON CHAIN RT!!! NOT is_constraint \n");
 				
 				// For objective: [since ch>0 here]
 				for (int i = 0; i < num_subchains; i++)

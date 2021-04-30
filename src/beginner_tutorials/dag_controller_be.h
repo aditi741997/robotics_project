@@ -127,7 +127,7 @@ public:
 	void changePriority(std::vector<std::vector<int>>& iexec_order, int ind, int core_id = 0);
 
 	// if ind need to wait for B, changePrio to B,wait,changePrio to ind.
-	bool checkWaitFor(std::vector<std::vector<int>>& iexec_order, int ind, long ind_to, int core_id, std::map<int, int>& core_node_exec_order_id, double core_per); 
+	bool checkWaitFor(std::vector<std::vector<int>>& iexec_order, int ind, long ind_to, int core_id, std::map<int, int>& core_node_exec_order_id, std::vector<double>& sc_fracs, double core_per); 
 
 	// int changePrioritySubChain(int ind, int prio);
 	int changePrioritySubChain(std::vector<int>& sc, int prio);
