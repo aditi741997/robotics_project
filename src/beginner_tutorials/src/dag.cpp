@@ -214,8 +214,9 @@ DAG::DAG()
 DAG::DAG(std::string fname)
 {
 	global_var_count = 0;
+	name_ = fname;
 	// Read out DAG structure from file.
-	std::cout << "IN DAG Constructor!! \n";
+	std::cout << "IN DAG Constructor!! NAME : " << name_ << std::endl;
 	std::ifstream df(fname);
 	std::vector<std::tuple<float, std::vector<int>, float, int > > chains;
 	if (df.is_open())
@@ -382,8 +383,11 @@ bool DAG::order_chains_criticality(std::vector<std::tuple<float, std::vector<int
 		print_vec(std::get<1>(all_chains[i]), "Chain : ");
 
 	double cons0 = std::get<0>(all_chains[0]);
-	
-	all_chains_rel_weights = std::vector<double> {1.0, 0.005, 0.005, 0.005, 0.0000001, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
+
+	if (name_.find("nav2d") != std::string::npos )
+		all_chains_rel_weights = std::vector<double> {1.0, 0.005, 0.005, 0.005, 0.0000001, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
+	else if (name_.find("illixr") != std::string::npos )
+		all_chains_rel_weights = std::vector<double> {1.0, 0.5, 0.005, 0.005, 0.005, 0.005, 0.0000001};
 	print_dvec(all_chains_rel_weights, "All Chains Rel Weights:");
 
 	return ret;	

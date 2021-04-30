@@ -119,6 +119,8 @@ public:
 	std::map<int, std::string> id_name_map;
 	std::map<std::string, int> name_id_map;
 
+	std::string name_;
+
 	DAG();
 	DAG(std::string fname);
 	

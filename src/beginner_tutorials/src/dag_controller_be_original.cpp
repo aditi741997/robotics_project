@@ -231,6 +231,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 	DAGControllerBE::~DAGControllerBE()
 	{
+		std::cout << "DAGControllerBE::~DAGControllerBE" << std::endl;
 		shutdown_scheduler = true;
 		if (sched_started)
 			handle_sched_thread.join();
@@ -243,6 +244,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::startup_trigger_func()
 	{
 		set_high_priority("Startup trigger thread", 4, 0);
+		pthread_setname_np(pthread_self(), "startup_trig");
+
 		double cc_period = 0.0; // in millisec.
 		for (int i = 0; i < exec_order.size(); i++)
 			cc_period += get_sum_ci_ith(exec_order[i])*offline_fracs[ node_dag_mc.id_name_map[ exec_order[i][0] ] ];
@@ -264,11 +267,12 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				total_period_count += 1;
 				per_core_period_counts[0] += 1;
 				// printf("MT: %f, RealTime: %f, Period ct: %li, checking Trigger for all, exec_order sz: %lu, curr_cc_period: %f", get_monotime_now(), get_realtime_now(), total_period_count, exec_order.size(), curr_cc_period);
-				for (int i = 0; i < exec_order.size(); i++)
+				for (int i = 0; i < exec_order.size() && !sched_started; i++)
 					checkTriggerExec(exec_order[i], 0, 1.0); // just for startup, we keep triggering nodes at some rate.
 			}
 			
 		}
+		printf("MonoTime: %f, RealTime: %f, SIGNING OFF startup_trigger thread!!! \n");
 	}
 
 	// FE will call this for each msg from the CC.
@@ -285,13 +289,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					sched_started = true;
 					
 					// Lets kill the startup_thread!
-					if (startup_thread->joinable())
-					{
-						pthread_cancel(startup_thread->native_handle());
-						pthread_join(startup_thread->native_handle(), NULL);
-						startup_thread->detach();
-						startup_thread = NULL;
-					}
+					// if (startup_thread->joinable())
+					// {
+					//	pthread_cancel(startup_thread->native_handle());
+					//	pthread_join(startup_thread->native_handle(), NULL);
+					//	startup_thread->detach();
+					//	startup_thread = NULL;
+					// }
 					
 					for (int i = 0; i < reset_count.size(); i++)
 						reset_count[i] = true;
@@ -333,6 +337,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::handle_sched_main(std::vector<int> core_ids)
 	{
 		set_high_priority("MAIN sched Thread", 4, 0);
+		std::string name = "hand_sched_" + std::to_string(core_ids.at(0));
+		pthread_setname_np(pthread_self(), name.c_str());
+
 		for (auto &i : node_dag_mc.name_id_map)
 			printf("#EXTRA THREADS for node %s : %lu", i.first.c_str(), node_extra_tids[i.first].size() );
 	
@@ -550,11 +557,16 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			printf("ERROR!!! Monotime %f, realtime %f, Node %s tid=0!!! \n", get_monotime_now(), get_realtime_now(), nname.c_str() );
 			return 1;
 		}
-		struct sched_param sp = { .sched_priority = prio,};
-		int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
-		if (ret != 0)
-			std::cout << "WEIRD-" << nname << " Changing prio to " << prio << ", tid: " << tid << ", RETVAL: " << ret << std::endl;
-		return (ret); // ret=0 : successful.
+		if (nname.find(INT_PLUGIN_NAME) == std::string::npos && nname.find(IMU_PLUGIN_NAME) == std::string::npos )
+		{
+			struct sched_param sp = { .sched_priority = prio,};
+			int ret = sched_setscheduler(tid, SCHED_FIFO, &sp);
+			if (ret != 0)
+				std::cout << "WEIRD-" << nname << " Changing prio to " << prio << ", tid: " << tid << ", RETVAL: " << ret << std::endl;
+			return (ret); // ret=0 : successful.
+		}
+		else
+			return 0;
 	}
 
 	// checks if all nodes' tid/pid info has been received.
@@ -565,7 +577,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		else if (dag_name.find("ill") != std::string::npos)
 		{
 			bool ans = true;
-			std::vector<std::string> node_ids {"6", "3", "2", "5", "8", "7"}; // wait for all 6 tids.
+			std::vector<std::string> node_ids {TW_PLUGIN_NAME, INT_PLUGIN_NAME, "2", RENDER_PLUGIN_NAME, CAM_PLUGIN_NAME, IMU_PLUGIN_NAME}; // wait for all 6 tids.
 			for (int i = 0; i < node_ids.size(); i++)
 				ans = ans && ( node_tid.find(node_ids[i]) != node_tid.end() );
 			return ans;
@@ -1035,8 +1047,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			
 				frontend->trigger_node(name, true);
 				// For Illixr Dag, need to trigger TW along with Imu, cuz Imu is at fixed freq for now. 
-				if ( (name.find("7") != std::string::npos) && (dag_name.find("ill") != std::string::npos) )
-					frontend->trigger_node("6", true);
+				if ( (name.find(IMU_PLUGIN_NAME) != std::string::npos) && (dag_name.find("ill") != std::string::npos) )
+					frontend->trigger_node(TW_PLUGIN_NAME, true);
 
 				if (last_trig_ts[name] > 0)
 					trigger_log << name << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
