@@ -12,6 +12,10 @@ using namespace ILLIXR;
 
 static size_t read_int_file(std::string path) {
 	auto file = std::ifstream{path};
+	if (!file.good()) {
+		std::cerr << "Could not open: " << path << std::endl;
+		abort();
+	}
 	size_t result;
 	file >> result;
 	return result;
