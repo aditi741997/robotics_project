@@ -17,5 +17,6 @@ C 6624 s mapcb navc lp X
 C 6984 s mapcb navp navc lp X
 C 9144 s mapcb mapupd navp navc lp X
 C 1000000 s fakenode X
-T navc lp X
-constraint
+WF navp mapcb X
+WF mapupd mapcb X
+weight
