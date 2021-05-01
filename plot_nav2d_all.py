@@ -8,6 +8,7 @@ import numpy as np
 #from sympy import *
 #from sympy.geometry import *
 import random
+import json
 
 slot = 5 # in seconds.
 #For plotting area covered in first 60sec: change slot=60, end_t=start_t+60+1.
@@ -229,6 +230,8 @@ collision = {} # frac9A_run1 -> # obstacle collision readings.
 runlevel_total_area_expl = {} # exp_id -> area expl.
 runlevel_meantputs = {} # exp id -> array of mean tputs [mU,mC,nC,nP,CC]
 runlevel_meanRTs = {} # exp id -> array of mean RTs ["Scan_MapCB_MapU_NavP_NavC_LP", "Scan_LC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]
+
+run_final_data = {}
 
 def mean_aggregate(agg_dict):
 	mean_dict = {}
@@ -499,7 +502,7 @@ def check_limbo_run(exp_id, smallest_map, small_map_obst):
 letter = 'N'
 #opt_total_Area = 339142.0
 opt_total_Area = 242367.0 if smallest_map else 339142.0 if small_map else 818045.0
-opt_total_gtArea = 215591 if small_map else 242367.0 # GTArea as per PostProcessing
+opt_total_gtArea = 215591 if small_map else 155890.0 # GTArea as per PostProcessing
 
 # LMap: 818045, 817667, 818141, 817838
 #opt_total_Area = 818045.0
@@ -556,11 +559,11 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = [ "StaticQNO1_1c" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
+expts = [ "DynNOFF_1c" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
 
 #runs = range(5, 8) + range(31,48)
-runs = range(1,4)
-for badr in [2]: #[2,5,8,15,17]: #57,89]: #[3,20,25,28,31,40,51,55]:
+runs = range(1,21)
+for badr in []: #[2,5,8,15,17]: #57,89]: #[3,20,25,28,31,40,51,55]:
     runs.remove(badr)
 print(runs, len(runs))
 
@@ -1139,9 +1142,12 @@ for i in expts:
 	#print("NEW Area Agg array across runs: ", new_area_agg)
 	run_level_total_times.append(run_total_times)
         print("For i= ", i, ", run-TotalArea Explored:", run_totalareas)
+        run_final_data["run_total_area"] = run_totalareas
         print("-")
         print("For i= ", i, ", run-TotalGROUNDTRUTHArea Explored:", run_total_gtareas)
-	
+	run_final_data["run_total_GT_area"] = run_total_gtareas
+        run_final_data["total_time"] = run_total_times
+
 	runlevel_med_totalarea.append( (sorted(run_totalareas)[ numrun ])/opt_total_Area ) #median over all runs.
 	runlevel_mean_totalarea.append( (sum(run_totalareas)/len(runs))/opt_total_Area ) # mean totalArea
         runlevel_tail_totalarea.append( (sorted(run_totalareas)[ (8*len(runs))/10 ])/opt_total_Area ) # tail totalArea
@@ -1206,6 +1212,9 @@ for i in expts:
         print("-")
 	print("FOR expt %s, GROUNDTRUTH area-time slot-wise agg : %s" %(i, str(gt_area_time_agg_dict) ) )
         print("-")
+        run_final_data["GT_area_in_stime"] = gt_area_time_agg_dict[50 if smallest_map else 100]
+        run_final_data["area_in_stime"] = area_time_agg_dict[50 if smallest_map else 100]
+        #run_final_data["collisions"] = colln_count_arr
         print("FOR expt %s, colln array : %s"%(i, str(colln_count_arr) ) )
         print("-")
         #print("Time to cover Xp area : ", time_to_areas)
@@ -1213,13 +1222,19 @@ for i in expts:
         print("-")
         print("SimTime to cover Xp GROUNDTRUTH area : ", stime_to_gt_areas)
         print("-")
-	#print("SimTime to cover #blocks PHYArea", run_time_phyarea)
-        print("FOR expt %s, clean finish arr : %s"%(i, clean_finish_arr) )
+        run_final_data["stime_area"] = stime_to_areas
+        run_final_data["stime_GT_area"] = stime_to_gt_areas
+        run_final_data["clean_finish"] = clean_finish_arr
+        run_final_data["expl_finished"] = run_finish_arr
+        run_final_data["colln_end"] = runs_colln_end_arr
+        #print("FOR expt %s, clean finish arr : %s"%(i, clean_finish_arr) )
         print("-")
-	print("for EXPT %s, run_expl_finished ARR: %s"%(i, str(run_finish_arr) ) )
+	#print("for EXPT %s, run_expl_finished ARR: %s"%(i, str(run_finish_arr) ) )
         print("-")
-	print("FOR EXPT %s, runs_colln_end_arr : %s "%(i, str(runs_colln_end_arr)) )
-
+	#print("FOR EXPT %s, runs_colln_end_arr : %s "%(i, str(runs_colln_end_arr)) )
+        print(run_final_data)
+        with open(i+'.txt','w') as ffff:
+            json.dump(run_final_data, ffff)
         counts_80area.append( len(time_80area) )
 
         counts_60area.append( len(time_60area) )
