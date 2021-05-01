@@ -38,9 +38,10 @@ public:
         : plugin{name_, pb_}
 		, sb{pb->lookup_impl<switchboard>()}
 	{
-		if (is_scheduler()) {
+		if (is_dynamic_scheduler()) {
 			size_t fc = std::stoi(std::getenv("ILLIXR_SCHEDULER_FC"));
 			auto dag_file = std::string{std::getenv("ILLIXR_SCHEDULER_CONFIG")};
+			std::cerr << "dag_file: " << dag_file << std::endl;
 			controller = std::make_unique<DAGControllerBE>(dag_file, this, false, "no", "no", 1, fc, 3, 4, 5, 6, 7, 1);
 			for (const auto& pair : controller->node_dag_mc.name_id_map) {
 				std::string name = pair.first;
@@ -53,7 +54,7 @@ public:
 						controller->recv_node_info(event->name, event->pid, ::getpid());
 					}
 				);
-				sb->schedule<switchboard::event_wrapper<bool>>(
+				auto& thread = sb->schedule<switchboard::event_wrapper<bool>>(
 					id,
 					name + "_completion",
 					[this, name](switchboard::ptr<const switchboard::event_wrapper<bool>>, size_t event) {
@@ -69,6 +70,7 @@ public:
 					std::move(name),
 					std::move(sb->get_writer<switchboard::event_wrapper<bool>>(name + "_trigger"))
 				));
+				set_priority(thread.get_pid(), 4);
 			}
 		}
 	}
@@ -95,9 +97,6 @@ public:
 
 private:
 	const std::shared_ptr<switchboard> sb;
-	size_t cpu_freq;
-	std::string root;
-	size_t fc;
 	std::mutex mutex;
 	std::unordered_map<std::string, switchboard::writer<switchboard::event_wrapper<bool>>> triggers;
 	std::unique_ptr<DAGControllerBE> controller;
