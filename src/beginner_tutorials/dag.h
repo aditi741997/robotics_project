@@ -119,11 +119,11 @@ public:
 	std::map<int, std::string> id_name_map;
 	std::map<std::string, int> name_id_map;
 
-	std::string name_;
-
 	DAG();
 	DAG(std::string fname);
-	
+
+	std::string name_;
+
 	// Each chain could be a vector of ids. : can find sum ci
 	// Sorted by the criticality : first chain is the most critical.
 	// ci/wi, chain, criticality_no., id	
@@ -199,4 +199,6 @@ public:
 	
 	void add_constraints_for_max_monos(int total_vars, Variable::t all_lfrac_vars);
 	void add_constraints_for_min_monos(int total_vars, Variable::t all_lfrac_vars);
+
+	double get_subchain_min_per(std::vector<int>& sc_ids);
 };
