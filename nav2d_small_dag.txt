@@ -5,8 +5,7 @@ N mapcb 5.0 0 640 0 S 20
 N mapupd 5.0 0 640 0 N
 N navp 5.0 0 1000 0 N
 N navc 5.0 0 0 0 N
-N fakenode 1000 0 0 0 N
-E s lc mapcb fakenode X
+E s lc mapcb X
 E lc lp X
 E mapcb navc navp mapupd X
 E mapupd navp X
@@ -16,7 +15,6 @@ C 50 s lc lp X
 C 6624 s mapcb navc lp X
 C 6984 s mapcb navp navc lp X
 C 9144 s mapcb mapupd navp navc lp X
-C 1000000 s fakenode X
 WF navp mapcb X
 WF mapupd mapcb X
 weight

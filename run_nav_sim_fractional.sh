@@ -7,8 +7,8 @@ ct=7
 ccid=2
 td="nono"
 expt_timelimit=17
-yolo=0
-dagfile="nav2d_small" # "nav2d_yolo" for yolo, "illixr" for illixr
+yolo=1
+dagfile="nav2d_yolo" # "nav2d_small" for nav2d "nav2d_yolo" for yolo, "illixr" for illixr
 for navpF in 1.0 #1.056 #5.0 #1.0 0.2
 do
 	for mcbF in 100.0 #1.107 #10.0 7.0 4.0 1.0 0.4 0.16 
@@ -23,14 +23,14 @@ do
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in {3..12} #54 {98..101} 
+						for run in {2..5} #54 {98..101} 
 						do
 							rosclean purge -y
 							rm ../robot_nav2d_obstacleDist_logs_.txt
 							rm ../mapper_scansPose_.txt
 							taskset -a -c 7-12 roslaunch nav2d_tutorials tutorial4_stage_noobst.launch &
 							sleep 27s
-							ename="DynNOF2a_1c_run$run"
+							ename="DynNOFF1Y_1c_run$run"
 							
 							echo "DELETING OLD LOGFILES For this expt:"
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
@@ -74,14 +74,12 @@ do
 							taskset -a -c 15 rosrun map_server map_saver -f $navRecvMappingName __name:=navRecvMappingNode map:=/robot_0/nav_recv_mapping &
 							
 							taskset -a -c 0 roslaunch nav2d_tutorials tutorial4_robot2.launch 2> $robofname &
-							sleep 12s
+							sleep 7s
+							taskset -a -c 1 rosrun beginner_tutorials campreprocess "nono" 20.0 "/camera/rgb/image_raw" 900 "/home/ubuntu/catkin_ws/NewJPGImgs" "new" > "camprep_logs_${ename}.out" 2> "camprep_logs_${ename}.err" &
+							sleep 2s
 							rosservice call /robot_0/StartMapping
 							
-							if [ $yolo -gt 0 ]; then
-								taskset -a -c 1 rosrun beginner_tutorials campreprocess "nono" 20.0 "/camera/rgb/image_raw" 900 "/home/ubuntu/catkin_ws/NewJPGImgs" "new" > "camprep_logs_${ename}.out" 2> "camprep_logs_${ename}.err" &
-								taskset -a -c 1 roslaunch darknet_ros darknet_ros.launch > "yolo_logs_${ename}.out" 2> "yolo_logs_${ename}.err" &
-							fi
-
+							
 							#taskset -a -c 5-6 python src/rbx/src/move_dynamic_obst_special.py 200 0.1 0.9 > "nav2d_moveObst_logs_${ename}.txt" 2> "nav2d_moveObst_logs_${ename}.err" &
 							# Before startingExpl, Look for MAPPING Failed / Successful.
 							failct="0"
@@ -116,8 +114,13 @@ do
 							sleep 10s
 							echo "StartMapping done, ABOUT TO CALL StartExploration!"
 							rosservice call /robot_0/StartExploration
-							sleep 2s
-							
+							sleep 1s
+						
+							if [ $yolo -gt 0 ]; then
+								taskset -a -c 1 roslaunch darknet_ros darknet_ros.launch > "yolo_logs_${ename}.out" 2> "yolo_logs_${ename}.err" &
+							fi
+
+
 							taskset -a -c 5-6 python measure_cpu.py 0 0 40 $ename $robofname &
 							echo "STARTED everything. NOW waiting for Exploration to FINISH/FAIL."
 							j="0"
