@@ -23,7 +23,7 @@ do
 					mcid=0
 					if [ $div -eq $mcid ]; then
 						#echo "WILL run this expt cuz div=mcID!!!!"
-						for run in {2..5} #54 {98..101} 
+						for run in 1 #54 {98..101} 
 						do
 							rosclean purge -y
 							rm ../robot_nav2d_obstacleDist_logs_.txt
@@ -35,12 +35,12 @@ do
 							echo "DELETING OLD LOGFILES For this expt:"
 							rm "../robot_nav2d_obstacleDist_logs_${ename}.txt"
 							rm "../robot_nav2d_${ename}_rt_stats.txt"
-							rm "../robot_nav2d_${ename}_nav_rt_stats.txt"
+							rm "../robot_nav2d_${ename}_nav_rt_stats.txt" "../robot_nav2d_${ename}_yolo_rt_stats.txt"
 							rm "../mapper_scansPose_${ename}.txt"
 							rm "../nmapupd_wf.csv" "../nnavp_wf.csv"
 							mapcb_procscans_name="../nav2d_stage_scans_${ename}.bag"
 							rm $mapcb_procscans_name 
-							for thing in local_map navigator_plan navigator_cmd mapper_mapUpdate mapper_scanCB operator_loop
+							for thing in yolo local_map navigator_plan navigator_cmd mapper_mapUpdate mapper_scanCB operator_loop
 							do
 								rm "../robot_nav2d_${thing}_stats_${ename}.txt"
 							done
@@ -58,12 +58,12 @@ do
 							dagcontOname="dag_contBE_${ename}.out"
 							#For slowing down navp: 
 							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_75p_smallnavp" $td "no" 16 63 3 63 1 1 1 0 > $dagcontOname 2> $dagcontEname &
-							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_95p_smallest" $td "no" 74 98 1 74 1 1 1 0 > $dagcontOname 2> $dagcontEname &
 							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller $dagfile $td "no" 1 1 1 1 1 1 1 1 > $dagcontOname 2> $dagcontEname & 
 							sleep 4s
-							taskset -a -c 1 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" $td > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
+							# The solver will automatically put the threads of shimfreqnode on the assigned core. 
+							taskset -a -c 0 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" $td > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
 							
-							taskset -a -c 1 rosrun beginner_tutorials shimstreamnode 1 1 "/robot_0/base_scan1" "/robot_0/base_scan2" "scan" "/robot_0/mcb_scan_dropF" > "nav2d_shimstream_logs_${ename}.out" 2> "nav2d_shimstream_logs_${ename}.out" &
+							taskset -a -c 0 rosrun beginner_tutorials shimstreamnode 1 1 "/robot_0/base_scan1" "/robot_0/base_scan2" "scan" "/robot_0/mcb_scan_dropF" > "nav2d_shimstream_logs_${ename}.out" 2> "nav2d_shimstream_logs_${ename}.out" &
 							# Start evt with prio=1, in any core.
 							sleep 2s
 							taskset -a -c 0 roslaunch nav2d_tutorials tutorial4_robot.launch 2> $opeMapFname &
@@ -75,7 +75,7 @@ do
 							
 							taskset -a -c 0 roslaunch nav2d_tutorials tutorial4_robot2.launch 2> $robofname &
 							sleep 7s
-							taskset -a -c 1 rosrun beginner_tutorials campreprocess "nono" 20.0 "/camera/rgb/image_raw" 900 "/home/ubuntu/catkin_ws/NewJPGImgs" "new" > "camprep_logs_${ename}.out" 2> "camprep_logs_${ename}.err" &
+							taskset -a -c 0 rosrun beginner_tutorials campreprocess "nono" 20.0 "/camera/rgb/image_raw" 900 "/home/ubuntu/catkin_ws/NewJPGImgs" "new" > "camprep_logs_${ename}.out" 2> "camprep_logs_${ename}.err" &
 							sleep 2s
 							rosservice call /robot_0/StartMapping
 							
@@ -111,14 +111,15 @@ do
 								echo $iter, $failct, $success
 							done
 
-							sleep 10s
+							sleep 7s
 							echo "StartMapping done, ABOUT TO CALL StartExploration!"
-							rosservice call /robot_0/StartExploration
 							sleep 1s
 						
 							if [ $yolo -gt 0 ]; then
-								taskset -a -c 1 roslaunch darknet_ros darknet_ros.launch > "yolo_logs_${ename}.out" 2> "yolo_logs_${ename}.err" &
+								taskset -a -c 0 roslaunch darknet_ros darknet_ros.launch > "yolo_logs_${ename}.out" 2> "yolo_logs_${ename}.err" &
 							fi
+							#sleep 1s
+							rosservice call /robot_0/StartExploration
 
 
 							taskset -a -c 5-6 python measure_cpu.py 0 0 40 $ename $robofname &
