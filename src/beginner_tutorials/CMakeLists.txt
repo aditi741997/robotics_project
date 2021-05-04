@@ -54,6 +54,10 @@ add_executable(subscriber src/subscriber.cpp)
 target_link_libraries(subscriber ${catkin_LIBRARIES})
 add_dependencies(subscriber beginner_tutorials_generate_messages_cpp)
 
+add_executable(campreprocess src/cam_preprocess_node.cpp)
+target_link_libraries(campreprocess ${catkin_LIBRARIES})
+add_dependencies(campreprocess beginner_tutorials_generate_messages_cpp)
+
 add_executable(objdetector src/obj_detector.cpp)
 target_link_libraries(objdetector ${catkin_LIBRARIES}
 ${OpenCV_LIBRARIES}
