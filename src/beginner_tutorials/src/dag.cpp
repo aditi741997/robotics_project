@@ -393,7 +393,7 @@ bool DAG::order_chains_criticality(std::vector<std::tuple<float, std::vector<int
 	double cons0 = std::get<0>(all_chains[0]);
 
 	if (name_.find("nav2d") != std::string::npos )
-		all_chains_rel_weights = std::vector<double> {1.0, 0.005, 0.005, 0.005, 0.0000001, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
+		all_chains_rel_weights = std::vector<double> {1.0, 0.005, 0.005, 0.005, 0.0005, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
 	else if (name_.find("illixr") != std::string::npos )
 		all_chains_rel_weights = std::vector<double> {1.0, 0.5, 0.005, 0.005, 0.005, 0.005, 0.0000001};
 

@@ -87,12 +87,16 @@ class DAGController: public DAGControllerFE
 	DAG node_dag; // Nov: not used now.
 	DAGControllerBE* controller;
 
+	int num_socket_conn; // 3 for nav2d, 4 for nav2d_yolo
+
 public:
         DAGController(int x, std::string dag_file, bool dyn_opt, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp)
         {
 		ROS_INFO("Initializing DAGController class, params: dyn_opt: %i, use_td: %s, fifo: %s, fmc: %i, fmu %i, fnc %i, fnp %i, ps %i, plc %i, plp %i", dyn_opt, use_td.c_str(), fifo.c_str(), f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
 		controller = new DAGControllerBE(dag_file, this, dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp, 1);
 
+		num_socket_conn = (dag_file.find("yolo") == std::string::npos) ? 3 : 4;
+		
 		ROS_INFO("DAGController : Subscribe to 'exec_start' topics for ALL nodes, to get tid/pid.");
 		last_node_cc_name = controller->get_last_node_cc_name();
 		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/robot_0/exec_end_" + last_node_cc_name, 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
@@ -157,10 +161,10 @@ public:
 	void socket_conn()
 	{
 		if (listen(srv_fd, 2) < 0) ROS_ERROR("Socket:: LISTEN failed!!!");
-		ROS_INFO("DAGC: Socket Connecting thread! id: %i Listening on port %i for clients...\n", ::gettid(), port_no);
+		ROS_INFO("DAGC: Socket Connecting thread! id: %i , WANNA connect to %i sockets, Listening on port %i for clients...\n", ::gettid(), num_socket_conn, port_no);
 
 		// want to connect to multiple clients
-		int socket_ct = 3; // scan, mapper, navigator
+		int socket_ct = num_socket_conn; // scan, mapper, navigator, camprep
 		int socket_conn_count = 0;
 
 		int read_size;

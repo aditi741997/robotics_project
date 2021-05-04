@@ -124,6 +124,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			offline_fracs["navc"] = 1.0/f_nc;
 			offline_fracs["navp"] = 1.0/f_np;
 				
+			offline_fracs["ppcam"] = 1.0;
 			/* node_max_skips["navc"] = 5;
 			node_max_skips["navp"] = 3;
 			node_max_skips["mapupd"] = 2; */
