@@ -90,10 +90,10 @@ class DAGController: public DAGControllerFE
 	int num_socket_conn; // 3 for nav2d, 4 for nav2d_yolo
 
 public:
-        DAGController(int x, std::string dag_file, bool dyn_opt, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp)
+        DAGController(int x, std::string dag_file, bool dyn_opt, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp, int num_cores)
         {
-		ROS_INFO("Initializing DAGController class, params: dyn_opt: %i, use_td: %s, fifo: %s, fmc: %i, fmu %i, fnc %i, fnp %i, ps %i, plc %i, plp %i", dyn_opt, use_td.c_str(), fifo.c_str(), f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
-		controller = new DAGControllerBE(dag_file, this, dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp, 1);
+		ROS_INFO("Initializing DAGController class, params: dyn_opt: %i, use_td: %s, fifo: %s, fmc: %i, fmu %i, fnc %i, fnp %i, ps %i, plc %i, plp %i, numcores: %i", dyn_opt, use_td.c_str(), fifo.c_str(), f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp, num_cores);
+		controller = new DAGControllerBE(dag_file, this, dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp, num_cores);
 
 		num_socket_conn = (dag_file.find("yolo") == std::string::npos) ? 3 : 4;
 		
@@ -512,7 +512,7 @@ int main (int argc, char **argv)
 		p_lp = atoi(argv[10]);	
 	}
 	bool dyn_opt = (atoi(argv[11]) == 1) ;
-        DAGController dagc(0, "/home/ubuntu/catkin_ws/" + dag_fname + "_dag.txt", dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
+        DAGController dagc(0, "/home/ubuntu/catkin_ws/" + dag_fname + "_dag.txt", dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp, atoi(argv[12]));
         ros::spin();
 
         return 0;
