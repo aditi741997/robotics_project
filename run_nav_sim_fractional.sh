@@ -7,6 +7,8 @@ ct=7
 ccid=2
 td="nono"
 expt_timelimit=17
+yolo=0
+dagfile="nav2d_small" # "nav2d_yolo" for yolo, "illixr" for illixr
 for navpF in 1.0 #1.056 #5.0 #1.0 0.2
 do
 	for mcbF in 100.0 #1.107 #10.0 7.0 4.0 1.0 0.4 0.16 
@@ -57,7 +59,7 @@ do
 							#For slowing down navp: 
 							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_75p_smallnavp" $td "no" 16 63 3 63 1 1 1 0 > $dagcontOname 2> $dagcontEname &
 							#taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_95p_smallest" $td "no" 74 98 1 74 1 1 1 0 > $dagcontOname 2> $dagcontEname &
-							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller "nav2d_small" $td "no" 1 1 1 1 1 1 1 1 > $dagcontOname 2> $dagcontEname & 
+							taskset -a -c 0 chrt -f 4 rosrun beginner_tutorials dag_controller $dagfile $td "no" 1 1 1 1 1 1 1 1 > $dagcontOname 2> $dagcontEname & 
 							sleep 4s
 							taskset -a -c 1 rosrun beginner_tutorials shimfreqnode $ccF "/robot_0/base_scan1" "/robot_0/base_scan" "scan" $td > "nav2d_shim_logs_${ename}.out" 2> "nav2d_shim_logs_${ename}.err" &
 							
@@ -75,6 +77,11 @@ do
 							sleep 12s
 							rosservice call /robot_0/StartMapping
 							
+							if [ $yolo -gt 0 ]; then
+								taskset -a -c 1 rosrun beginner_tutorials campreprocess "nono" 20.0 "/camera/rgb/image_raw" 900 "/home/ubuntu/catkin_ws/NewJPGImgs" "new" > "camprep_logs_${ename}.out" 2> "camprep_logs_${ename}.err" &
+								taskset -a -c 1 roslaunch darknet_ros darknet_ros.launch > "yolo_logs_${ename}.out" 2> "yolo_logs_${ename}.err" &
+							fi
+
 							#taskset -a -c 5-6 python src/rbx/src/move_dynamic_obst_special.py 200 0.1 0.9 > "nav2d_moveObst_logs_${ename}.txt" 2> "nav2d_moveObst_logs_${ename}.err" &
 							# Before startingExpl, Look for MAPPING Failed / Successful.
 							failct="0"
@@ -153,7 +160,7 @@ do
 							rosrun map_server map_saver -f $ename map:=/robot_0/map &
 							sleep 5s
 							echo "Killing all procs now!"
-							for pname in shimstream measure_cpu dag_controller operator map_saver navigator mapper joy_node shimfreqnode rviz remote_joy stage get_map_client explore_client set_goal_client move_dynamic_obst
+							for pname in darknet camprep shimstream measure_cpu dag_controller operator map_saver navigator mapper joy_node shimfreqnode rviz remote_joy stage get_map_client explore_client set_goal_client move_dynamic_obst
 							do
 							    echo "Killing_$pname"
 							    kill -15 $(ps -ef | grep $pname | grep -v grep | awk '{print $2}') #| xargs kill -15
