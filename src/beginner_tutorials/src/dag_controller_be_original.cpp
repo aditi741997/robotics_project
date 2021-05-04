@@ -379,7 +379,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		double core_period = 1.0;
 		std::vector<long> sc_to (core_exec_order.size() );
                 std::vector<double> sc_fracs ( core_exec_order.size() ) ;
-		
+		std::vector<double> sc_trigger_fracs ( core_exec_order.size() ) ; // To enforce a lower bound on period, a node can be sent triggers at a frequency lower than what was assigned by the solver. It still gets resources equal to solver's O/P, but they can be used by other nodes as well.
+
 		while (!shutdown_scheduler)
 		{
 			offline_fracs_mtx.lock();
@@ -392,11 +393,25 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				core_period += (double)sc_to[i]/1000.0;
 			}
 			offline_fracs_mtx.unlock();
+			
+			for (int i = 0; i < core_exec_order.size(); i++)
+			{
+				double min_per = node_dag_mc.get_subchain_min_per(core_exec_order[i]);
+				if (min_per > 0.001)
+				{
+					sc_trigger_fracs[i] = std::min(sc_fracs[i], (core_period)/min_per);
+					// printf("min per for sc id %i is %f, core per: %f, curr frac: %f, new frac: %f, trigger_Fracs: %f", core_exec_order[i][0], min_per, core_period, sc_fracs[i], (core_period)/min_per, sc_trigger_fracs[i]);
+				}
+				else
+					sc_trigger_fracs[i] = sc_fracs[i];
+			}
+			
 			if (total_period_count % 100 == 0) {
 				DEBUG(core_period);
 				for (size_t i = 0; i < sc_fracs.size(); ++i) {
 					DEBUG(i);
 					DEBUG(sc_fracs[i]);
+					DEBUG(sc_trigger_fracs[i]);
 				}
 			}
 
@@ -405,9 +420,9 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				// prio(i) = 2, all others = 1.
 				long i_to = sc_to[i];
 				// CHECK: For DynNoSC 
-				checkTriggerExec( core_exec_order[i], core_ids[0], sc_fracs[i] ); 
+				checkTriggerExec( core_exec_order[i], core_ids[0], sc_trigger_fracs[i] ); 
 				
-				if (! checkWaitFor(core_exec_order, i, i_to, core_ids[0], core_node_exec_order_id, sc_fracs, core_period) )
+				if (! checkWaitFor(core_exec_order, i, i_to, core_ids[0], core_node_exec_order_id, sc_trigger_fracs, core_period) )
 				{
 					changePriority(core_exec_order, i, core_ids[0]); // handles changing priority
 					

@@ -219,6 +219,8 @@ DAG::DAG(std::string fname)
 	std::cout << "IN DAG Constructor!! NAME : " << name_ << std::endl;
 	std::ifstream df(fname);
 	std::vector<std::tuple<float, std::vector<int>, float, int > > chains;
+	
+	
 	if (df.is_open())
 	{
 		std::string line;
@@ -333,7 +335,13 @@ DAG::DAG(std::string fname)
 	
 }
 
-
+double DAG::get_subchain_min_per(std::vector<int>& sc_ids)
+{
+	double min_per = 0.0;
+	for (auto &x : sc_ids)
+		min_per = std::max(min_per, id_node_map[x].min_period );
+	return min_per;
+}
 
 void DAG::print_dvec(std::vector<double>& v, std::string s)
 {
@@ -388,6 +396,7 @@ bool DAG::order_chains_criticality(std::vector<std::tuple<float, std::vector<int
 		all_chains_rel_weights = std::vector<double> {1.0, 0.005, 0.005, 0.005, 0.0000001, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
 	else if (name_.find("illixr") != std::string::npos )
 		all_chains_rel_weights = std::vector<double> {1.0, 0.5, 0.005, 0.005, 0.005, 0.005, 0.0000001};
+
 	print_dvec(all_chains_rel_weights, "All Chains Rel Weights:");
 
 	return ret;	
