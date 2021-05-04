@@ -176,6 +176,7 @@ private:
 	std::vector< std::vector<int> > curr_sc_core_assgt;
 	std::map<int, boost::thread> per_core_sched_threads;
 	std::map<int, long int> per_core_period_counts;
+	std::map<int, std::map<int, long int> > per_core_sc_last_trigger_ct; // core id -> [sc_0th_id -> period_ct of when this was triggered last]
 	std::map<int, double> per_core_period_map; // HP of each core sched.
 	// std::map<int, boost::condition_variable> cv_;
 	// pass core # to each function to easily access period ct etc.

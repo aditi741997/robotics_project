@@ -352,6 +352,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			return;
 		}
 		per_core_period_counts[core_ids[0] ] = 1;
+		per_core_sc_last_trigger_ct[ core_ids[0] ].clear();
 		total_period_count = 1;
 		
 		// Done: Make core-wise exec_order: [exec_list is the list of sc ids on a particular core.]
@@ -374,6 +375,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			}
 
 			core_exec_order.push_back( a );
+			per_core_sc_last_trigger_ct[ core_ids[0] ][ a[0] ] = -1;
 		}
 		changeAffinityThread("handle_Sched_main for core="+std::to_string(core_ids[0]), 0, core_ids );
 		
@@ -591,7 +593,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	bool DAGControllerBE::got_all_info()
 	{
 		if (dag_name.find("nav") != std::string::npos )
-			return (node_tid.find("navc") != node_tid.end());
+			return (node_tid.find("navc") != node_tid.end() && ( (dag_name.find("yolo") != std::string::npos) ? node_tid.find("yolo") != node_tid.end() : true ) );
 		else if (dag_name.find("ill") != std::string::npos)
 		{
 			bool ans = true;
@@ -831,6 +833,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		printf("Mt %f, realtime %f, dynamic_reoptimize_func THREAD pthread tid: %i, tid: %i \n", get_monotime_now(), get_realtime_now(), reoptimize_thread_id, ::gettid() );
 
 		int sleep_time = 2000;
+		bool first_resolve = true;
 
 		while (!shutdown_scheduler)
 		{
@@ -846,8 +849,36 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			try
 			{
 			offline_fracs_mtx.lock();
-			// update compute times to be 75ile of recent data.
+			// update compute times to be 95ile of recent data.
 			node_dag_mc.update_cis(node_ci_arr, node_ci2_arr, node_ci_mode_arr);
+			if (first_resolve)
+			{
+				// bootstrapping: if a node has 0 ci samples now, use max of other ci's as an estimate. [only for first re-solve.]
+				std::vector<int> bootstrap_ci_nodes;
+				float max_ci = 0.0;
+				for (auto& kv : node_dag_mc.name_id_map)
+				{
+					if (node_ci_mode_arr[kv.first].size() == 0)
+						bootstrap_ci_nodes.push_back(kv.second);
+					else
+						max_ci = std::max(max_ci, node_dag_mc.id_node_map[kv.second].compute);
+				}
+				for (auto &x: bootstrap_ci_nodes)
+				{
+					printf("CI ESTIMATE unavailable for node %i, using max of other ci as an estimate %f", x, max_ci);
+					node_dag_mc.id_node_map[x].compute = max_ci;
+				}
+				
+				// assign each SC frac = (#nodes)*5 / ci : so that we give each node 5ms per HP until first re-solve.
+				for (int i = 0; i < exec_order.size(); i++)
+				{
+					offline_fracs[ node_dag_mc.id_name_map[exec_order[i][0]] ] = std::min(1.0, (5.0 * exec_order[i].size())/( get_sum_ci_ith(exec_order[i]) ) );
+					printf("JUST BEFORE FIRST re-solve: SETTING offline fracs so as to give each node <=5ms per HP [just until first re-solve!!] frac for %s : %f", node_dag_mc.id_name_map[exec_order[i][0]].c_str(), offline_fracs[ node_dag_mc.id_name_map[exec_order[i][0]] ]);
+				}
+			
+				first_resolve = false;
+			}
+			
 			offline_fracs_mtx.unlock();
 			printf("DONE Updating all cis! Will start solving now: ");
 				
@@ -877,7 +908,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					offline_fracs_mtx.unlock();
 
 					update_per_core_threads();
-
 
 					// For DFracV2 expts, where we re-solve only once:
 					// dynamic_reoptimize = false;
@@ -1034,10 +1064,11 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		int id = sci[0];
 		int ind_p = round(1.0/frac);
 		std::string name = node_dag_mc.id_name_map[id];
-	
+		bool is_streaming = (node_dag_mc.id_node_map[id].node_type.find("S") != std::string::npos );
+
 		bool need_to_skip_trigger_and_wait = false;
 		int wait_for_nid = 0;
-		// March-2021: Skip triggers/give resrc to previous node, if need to wait for new inputs.
+		// March-2021: [old implementation of waitfor] Skip triggers/give resrc to previous node, if need to wait for new inputs.
 		/*	
 		if ( node_dag_mc.id_node_map[id].wait_for_outputs.size() > 0 )		
 			{
@@ -1054,17 +1085,23 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			printf("WEIRDDDDDD - ind_p : %i, frac: %f, name: %s", ind_p, frac, name.c_str());
 
 		// Mar-Apr:2021: Triggering mapcb each period since its a streaming node. 
-		if ( (ind_p == 1 || ( (ind_p>0) && ( (per_core_period_counts[core_id]) %ind_p == 1)) ) || (name.find("mapcb") != std::string::npos) ) // && (node_tid.find(name) != node_tid.end() ) )  
+		// if ( (ind_p == 1 || ( (ind_p>0) && ( (per_core_period_counts[core_id]) %ind_p == 1)) ) || (name.find("mapcb") != std::string::npos) ) // && (node_tid.find(name) != node_tid.end() ) )  
+		
+		// ind_p=1, is_streaming : trigger per HP, per_core_period_counts = 1 means first period, then check wrt last trigger.
+
+		if ( (ind_p == 1) || (is_streaming) || (per_core_period_counts[core_id] == 1) || (per_core_sc_last_trigger_ct[core_id][id] < (per_core_period_counts[core_id] - ind_p) ) )
 		{
+			/*
 			if (need_to_skip_trigger_and_wait)
 			{
 				node_skip_ct[name] += 1;	
 				if (per_core_period_counts[core_id]%50 == 7 || (name.find("navp") != std::string::npos) || (name.find("mapu") != std::string::npos) )
 					printf("MT: %f, RT: %f, node: %s, skip ct: %i, latest ts: %i, WAITFOR %s with ts: %i simTime: %i ", get_monotime_now(), get_realtime_now(), name.c_str(), node_skip_ct[name].load(), node_latest_sensor_ts[name], node_dag_mc.id_name_map[wait_for_nid].c_str(), node_latest_sensor_ts[node_dag_mc.id_name_map[wait_for_nid]], frontend->get_sim_time() );
 			}
-			else
+			else */
+
 			{
-				if (per_core_period_counts[core_id]%12 == 3)
+				if (per_core_period_counts[core_id]%12 == 3 || (name.find("ppcam") != std::string::npos) )
 					printf("MT: %f, RT: %f, trigger node: %s, frac: %i, period_count: %li \n", get_monotime_now(), get_realtime_now(), name.c_str(), ind_p, per_core_period_counts[core_id]);
 			
 				frontend->trigger_node(name, true);
@@ -1075,7 +1112,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				if (last_trig_ts[name] > 0)
 					trigger_log << name << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
 				last_trig_ts[name] = get_realtime_now();
-				node_skip_ct[name] = 0; // reset skip ct at every trigger
+				// node_skip_ct[name] = 0; // reset skip ct at every trigger
+				per_core_sc_last_trigger_ct[core_id][id] = per_core_period_counts[core_id];
 			}
 		}
 		// return false only if need_to_skip_trig_and_wait is true.

@@ -156,6 +156,8 @@ void YoloObjectDetector::init() {
       nodeHandle_.advertise<sensor_msgs::Image>(detectionImageTopicName, detectionImageQueueSize, detectionImageLatch);
 
   cam_yolo_count = 0;
+  last_cam_ts = -1.0;
+  last_cam_yolo_out = 0.0;
 
   yolo_thr_info_pub = nodeHandle_.advertise<std_msgs::Header> ("/robot_0/exec_start_yolo", 1, true);
   yolo_exec_end_pub = nodeHandle_.advertise<std_msgs::Header> ("/robot_0/exec_end_yolo", 1, true);
@@ -189,7 +191,7 @@ void write_arrs_to_file(std::vector<double>& times, std::vector<double>& ts, std
 		if (sz > 0)
 		{
 			std::ofstream of;
-			of.open("/home/ubuntu/robot_" + s + "_stats_" + ename + ".txt", std::ios_base::app);
+			of.open("/home/ubuntu/robot_nav2d_" + s + "_stats_" + ename + ".txt", std::ios_base::app);
 			of << "\n" << s << " times: ";
 			for (int i = 0; i < sz; i++)
 				of << times[i] << " ";
@@ -210,7 +212,7 @@ void write_arr_to_file(std::vector<double>& arr, std::string m)
 	        nh.param<std::string>("/expt_name", ename, "");
 
 	        std::ofstream of;
-	        of.open("/home/ubuntu/robot_nav2d_" + ename + "_rt_stats.txt", std::ios_base::app);
+	        of.open("/home/ubuntu/robot_nav2d_" + ename + "_yolo_rt_stats.txt", std::ios_base::app);
 	        of << m << ": ";
 	             for (int i = 0; i < arr.size(); i++)
 	                     of << std::to_string(arr[i]) << " ";
@@ -296,7 +298,8 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg) {
     try
     {
 	    printf("buffletter? %p buff letter: %p, data: %p", (void*) (buffLetter_), (void*)buffLetter_[buffIndex_].data );
-    	letterbox_image_into(buff_[buffIndex_], net_->w, net_->h, buffLetter_[buffIndex_]);
+    		// this is not needed as we anyway assign buffLetter_[0] below.
+	    // letterbox_image_into(buff_[buffIndex_], net_->w, net_->h, buffLetter_[buffIndex_]);
 	}
     catch (int e)
     {
@@ -347,16 +350,17 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg) {
     ts.push_back(ci+ci_start);
     printf("CI: %f, cpu time: %f", ci, cpu_ci);
 
-    if (cam_yolo_count % 50 == 17)
+    if (cam_yolo_count % 10 == 7)
     {
 	    // write lat,tput,rt to file.
+	    	printf("WRITING ALL ARRS TO FILE!!!");
 		write_arr_to_file(lat_cam_yolo_arr, "Lat_PPCam_Yolo");
 		write_arr_to_file(tput_cam_yolo_arr, "Tput_PPCam_Yolo");
 		write_arr_to_file(rt_cam_yolo_arr, "RT_PPCam_Yolo");
 		write_arr_to_file(ts_cam_yolo_arr, "TS_PPCam_Yolo");
     }
 
-    if (ts.size()%50 == 27)
+    if (cam_yolo_count %10 == 8)
 	    write_arrs_to_file(cis, ts, "yolo");
 
     double time_now = get_time_now();
@@ -367,7 +371,9 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg) {
 	    ts_cam_yolo_arr.push_back(time_now);
 	    cam_yolo_count += 1;
 
-	    if (last_cam_yolo_out)
+	    printf("last cam ts: %f, using cam ts: %f, time now: %f, last_cam_yolo_out: %f", last_cam_ts, using_cam_ts, time_now, last_cam_yolo_out);
+
+	    if (last_cam_yolo_out > 0.0)
 		    tput_cam_yolo_arr.push_back(time_now - last_cam_yolo_out);
 
 	    if (cam_yolo_count > 1)
