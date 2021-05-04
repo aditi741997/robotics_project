@@ -191,6 +191,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	
 		// fakenode:
 		fakenode_thread = boost::thread(&DAGControllerBE::fakenode_work, this);
+	
+		reoptimize_thread_id = 0; // initialize with 0
 	}
 
 	void DAGControllerBE::start()
@@ -669,7 +671,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					
 				}
 			}
-			if (dynamic_reoptimize)
+			if (dynamic_reoptimize && (reoptimize_thread_id == 0) )
 				reoptimize_thread = boost::thread(&DAGControllerBE::dynamic_reoptimize_func, this);
 		}
 	}
@@ -882,7 +884,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					// return;
 				}
 				else
+				{
 					scale_nc_constr = true;
+					printf("SAD: all_frac_values[0]: %f", all_frac_values[0]);
+				}
 			}
 			catch (const std::exception& e)
 			{
@@ -891,11 +896,12 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			}
 			
 			sleep_time = scale_nc_constr ? 1000 : 5000;
+			/*
 			if (scale_nc_constr)
 			{
 				node_dag_mc.scale_nc_constraints(1.5);
 				scale_nc_constr = false;
-			}
+			} */
 		}
 		printf("MT: %f, RT: %f, OUT OF THE reoptimize LOOP!!! shutdown_scheduler: %i \n", get_monotime_now() , get_realtime_now(), shutdown_scheduler.load());
 	
