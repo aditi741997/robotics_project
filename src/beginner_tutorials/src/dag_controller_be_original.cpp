@@ -423,7 +423,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				// CHECK: For DynNoSC 
 				checkTriggerExec( core_exec_order[i], core_ids[0], sc_trigger_fracs[i] ); 
 				
-				if (! checkWaitFor(core_exec_order, i, i_to, core_ids[0], core_node_exec_order_id, sc_trigger_fracs, core_period) )
+				if (! checkWaitFor(core_exec_order, i, i_to, core_ids[0], core_node_exec_order_id, sc_fracs, core_period) )
 				{
 					changePriority(core_exec_order, i, core_ids[0]); // handles changing priority
 					
