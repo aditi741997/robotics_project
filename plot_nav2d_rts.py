@@ -3,7 +3,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 import copy
-
+import json
 rt_fname_pre = sys.argv[1]
 
 start_t = float(sys.argv[2])
@@ -106,7 +106,11 @@ fname_append = sys.argv[7] #"_nav" if nav_chains else ""
 
 high_lat_thresh = float(sys.argv[8])
 
+data_fname = sys.argv[9]
+
 runs = range(start_run_ind,end_run_ind+1)
+
+runs_final_data = {}
 
 for run in runs: #range(start_run_ind,end_run_ind+1):
         #for chain in ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]:
@@ -189,6 +193,12 @@ for ch in arr_chains:
 for k in per_run_chain_lats:
     print(k, "LAT ORDERED WRT TIME:", per_run_chain_lats[k])
     print('---')
+    if "Odom_NC" in k:
+        runs_final_data["Odom_NC_Lat"] = per_run_chain_lats[k]
+
+print("fileNAME : ", data_fname)
+with open(data_fname+'.txt','w') as ffff:
+    json.dump(runs_final_data, ffff)
 
 if yolo_chains:
     for k in per_run_chain_lats:
