@@ -105,7 +105,6 @@ void YoloObjectDetector::init() {
   strcpy(cfg, configPath.c_str());
 
   // Path to data folder.
-  ROS_INFO("DATAPath : %s", darknetFilePath_.c_str());
   dataPath = darknetFilePath_;
   dataPath += "/data";
   data = new char[dataPath.length() + 1];
@@ -147,6 +146,7 @@ void YoloObjectDetector::init() {
   nodeHandle_.param("publishers/detection_image/queue_size", detectionImageQueueSize, 1);
   nodeHandle_.param("publishers/detection_image/latch", detectionImageLatch, true);
 
+  ROS_INFO("DATAPath : %s , cam queue length: %i", darknetFilePath_.c_str(), cameraQueueSize);
   imageSubscriber_ = imageTransport_.subscribe(cameraTopicName, cameraQueueSize, &YoloObjectDetector::cameraCallback, this);
   objectPublisher_ =
       nodeHandle_.advertise<darknet_ros_msgs::ObjectCount>(objectDetectorTopicName, objectDetectorQueueSize, objectDetectorLatch);
@@ -634,9 +634,13 @@ void YoloObjectDetector::setupNetwork(char* cfgfile, char* weightfile, char* dat
   demoThresh_ = thresh;
   demoHier_ = hier;
   fullScreen_ = fullscreen;
-  printf("In setupNetwork: YOLO V3? demoFrame_: %i , demoPrefix_: %s, demoDelay_: %i, \n", demoFrame_, demoPrefix_, demoDelay_);
+  ROS_INFO("In setupNetwork: YOLO V3? demoFrame_: %i , demoPrefix_: %s, demoDelay_: %i, \n", demoFrame_, demoPrefix_, demoDelay_);
+  struct timespec cb_start, cb_end;
+    clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
   net_ = load_network(cfgfile, weightfile, 0);
   set_batch_network(net_, 1);
+  clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
+  ROS_INFO("cputime for load nw stuff: %f", get_time_diff(cb_start, cb_end));
 }
 
 void YoloObjectDetector::yolo() {
