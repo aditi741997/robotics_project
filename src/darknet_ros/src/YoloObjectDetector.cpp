@@ -354,7 +354,7 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg) {
     if ( ci < (1.25 * cpu_ci))
 	    printf("BAD YOLO!!! TS: %f Took very less time to finish -> Hogged cpu!!! \n", time_now);
 
-    if (cam_yolo_count % 10 == 7)
+    if (cam_yolo_count % 5 == 3)
     {
 	    // write lat,tput,rt to file.
 	    	printf("WRITING ALL ARRS TO FILE!!!");
@@ -364,7 +364,7 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg) {
 		write_arr_to_file(ts_cam_yolo_arr, "TS_PPCam_Yolo");
     }
 
-    if (cam_yolo_count %10 == 8)
+    if (cam_yolo_count %10 == 3)
 	    write_arrs_to_file(cis, ts, "yolo");
 
     double lat_ppcam_yolo = time_now - using_cam_ts;
