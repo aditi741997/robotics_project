@@ -124,7 +124,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			offline_fracs["navc"] = 1.0/f_nc;
 			offline_fracs["navp"] = 1.0/f_np;
 				
-			offline_fracs["ppcam"] = 1.0;
+			offline_fracs["ppcam"] = 1.0/140;
 			/* node_max_skips["navc"] = 5;
 			node_max_skips["navp"] = 3;
 			node_max_skips["mapupd"] = 2; */
@@ -1091,7 +1091,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		
 		// ind_p=1, is_streaming : trigger per HP, per_core_period_counts = 1 means first period, then check wrt last trigger.
 
-		if ( (ind_p == 1) || (is_streaming) || (per_core_period_counts[core_id] == 1) || (per_core_sc_last_trigger_ct[core_id][id] < (per_core_period_counts[core_id] - ind_p) ) )
+		if ( (ind_p == 1) || (is_streaming) || (per_core_period_counts[core_id] == 1) || (per_core_sc_last_trigger_ct[core_id][id] <= (per_core_period_counts[core_id] - ind_p) ) )
 		{
 			/*
 			if (need_to_skip_trigger_and_wait)
