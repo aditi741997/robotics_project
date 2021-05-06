@@ -170,6 +170,7 @@ for r in runs:
                 print("Ename: %s, run: %i, HAS WEIRD PP error: %s"%(ename, r, l) )
 
 # check for 'ERROR' tid=0 errors | yolo asan error:
+good_runs_bad_yolo_stats = {}
 for r in runs:
 	yolo_asan_err = False
 	try:
@@ -190,10 +191,12 @@ for r in runs:
                 if (bad_yolo_ct > 3) or (len(bad_yolo_after_init) > 1):
                     print("Ename: %s, run: %i, HAS too many bad yolos %i after init: %i [start: %f]"%(ename, r, bad_yolo_ct, len(bad_yolo_after_init), start_rts[r]))
                     bad_runs.add(r)
+                elif r not in bad_runs:
+                    good_runs_bad_yolo_stats[r] = (bad_yolo_ct, len(bad_yolo_after_init))
         except:
 		print("Weird error in reading yolo logs.", sys.exc_info()[0])
         
-
+print("FOR Good runs, bad yolo stats: ", good_runs_bad_yolo_stats)
 print("FINAL Set of bad runs: ", bad_runs, "#BadRuns: ", len(bad_runs) )
 print("#E Fails: ", len(efails), efails)
 print("THRASHing: ", thrash_set)
