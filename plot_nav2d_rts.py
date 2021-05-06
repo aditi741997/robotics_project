@@ -110,6 +110,10 @@ data_fname = sys.argv[9]
 
 runs = range(start_run_ind,end_run_ind+1)
 
+for br in [3,10,13,17,21]:
+	if br in runs:
+		runs.remove(br)
+print(runs, len(runs))
 runs_final_data = {}
 
 for run in runs: #range(start_run_ind,end_run_ind+1):

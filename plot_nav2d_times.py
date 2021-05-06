@@ -97,11 +97,17 @@ aggregate_navc_tput = []
 per_run_navc_ts = []
 node_tputs = {} # node name -> array
 
+runs = range(start_run_ind,end_run_ind+1)
+for br in [3,10,13,17,21]:
+	if br in runs:
+		runs.remove(br)
+print(runs, len(runs))
+
 runs_final_data = {}
 
 for fname in ["operator_loop", "yolo", "local_map", "navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_plan"]:
     node_tputs[fname] = []
-    for run in range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]: 
+    for run in runs: #range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]: 
     	print("################## DOING RUN %i"%(run) )
         times = []
         ts = []
