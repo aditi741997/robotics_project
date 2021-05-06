@@ -177,14 +177,25 @@ void CamPreProcess::do_work()
 
 	if (total_pub_count < 50)
 	{
-		printf("CAMPP TID: %i, PID : %i", ::gettid(), ::getpid());
+		std_msgs::Header hdr, hdre;
+		std::stringstream ss_e1, ss_e2;
+		if (total_pub_count%2 == 1)
+		{
 
-		std_msgs::Header hdr;
-		std::stringstream ss_e;
-                ss_e << ::getpid() << " ppcam " << ::gettid();
-                hdr.frame_id = ss_e.str();
-		
-		pp_thr_info_pub.publish(hdr);
+			ss_e1 << ::getpid() << " ppcam " << ::gettid();
+			hdr.frame_id = ss_e1.str();
+			printf("CAMPP TID: %i, PID : %i hdr msg: %s", ::gettid(), ::getpid(), hdr.frame_id.c_str());
+			pp_thr_info_pub.publish(hdr);
+
+		}
+		else
+		{
+			ss_e2 << ::getpid() << " ppcam_extra " << nh.getPMTId();
+			hdre.frame_id = ss_e2.str();
+			printf("CAMPP extra tid %s", hdre.frame_id.c_str());
+			pp_thr_info_pub.publish(hdre);
+		}
+			
 	}
 
 	// sieve

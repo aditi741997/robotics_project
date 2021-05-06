@@ -388,6 +388,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 		while (!shutdown_scheduler)
 		{
+			set_high_priority("MAIN sched Thread", 4, 0);
 			offline_fracs_mtx.lock();
 			// Using lock to protect offline_fracs, node_dag_mc. core_period = per_core_period_map[ core_ids[0] ];
 			core_period = 0.0;
@@ -411,9 +412,10 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 					sc_trigger_fracs[i] = sc_fracs[i];
 			}
 			
-			if (total_period_count % 100 == 0) {
+			if (total_period_count % 100 == 1) {
 				DEBUG(core_period);
 				for (size_t i = 0; i < sc_fracs.size(); ++i) {
+					DEBUG(get_monotime_now());
 					DEBUG(i);
 					DEBUG(sc_fracs[i]);
 					DEBUG(sc_trigger_fracs[i]);
@@ -450,7 +452,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 							ct += 1;
 						}
 						if (ct > 5)
-							printf("Monotime %f, realtime %f, Waited for CC's completion! ct %i ready_sched %i [if 0, CC hasnt ended!] \n", get_monotime_now(), get_realtime_now(), ct, (bool)(ready_sched.load()) );
+							printf("Monotime %f, realtime %f, Waited for CC's completion! ct %i node finished:  %i [if 0, CC hasnt ended!] \n", get_monotime_now(), get_realtime_now(), ct, (bool)(node_finished[ lastnode_id ]) );
 						
 			cc_completion_log << trig_cc << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
 						// clear node_finished bool.
@@ -471,7 +473,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			int one_in_k_per = ceil(2000/(float)(20* core_period ));
 			
 			// CHECK: For DynNoSC
-			if (per_core_period_counts[core_ids[0]] %( one_in_k_per ) == 0 && (dynamic_reoptimize))
+			if (per_core_period_counts[core_ids[0]] %( one_in_k_per ) == 0 && (reoptimize_thread_id != 0))
 			{
 				printf("WANNA run dyn_reopt-2ms now!! 1in?Per: %i \n", one_in_k_per);
 				changePriority(core_exec_order, -1, core_ids[0]);

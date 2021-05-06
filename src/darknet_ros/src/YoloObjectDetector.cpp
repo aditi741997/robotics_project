@@ -233,7 +233,7 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg) {
   struct timespec cb_start, cb_end;
   clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start);
 
-  if (cam_yolo_count < 10)
+  if (cam_yolo_count < 3)
   {
 	  printf("YOLO publoshing tid %i, pid %i \n", ::gettid(), ::getpid());
 	  std_msgs::Header hdr;
@@ -344,11 +344,15 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg) {
 
 
     clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end);
-    double ci = get_time_now() - ci_start;
+    double time_now = get_time_now();
+    double ci = time_now - ci_start;
     double cpu_ci = get_time_diff(cb_start, cb_end);
     cis.push_back(cpu_ci);
     ts.push_back(ci+ci_start);
-    printf("CI: %f, cpu time: %f", ci, cpu_ci);
+    printf("CI: %f, cpu time: %f \n", ci, cpu_ci);
+
+    if ( ci < (1.25 * cpu_ci))
+	    printf("BAD YOLO!!! TS: %f Took very less time to finish -> Hogged cpu!!! \n", time_now);
 
     if (cam_yolo_count % 10 == 7)
     {
@@ -363,7 +367,6 @@ void YoloObjectDetector::cameraCallback(const sensor_msgs::ImageConstPtr& msg) {
     if (cam_yolo_count %10 == 8)
 	    write_arrs_to_file(cis, ts, "yolo");
 
-    double time_now = get_time_now();
     double lat_ppcam_yolo = time_now - using_cam_ts;
     if (using_cam_ts > last_cam_ts)
     {
