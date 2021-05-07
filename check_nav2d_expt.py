@@ -183,14 +183,22 @@ for r in runs:
 			bad_runs.add(r)
 	        bad_yolo_ct = 0
                 with open("yolo_logs_"+  ename + run_txt + str(r) + ".out", 'r') as f:
-                    bad_yolos = filter( lambda x: "BAD YOLO" in x, f.readlines())
+                    if "1c" in ename:
+                        bad_yolos = filter( lambda x: "BAD YOLO" in x, f.readlines())
+                        bad_yolo_after_init = filter(lambda x: float(x.split(' ')[3]) > (start_rts[r]+10.0) , bad_yolos)
+                    else:
+                        # need to check CI, cputime ratio
+                        times = filter(lambda x: "cpu time:" in x, f.readlines())
+                        #print(times, "times")
+                        bad_yolos = filter(lambda x: float(x.split(' ')[1][:-1]) < 1.1*float(x.split(' ')[4]), times)
+                        bad_yolo_after_init = []
                     bad_yolo_ct = len(bad_yolos)
-                    bad_yolo_after_init = filter(lambda x: float(x.split(' ')[3]) > (start_rts[r]+10.0) , bad_yolos)
                     
                 # if >3 reject, else if >1 in >10s : reject.
                 if (bad_yolo_ct > 3) or (len(bad_yolo_after_init) > 1):
                     print("Ename: %s, run: %i, HAS too many bad yolos %i after init: %i [start: %f]"%(ename, r, bad_yolo_ct, len(bad_yolo_after_init), start_rts[r]))
                     bad_runs.add(r)
+                    print("bad yolos: ", bad_yolos)
                 elif r not in bad_runs:
                     good_runs_bad_yolo_stats[r] = (bad_yolo_ct, len(bad_yolo_after_init))
         except:
