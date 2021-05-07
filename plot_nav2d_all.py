@@ -559,11 +559,11 @@ runs_mean_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 runs_75p_tputs = {} # subchain name -> array[over is] of arrays[over runs].
 
 exptn = "OfflineMCB_H"
-expts = [ "DynNOFF_1c" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
+expts = [ "StaticNOFF1Y_1c" ] #,"DefSM4V3_1c_CC2" ,"DefaultTD_2c"] 
 
 #runs = range(5, 8) + range(31,48)
-runs = range(1,21)
-for badr in []: #[2,5,8,15,17]: #57,89]: #[3,20,25,28,31,40,51,55]:
+runs = range(1,26)
+for badr in [3,10,13,17,21]: #[2,5,8,15,17]: #57,89]: #[3,20,25,28,31,40,51,55]:
     runs.remove(badr)
 print(runs, len(runs))
 
@@ -571,7 +571,8 @@ print(runs, len(runs))
 run_rts_percentile = 90 #50
 run_lats_percentile = 90
 for i in expts:
-        run_totalareas = []
+        run_start_rt_ts = []
+	run_totalareas = []
 	run_total_gtareas = []
 	run_tputs = {} # name -> list
 	run_rts = {} # chain name -> list
@@ -663,6 +664,7 @@ for i in expts:
 		print("For i ", i, " Start, end times: ", start_i, end_i, " ST start %f end %f"%(start_st_i,end_st_i) )
 		run_total_times.append(round(end_st_i - start_st_i - 0.1,2))
 		run_finish_arr.append( run_expl_finished )
+		run_start_rt_ts.append(start_i)
 		# store each run's metrics as dict: window# -> value
 		# so its easier to take intersection of set of keys of all metrics.
 	# Get tput for each subchain
@@ -1217,6 +1219,8 @@ for i in expts:
         #run_final_data["collisions"] = colln_count_arr
         print("FOR expt %s, colln array : %s"%(i, str(colln_count_arr) ) )
         print("-")
+	print("RUN Start TIMES ARR: ", run_start_rt_ts)
+	print("--")
         #print("Time to cover Xp area : ", time_to_areas)
         print("SimTime to cover Xp area : ", stime_to_areas)
         print("-")
