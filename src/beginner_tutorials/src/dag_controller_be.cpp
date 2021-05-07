@@ -31,6 +31,8 @@
 #define CAM_PLUGIN_NAME "8"
 #define INT_PLUGIN_NAME "3"
 
+const int scheduler_priority = 6;
+
 int sched_setattr(pid_t pid, const struct sched_attr *attr, unsigned int flags)
 {
 	        return syscall(__NR_sched_setattr, pid, attr, flags);
@@ -258,7 +260,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	void DAGControllerBE::startup_trigger_func()
 	{
 		pthread_setname_np(pthread_self(), "startup_trig");
-		set_high_priority("Startup trigger thread", 4, 0);
+		set_high_priority("Startup trigger thread", scheduler_priority, 0);
 		double cc_period = 0.0; // in millisec.
 		for (int i = 0; i < exec_order.size(); i++)
 			cc_period += get_sum_ci_ith(exec_order[i])*offline_fracs[ node_dag_mc.id_name_map[ exec_order[i][0] ] ];
@@ -352,7 +354,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	{
 		std::string name = "hand_sched_" + std::to_string(core_ids.at(0));
 		pthread_setname_np(pthread_self(), name.c_str());
-		set_high_priority("MAIN sched Thread", 4, 0);
+		set_high_priority("MAIN sched Thread", scheduler_priority, 0);
 		for (auto &i : node_dag_mc.name_id_map)
 			printf("#EXTRA THREADS for node %s : %lu", i.first.c_str(), node_extra_tids[i.first].size() );
 	
@@ -383,6 +385,15 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 			core_exec_order.push_back( a );
 		}
+
+		static bool swap_order = std::getenv("ILLIXR_SWAP_ORDER") && (strcmp(std::getenv("ILLIXR_SWAP_ORDER"), "y") == 0);
+		if (swap_order) {
+			std::cout << "Swapping (added on 2021-05-01)" << std::endl;
+			auto tmp = core_exec_order[1];
+			core_exec_order[1] = core_exec_order[2];
+			core_exec_order[2] = tmp;
+		}
+
 		changeAffinityThread("handle_Sched_main for core="+std::to_string(core_ids[0]), 0, core_ids );
 		
 		printf("STARTING MAinSched thread!! tid: %li Len of exec_order: %zu, curr_cc_period: %f, #cores: %zu, core0: %i \n", ::gettid(), core_exec_order.size(), per_core_period_map[ core_ids[0] ], core_ids.size(), core_ids[0] );
@@ -487,11 +498,15 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 				}
 				else
 				{
-					// sleep for remaining time in budget.
-					long render_time = (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() - render_trigger_ts  );
-					static_assert(sizeof(long) >= 7);
-					thread_custom_sleep_for( illixr_noncrit_to_budget - render_time );
-					cc_completion_log << render_trigger_ts << ", " << render_time << ", " << lastnodename << ", " << illixr_noncrit_to_budget << "\n";
+					if (swap_order) {
+						thread_custom_sleep_for(i_to);
+					} else {
+						// sleep for remaining time in budget.
+						long render_time = (std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() - render_trigger_ts  );
+						static_assert(sizeof(long) >= 7);
+						thread_custom_sleep_for( illixr_noncrit_to_budget - render_time );
+						cc_completion_log << render_trigger_ts << ", " << render_time << ", " << lastnodename << ", " << illixr_noncrit_to_budget << "\n";
+					}
 				}
 			}
 
@@ -744,7 +759,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 
 			if (need_to_update)
 			{
-				set_high_priority("dyn_reopt - NEW SCHED THR", 4, ::gettid() );
+				set_high_priority("dyn_reopt - NEW SCHED THR", scheduler_priority, ::gettid() );
 
 				printf("Monotime %f, Realtime %f :  NEED TO UPDATE was true!!! Starting to join old threads!!", get_monotime_now(), get_realtime_now());
 				shutdown_scheduler = true;
@@ -936,7 +951,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	// Func to just sleep for timeout millisec and then notify cv.
 	void DAGControllerBE::timer_thread_func(double timeout)
 	{
-		set_high_priority("Timer thread", 4, 0);
+		set_high_priority("Timer thread", scheduler_priority, 0);
 		// set canceltype to asynchronous.
 		int oldstate;
 		int ret_pct = pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, &oldstate);

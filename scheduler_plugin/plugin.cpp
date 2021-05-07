@@ -38,7 +38,7 @@ public:
         : plugin{name_, pb_}
 		, sb{pb->lookup_impl<switchboard>()}
 	{
-		if (is_dynamic_scheduler()) {
+		if (is_dynamic_scheduler() || is_static_scheduler()) {
 			size_t fc = std::stoi(std::getenv("ILLIXR_SCHEDULER_FC"));
 			auto dag_file = std::string{std::getenv("ILLIXR_SCHEDULER_CONFIG")};
 			std::cerr << "dag_file: " << dag_file << std::endl;
@@ -70,7 +70,7 @@ public:
 					std::move(name),
 					std::move(sb->get_writer<switchboard::event_wrapper<bool>>(name + "_trigger"))
 				));
-				set_priority(thread.get_pid(), 4);
+				set_priority(thread.get_pid(), 6);
 			}
 		}
 	}
