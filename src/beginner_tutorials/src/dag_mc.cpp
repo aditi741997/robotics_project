@@ -324,7 +324,7 @@ std::vector<float> DAGMultiCore::compute_rt_solve()
 				std::vector<double> a (total_vars, 0.0);
 				a[frac_var_ct + node_id_sc_id[jnode.id] ] = -1.0;
 				// log (approx_per) >= log(fixed_per)
-				print_dvec(a, "ADDED Pni >= fixed_per ");
+				print_dvec(a, "ADDED Pni >= fixed per");
 				mosek_model->constraint( Expr::dot(new_array_ptr<double>(a), all_l_vars), Domain::lessThan( log(1.0/fixed_per) ) ); 
 			}
 			else
@@ -622,9 +622,11 @@ std::vector<float> DAGMultiCore::compute_rt_solve()
 				{
 					auto& sid = core_sc_list[i][si];
 					double f_norm = max_frac/( (*opt_ans)[ sc_id_frac_id[sid] ] );
-					
-					float rf_norm = (f_norm > 1.0) ? round(f_norm) : (f_norm) ;
-					printf("SC ID %i, orig frac: %f, f_norm: %f, frac val (round): %f [can be<1 for S nodes] ", sid, (*opt_ans)[ sc_id_frac_id[sid] ], f_norm, rf_norm);
+				
+					// dont round off for slam. For exactness. In the future, we dont need to round off here since the controller already rounds off while sending triggers.
+					bool is_camslam = (id_name_map[exec_order[sid][0]].find("8") != std::string::npos ); // is exec_order[sid] camslam?
+					float rf_norm = ( (f_norm > 1.0) && (!is_camslam) ) ? round(f_norm) : (f_norm) ;
+					printf("SC ID %i, orig frac: %f, f_norm: %f, frac val (round): %f [can be<1 for S nodes], is_camslam? %i ", sid, (*opt_ans)[ sc_id_frac_id[sid] ], f_norm, rf_norm, is_camslam);
 					all_frac_vals[sid] = rf_norm;
 				}
 
