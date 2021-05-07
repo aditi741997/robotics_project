@@ -1,0 +1,22 @@
+N s 5.0 0 0 0 N
+N lc 5.0 0 0 0 N
+N lp 5.0 0 0 0 N
+N mapcb 5.0 0 640 0 S 20 
+N mapupd 5.0 0 640 0 N
+N navp 5.0 0 1000 0 N
+N navc 5.0 0 0 0 N
+N ppcam 5.0 0 0 0 N
+N yolo 5.0 0 0 0 N
+E s lc mapcb X
+E lc lp X
+E mapcb navc navp mapupd X
+E mapupd navp X
+E navp navc X
+E navc lp X
+E ppcam yolo X
+C 50 s lc lp X
+C 6624 s mapcb navc lp X
+C 6984 s mapcb navp navc lp X
+C 9144 s mapcb mapupd navp navc lp X
+C 10000 ppcam yolo X
+weight

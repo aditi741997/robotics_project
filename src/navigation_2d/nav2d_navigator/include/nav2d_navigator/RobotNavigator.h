@@ -147,9 +147,9 @@ private:
 	std::vector<double> explore_cb_cmd_ts;
 
 	// For measuring RT:
-	double current_plan_last_scan_mapCB_mapUpd_used_ts;
-	double current_mapCB_tf_navCmd_scan_ts; // current Cmd - Transform's TS wrt latest scan used by mapper.
-	double current_mapCB_tf_navPlan_scan_ts, latest_mapCB_tf_navPlan_scan_ts;
+	double current_plan_last_scan_mapCB_mapUpd_used_ts = 0.0;
+	double current_mapCB_tf_navCmd_scan_ts = 0.0, current_mapCB_tf_navCmd_allScans_ts = 0.0; // current Cmd - Transform's TS wrt latest scan used by mapper.
+	double current_mapCB_tf_navPlan_scan_ts = 0.0, current_mapCB_tf_navPlan_allScans_ts = 0.0, latest_mapCB_tf_navPlan_scan_ts = 0.0, latest_mapCB_tf_navPlan_allScans_ts = 0.0;
 
 	ros::Subscriber mScanUsedTSTFSubscriber;
 	double current_mapper_tf_scan_ts, current_mapper_tf_allScans_rt_ts; // latest transform's - scan used TS & latest scan processed.
@@ -168,6 +168,11 @@ private:
 
 	int latest_mapCB_tf_ts_st_navp = 0;
 	int latest_mapCB_tf_ts_st_navc = 0; // comes with the hdr published along with the tf 
-	double latest_mapCB_tf_ts_rt_navp, latest_mapCB_tf_ts_rt_navc; // RT TS of latest scan processed before navc,navp fetch tf.
+	double latest_mapCB_allS_tf_ts_rt_navp, latest_mapCB_allS_tf_ts_rt_navc, latest_mapCB_tf_ts_rt_navp, latest_mapCB_tf_ts_rt_navc; // RT TS of latest scan processed before navc,navp fetch tf [wrt allscans processed vs only scans processed fully]
 	bool need_to_replan = true;
+
+	// Saving the latency wrt odom at NP,NC
+	std::vector<float> nc_odom_st_lat;
+	std::vector<float> np_odom_st_lat;
+	ros::Time current_nc_st_ts, current_np_st_ts;
 };

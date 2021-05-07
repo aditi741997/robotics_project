@@ -1,3 +1,4 @@
+#include <numeric>
 #include <dag.h>
 
 // This function is picked up from the example gp code in mosek fusion examples.
@@ -214,10 +215,13 @@ DAG::DAG()
 DAG::DAG(std::string fname)
 {
 	global_var_count = 0;
+	name_ = fname;
 	// Read out DAG structure from file.
-	std::cout << "IN DAG Constructor!! \n";
+	std::cout << "IN DAG Constructor!! NAME : " << name_ << std::endl;
 	std::ifstream df(fname);
 	std::vector<std::tuple<float, std::vector<int>, float, int > > chains;
+	
+	
 	if (df.is_open())
 	{
 		std::string line;
@@ -232,9 +236,9 @@ DAG::DAG(std::string fname)
 			{
 				//its a node!!
 				DAGNode n;
-				std::string name;
+				std::string name, nodetype;
 				float ci, fixed_per, min_per, max_per;
-				ss >> name >> ci >> fixed_per >> min_per >> max_per;
+				ss >> name >> ci >> fixed_per >> min_per >> max_per >> nodetype;
 
 				n.name = name;
 				n.id = node_count;
@@ -242,8 +246,14 @@ DAG::DAG(std::string fname)
 				n.fixed_period = fixed_per;
 				n.min_period = min_per;
 				n.max_period = max_per;
+				n.node_type = nodetype;
 
-				std::cout << "Adding node, name : " << name << ", id : " << n.id << ", ci :" << ci << ", fixed_period: " << fixed_per << ", min per: " << min_per << ", max period: " << max_per << std::endl;
+				float stream_minper = 0.0; // e.g. mapcb stream <= 50Hz.
+				if (nodetype.find("S") != std::string::npos)
+					ss >> stream_minper;
+				n.stream_minper = stream_minper;
+
+				std::cout << "Adding node, name : " << name << ", id : " << n.id << ", ci :" << ci << ", fixed_period: " << fixed_per << ", min per: " << min_per << ", max period: " << max_per << ", nodetype: " << nodetype << ", stream_minper: " << stream_minper << std::endl;
 
 				id_name_map[node_count] = name;
 				id_node_map[node_count] = n;
@@ -301,6 +311,19 @@ DAG::DAG(std::string fname)
 					ss >> b;
 				}
 			}
+			else if (line_type.find("T") != std::string::npos )
+			{
+				std::string a,b;
+				ss >> a >> b;
+				// node a should be slower than node b
+				DAGNode& na = id_node_map[name_id_map[a]];
+				while (b.find("X") == std::string::npos )
+				{
+					std::cout << "NODE " << a << " should be slower than " << b << std::endl;
+					na.tput_slower_than.push_back( name_id_map[b] );
+					ss >> b;
+				}
+			}
 			else
 			{
 				is_constraint = (line_type.find("constr") != std::string::npos);
@@ -313,12 +336,12 @@ DAG::DAG(std::string fname)
 	
 }
 
-void DAG::print_vec(std::vector<int>& v, std::string s)
+double DAG::get_subchain_min_per(std::vector<int>& sc_ids)
 {
-	std::cout << s;
-	for (int i = 0; i < v.size(); i++)
-		std::cout << " " << v[i];
-	std::cout << "\n";
+	double min_per = 0.0;
+	for (auto &x : sc_ids)
+		min_per = std::max(min_per, id_node_map[x].min_period );
+	return min_per;
 }
 
 void DAG::print_dvec(std::vector<double>& v, std::string s)
@@ -369,8 +392,12 @@ bool DAG::order_chains_criticality(std::vector<std::tuple<float, std::vector<int
 		print_vec(std::get<1>(all_chains[i]), "Chain : ");
 
 	double cons0 = std::get<0>(all_chains[0]);
-	
-	all_chains_rel_weights = std::vector<double> {1.0, 0.001, 0.001, 0.001, 0.001, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
+
+	if (name_.find("nav2d") != std::string::npos )
+		all_chains_rel_weights = std::vector<double> {1.0, 0.005, 0.005, 0.005, 0.0005, 0.001, 0.001}; // {1.0, 0.0064, 0.006, 0.0046, 0.001, 0.1f, 0.1f, 0.1f, 0.1f};
+	else if (name_.find("illixr") != std::string::npos )
+		all_chains_rel_weights = std::vector<double> {1.0, 0.5, 0.005, 0.005, 0.005, 0.005, 0.0000001};
+
 	print_dvec(all_chains_rel_weights, "All Chains Rel Weights:");
 
 	return ret;	
@@ -1059,11 +1086,13 @@ void DAG::clear_old_data(int frac_var_count)
 	all_rt_minmono_periods.clear();
 }
 
-void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> >& node_ci_arr)
+void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> > node_ci_arr, std::map<std::string, boost::circular_buffer<double> > node_ci2_arr, std::map<std::string, boost::circular_buffer<int> > mode_ct)
 {
 	for (auto const& x: node_ci_arr)
 	{
-		std::vector<double> cis;
+		printf("STARTING TO UPDATE CI FOR NODE: %s ", x.first.c_str());
+		std::vector<double> cis, ci2s;
+		int normal_ct = 0, total_ct = 0;
 		if (x.second.size() > 0)
 		{
 			// take latest 50 :
@@ -1075,10 +1104,35 @@ void DAG::update_cis(std::map<std::string, boost::circular_buffer<double> >& nod
 				ct++;
 				it++;
 			}
-			printf("Arr sz for %s, %i, last elem: %f, first elem : %f", x.first.c_str(), cis.size(),  cis[cis.size()-1], cis[0] );
+			printf("Arr sz for %s, %i, avg: %f , last elem: %f, first elem : %f", x.first.c_str(), cis.size(),  std::accumulate(cis.begin(), cis.end(),0.0)/cis.size(), cis[cis.size()-1], cis[0] );
 			std::sort(cis.begin(), cis.end());
-			std::cout << "UPDATED Compute time of node " << x.first << " from " << id_node_map [ name_id_map [ x.first ] ].compute << " TO " << cis[(75*cis.size())/100]*1000.0 << std::endl;
-			id_node_map [ name_id_map [ x.first ] ].compute = cis[(75*cis.size())/100]*1000.0; // Nodes publish time in sec, DAG operates in ms.
+		}
+		if ( (node_ci2_arr.find(x.first) != node_ci2_arr.end()) && (node_ci2_arr[x.first].size() > 0) )
+		{
+			auto it = node_ci2_arr[x.first].rbegin();
+			while (it != node_ci2_arr[x.first].rend())
+			{
+				ci2s.push_back(*it);
+				it++;
+			}
+			std::sort(ci2s.begin(), ci2s.end());
+			printf("CI2S Arr sz for %s, %i, last elem: %f, first elem : %f, 95ile: %f, avg: %f", x.first.c_str(), ci2s.size(), ci2s[ci2s.size()-1], ci2s[0], ci2s[(95*ci2s.size())/100], (std::accumulate(ci2s.begin(), ci2s.end(),0.0))/ci2s.size() );
+		}
+		// count mode from mode_ct:
+		for (auto &mx : mode_ct[x.first])
+		{
+			if (mx ==0)
+				normal_ct += 1;
+			total_ct += 1;
+		}
+
+		if (cis.size() > 0)
+		{
+			printf("normalct: %i, totalct: %i, ci len: %i [95ile: %f], ci2 len: %i \n", normal_ct, total_ct, cis.size(), cis[(95*cis.size())/100], ci2s.size());
+			double new_ci = (ci2s.size()==0) ? (cis[(95*cis.size())/100]) : ( ( (std::accumulate(cis.begin(), cis.end(),0.0) * normal_ct)/(total_ct*cis.size()) ) + ( (std::accumulate(ci2s.begin(), ci2s.end(),0.0)  * (total_ct-normal_ct)) / (total_ct*ci2s.size())  ) ); 
+			new_ci *= 1000.0;
+			std::cout << "UPDATED Compute time of node " << x.first << " from " << id_node_map [ name_id_map [ x.first ] ].compute << " TO " << new_ci << std::endl;
+			id_node_map [ name_id_map [ x.first ] ].compute = new_ci; // Nodes publish time in sec, DAG operates in ms.
 		}
 	}
 }

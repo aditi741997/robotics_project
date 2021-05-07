@@ -12,6 +12,8 @@
 #include <Python.h>
 #include <bits/stdc++.h>
 
+#include <fstream>
+
 std::string pub_topic = "";
 ros::Publisher roi_pub;
 
@@ -23,7 +25,7 @@ class ObjDetector
     ros::Publisher roi_pub;
     ros::Subscriber img_sub;
     std::string pub_topic = "/roi";
-    std::string sub_topic = "/camera1/rgb/image_raw";
+    std::string sub_topic = "/camera/rgb/image_raw";
 
     int pub_queue_len, sub_queue_len, num_msgs, limit;
     bool publish, do_heavy;
@@ -59,9 +61,13 @@ class ObjDetector
 
     bool write_imgs_to_file = false;
 
+    std::ofstream per_output_logs;
+
 public:
     ObjDetector(int pql, int sql, int num_msg, bool pub, bool doheavy, int lim)
     {
+	    // Apr,2021 : pql denotes the publisher's pub freq!!!
+	    per_output_logs.open("HaarOutputLogs_"+std::to_string(sql)+"_"+std::to_string(pql)+".csv");
         // ros::NodeHandle nh;
         publish = pub;
         pub_queue_len = pql;
@@ -77,11 +83,12 @@ public:
         {
             roi_pub = nh.advertise<std_msgs::Header>(pub_topic, pub_queue_len);
 
+	    /*
             while (0 == roi_pub.getNumSubscribers())
             {
                 ROS_INFO("Waiting for subscribers to connect");
                     ros::Duration(0.1).sleep();
-            }
+            } */
             ros::Duration(1.0).sleep();                    
         }
 
@@ -159,7 +166,10 @@ public:
     {
 	// PyRun_SimpleString("import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_random_haar()");
 	// std::string s = "import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_haar_ob_track(" + get_string((total%449) + 1) + ")";
-	std::string s = "import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_haar_vw_img(" + get_string((total%1000)) + ", " + get_string((int)run_twice) + ")";
+	// std::string s = "import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_haar_vw_img(" + get_string((total%1000)) + ", " + get_string((int)run_twice) + ")";
+    	// apr,2021: doing haar - multiple cascades, expt w.r.t queue length
+	std::string s = "import sys;sys.path.append('/home/ubuntu/catkin_ws');import cv2;cv2.setNumThreads(1);import haar_detector;haar_detector.do_haar_cond_lfw (" + get_string(1+(total%800)) + ") ";
+	
 	PyRun_SimpleString(s.c_str());
     }
 
@@ -171,6 +181,9 @@ public:
 
 	struct timespec cb_start_ts, cb_end_ts;
         clock_gettime(CLOCK_MONOTONIC, &cb_start_ts);
+
+	struct timespec cb_start_cpu_ts, cb_end_cpu_ts;
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start_cpu_ts);
 
 	 // compute latency w.r.t. TD publishing node
     std::stringstream ss;
@@ -270,7 +283,7 @@ public:
             calcPrimes(true);
         }
 
-        if(total%800 == 3)
+        if(total%20 == 3)
         {
             ROS_INFO("Num msgs %d, Msg seq : %d", total, msg->header.seq);
             print_stats();
@@ -303,9 +316,14 @@ public:
     	compute_ts_sum += compute_ts;
     	compute_ts_arr.push_back(compute_ts);
 
+	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_end_cpu_ts);
+	double cputime_ci = cb_end_cpu_ts.tv_sec + 1e-9*cb_end_cpu_ts.tv_nsec - (cb_start_cpu_ts.tv_sec + 1e-9*cb_start_cpu_ts.tv_nsec);
+
 	double cb_only = cb_only_end.tv_sec + 1e-9*cb_only_end.tv_nsec - ( cb_start_ts.tv_sec + 1e-9*cb_start_ts.tv_nsec);
 	compute_only_sum += cb_only;
 	compute_only_arr.push_back(cb_only);
+
+	per_output_logs << lat << ", " << cputime_ci << ", " << compute_ts << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << ", \n";
 
 	if ( (total >= 2) && (last_pub_time > 0.0) )
 	{
@@ -351,7 +369,7 @@ public:
         ROS_INFO("Mean, median, tail Compute time (c2) : %f %f %f ", avg_comp, med_comp, perc_comp);
 	ROS_INFO("Mean, median, tail of RT Compute time (c2) : %f %f %f", avg_crt, med_crt, perc_crt);
 	print_arr(tput_sum, tput_arr, "N2 Tput");
-	print_arr(td_latency_sum, td_latency_arr, "Lat at N2 w.r.t. TD node");
+	// print_arr(td_latency_sum, td_latency_arr, "Lat at N2 w.r.t. TD node");
 	print_arr(compute_ts_sum, compute_ts_arr, "RT (TS) Compute Time");
     	print_arr(compute_only_sum, compute_only_arr, "TS compute only time!!");
 	// print_arr(td_clock_lat_sum, td_clock_lat_arr, "RT (TS) Latency at N2 w.r.t. TD node");
@@ -405,11 +423,11 @@ int main(int argc, char **argv)
 	Py_Initialize();
 	std::cout << "py envt init\n";
 	// PyRun_SimpleString("print('Hello World from Embedded Python!!!');import cv2;haar_scaleFactor = 1.3;print('haar:%f, cv2 numThr : %i'%(haar_scaleFactor, cv2.getNumThreads()));cascade='/home/ubuntu/catkin_ws/src/rbx/data/haar_detectors/';cs1 =  cv2.CascadeClassifier(cascade);image=cv2.imread('/home/ubuntu/catkin_ws/src/rbx/data/images_fei/Haar_FaceDetected/47-08.jpg');cs1.detectMultiScale(image, **haar_params);");
-	PyRun_SimpleString("print('Hello World from Embedded Python!!!');import cv2;import sys;sys.path.append('/home/ubuntu/catkin_ws');import haar_detector;haar_detector.do_haar(cv2.imread('/home/ubuntu/catkin_ws/src/rbx/data/images_fei/Haar_FaceDetected/47-08.jpg'))");
+	PyRun_SimpleString("print('Hello World from Embedded Python!!!');import cv2;import sys;sys.path.append('/home/ubuntu/catkin_ws');import haar_detector;haar_detector.do_haar(cv2.imread('/home/ubuntu/catkin_ws/src/rbx/data/images_fei/Haar_FaceDetected/47-08.jpg'),False)");
 	/*  std::string ps = "taskset -c " + std::string(argv[8]) + " python /home/ubuntu/catkin_ws/Sample.py";
 	system(ps.c_str());	
 */	
-    ROS_INFO("Init node %s, pub queue len %d, sub_queue_len %d, num_msgs %d, pub %d, doheavy %d, limit %d", node_name.c_str(), pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);
+    ROS_INFO("INIT NODE %s, pub queue len %d, sub_queue_len %d, num_msgs %d, pub %d, doheavy %d, limit %d", node_name.c_str(), pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);
 
     ros::init(argc, argv, node_name);
     ObjDetector od(pub_queue_len, sub_queue_len, num_msgs, publish, doheavy, lim);

@@ -40,25 +40,28 @@ public:
 	{
 		if (is_dynamic_scheduler() || is_static_scheduler()) {
 			size_t fc = std::stoi(std::getenv("ILLIXR_SCHEDULER_FC"));
+			if (fc == 0) { std::cerr << "fc is wrong: " << fc << std::endl; abort();}
 			auto dag_file = std::string{std::getenv("ILLIXR_SCHEDULER_CONFIG")};
 			std::cerr << "dag_file: " << dag_file << std::endl;
-			controller = std::make_unique<DAGControllerBE>(dag_file, this, false, "no", "no", 1, fc, 3, 4, 5, 6, 7, 1);
+			controller = std::make_unique<DAGControllerBE>(dag_file, this, is_dynamic_scheduler(), "no", "no", 1, fc, 1, 1, 1, 1, 1, 1);
 			for (const auto& pair : controller->node_dag_mc.name_id_map) {
 				std::string name = pair.first;
-				sb->schedule<thread_info>(
+				sb->schedule<switchboard::event_wrapper<thread_info>>(
 					id,
 					name + "_thread_id",
-					[this, name](switchboard::ptr<const thread_info> event, size_t) {
+					[this, name](switchboard::ptr<const switchboard::event_wrapper<thread_info>> event, size_t) {
 						std::lock_guard<std::mutex> lock{mutex};
-						std::cerr << "thread_id for " << event->name << " is " << event->pid << std::endl;
-						controller->recv_node_info(event->name, event->pid, ::getpid());
+						std::cerr << "thread_id for " << event->o().name << " is " << event->o().pid << std::endl;
+						controller->recv_node_info(event->o().name, event->o().pid, ::getpid());
 					}
 				);
-				auto& thread = sb->schedule<switchboard::event_wrapper<bool>>(
+				auto& thread = sb->schedule<switchboard::event_wrapper<completion>>(
 					id,
 					name + "_completion",
-					[this, name](switchboard::ptr<const switchboard::event_wrapper<bool>>, size_t event) {
-						// controller->update_ci(name, ci);
+					[this, name](switchboard::ptr<const switchboard::event_wrapper<completion>> comp, size_t event) {
+						controller->update_ci(name, comp->o().cpu_time_duration, 0);
+						controller->update_latest_sensor_ts(name, comp->o().wall_time_end);
+
 						if (name == controller->get_last_node_cc_name()) {
 							controller->recv_critical_exec_end();
 						} else {

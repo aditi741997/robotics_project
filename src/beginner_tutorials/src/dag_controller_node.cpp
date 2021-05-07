@@ -51,7 +51,9 @@ class DAGController: public DAGControllerFE
 	// Store tid, pid for each node:
         std::map<std::string, int> node_pid;
         std::map<std::string, int> node_tid; // id of the thread which executes the main cb for a node. 
-        
+       
+	ros::Publisher mcb_dfpub;
+
 	// DAG data structure : to be used by the scheduling algorithm
 	std::map<std::string, int> node_ci, node_fi;
         std::vector<ros::Subscriber> exec_start_subs;
@@ -85,12 +87,16 @@ class DAGController: public DAGControllerFE
 	DAG node_dag; // Nov: not used now.
 	DAGControllerBE* controller;
 
-public:
-        DAGController(int x, std::string dag_file, bool dyn_opt, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp)
-        {
-		ROS_INFO("Initializing DAGController class, params: dyn_opt: %i, use_td: %s, fifo: %s, fmc: %i, fmu %i, fnc %i, fnp %i, ps %i, plc %i, plp %i", dyn_opt, use_td.c_str(), fifo.c_str(), f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
-		controller = new DAGControllerBE(dag_file, this, dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp, 1);
+	int num_socket_conn; // 3 for nav2d, 4 for nav2d_yolo
 
+public:
+        DAGController(int x, std::string dag_file, bool dyn_opt, std::string use_td, std::string fifo, int f_mc, int f_mu, int f_nc, int f_np, int p_s, int p_lc, int p_lp, int num_cores)
+        {
+		ROS_INFO("Initializing DAGController class, params: dyn_opt: %i, use_td: %s, fifo: %s, fmc: %i, fmu %i, fnc %i, fnp %i, ps %i, plc %i, plp %i, numcores: %i", dyn_opt, use_td.c_str(), fifo.c_str(), f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp, num_cores);
+		controller = new DAGControllerBE(dag_file, this, dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp, num_cores);
+
+		num_socket_conn = (dag_file.find("yolo") == std::string::npos) ? 3 : 4;
+		
 		ROS_INFO("DAGController : Subscribe to 'exec_start' topics for ALL nodes, to get tid/pid.");
 		last_node_cc_name = controller->get_last_node_cc_name();
 		critical_exec_end_sub = nh.subscribe<std_msgs::Header>("/robot_0/exec_end_" + last_node_cc_name, 1, &DAGController::critical_exec_end_cb, this, ros::TransportHints().tcpNoDelay());
@@ -118,6 +124,8 @@ public:
 			}	
 		}
 		ROS_INFO("DAGController: PMT Id: %i, InternalCBQTID: %i", nh.getPMTId(), nh.getInternalCBQTId() );
+		
+		mcb_dfpub = nh.advertise <std_msgs::Header> ("/robot_0/mcb_scan_dropF", 1, true);
 		
 		// Nov: for IPC with navigator node:
 		srv_fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -153,10 +161,10 @@ public:
 	void socket_conn()
 	{
 		if (listen(srv_fd, 2) < 0) ROS_ERROR("Socket:: LISTEN failed!!!");
-		ROS_INFO("DAGC: Socket Connecting thread! id: %i Listening on port %i for clients...\n", ::gettid(), port_no);
+		ROS_INFO("DAGC: Socket Connecting thread! id: %i , WANNA connect to %i sockets, Listening on port %i for clients...\n", ::gettid(), num_socket_conn, port_no);
 
 		// want to connect to multiple clients
-		int socket_ct = 3; // scan, mapper, navigator
+		int socket_ct = num_socket_conn; // scan, mapper, navigator, camprep
 		int socket_conn_count = 0;
 
 		int read_size;
@@ -212,24 +220,42 @@ public:
 		double ci;
 		std::string n_name;
 		ss >> ci >> n_name;
-		controller->update_ci(n_name, ci);
-		controller->notify_node_exec_end(n_name);
 		// TODO: get TS for all nodes. Getting for just mapcb for now:
 		if ( (n_name.find("mapcb") != std::string::npos) || (n_name.find("navc") != std::string::npos) || (n_name.find("navp") != std::string::npos) || (n_name.find("mapupd") != std::string::npos))
 		{
-			int ts;
+			float ts;
 			ss >> ts;
 			controller->update_latest_sensor_ts(n_name, ts);
 		}
+		int mode = 0;
+		if (n_name.find("mapcb") != std::string::npos)
+			ss >> mode;
+		controller->update_ci(n_name, ci, mode);
+		controller->notify_node_exec_end(n_name);
 	}
 
+
+	void update_speriod(double s, std::string nname)
+	{
+		if (nname.find("mapc") != std::string::npos)
+		{
+			// HARDCODED: MAPCB scan incoming freq: 50Hz -> 20ms.
+			std_msgs::Header hdr;
+			int num,den; // express drop as a/b.
+			den = 50;
+			num = (int) 1000.0/s; 
+			hdr.frame_id = std::to_string(num) + " " + std::to_string(den); // ( std::max((int)( s / 20.0), 1) );
+			printf("UPDATING DROP FRACTION OF MCB TO %s (accept/out_of)", hdr.frame_id.c_str());
+			mcb_dfpub.publish(hdr);
+		}
+	}
 
 	// Cb to handle end of critical chain exec. Need to start dynamic sched stuff:
 	void critical_exec_end_cb(const std_msgs::Header::ConstPtr& msg)
 	{
 		// ROS_WARN("GOT exec_end msg from cc!!! Calling the BE.");
 		controller->recv_critical_exec_end();
-		controller->update_ci(last_node_cc_name, stod(msg->frame_id) );
+		controller->update_ci(last_node_cc_name, stod(msg->frame_id),0 );
 		/*
 		// Oct: shouldnt we start with ind=1, since ind=0 is the CC.
 		int ind = 1;
@@ -391,7 +417,7 @@ public:
                                 strcpy(msg, hdr.frame_id.c_str());
 				send(trigger_socks[name], msg, strlen(msg), 0);
 			}
-			else
+			else if (name.find("fakenode") == std::string::npos) // no problem if its a fakenode.
 				ROS_ERROR("trigger_socks_conn SOCKET NOT connected for %s IS false!!! Nav-DAGController SOCKET NOT connected!!", name.c_str());
 		}
 	}
@@ -486,7 +512,7 @@ int main (int argc, char **argv)
 		p_lp = atoi(argv[10]);	
 	}
 	bool dyn_opt = (atoi(argv[11]) == 1) ;
-        DAGController dagc(0, "/home/ubuntu/catkin_ws/" + dag_fname + "_dag.txt", dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp);
+        DAGController dagc(0, "/home/ubuntu/catkin_ws/" + dag_fname + "_dag.txt", dyn_opt, use_td, fifo, f_mc, f_mu, f_nc, f_np, p_s, p_lc, p_lp, atoi(argv[12]));
         ros::spin();
 
         return 0;

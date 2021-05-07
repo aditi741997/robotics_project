@@ -3,6 +3,7 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import random
+import json
 
 fname_pre_str = sys.argv[1]
 fname_post_str = sys.argv[2]
@@ -12,6 +13,8 @@ end_t = float(sys.argv[4])
 
 start_run_ind = int(sys.argv[5])
 end_run_ind = int(sys.argv[6])
+
+data_fname = sys.argv[7]
 
 def aggregate_over_time(m_arr, ts_arr, start_t, slot, end_t):
         new_m_arr = []
@@ -91,11 +94,20 @@ per_run_drops_ratio = []
 per_run_scan_lat = []
 aggregate_navc_tput = []
 
+per_run_navc_ts = []
 node_tputs = {} # node name -> array
 
-for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_plan"]:
+runs = range(start_run_ind,end_run_ind+1)
+for br in [3,10,13,17,21]:
+	if br in runs:
+		runs.remove(br)
+print(runs, len(runs))
+
+runs_final_data = {}
+
+for fname in ["operator_loop", "yolo", "local_map", "navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_plan"]:
     node_tputs[fname] = []
-    for run in range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]: 
+    for run in runs: #range(start_run_ind,end_run_ind+1):#[52,53,54,56,57]: 
     	print("################## DOING RUN %i"%(run) )
         times = []
         ts = []
@@ -110,7 +122,7 @@ for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_p
 		with open(fname_pre_str + fname + fname_post_str + "_run" + str(run) + ".txt", 'r') as f:
 		    for fl in f.readlines():
 			if ("times:" in fl) or ("local_map Times" in fl):
-			    times += [ round(float(x),3) for x in fl.split(" ")[2:-1] ]
+			    times += [ round(float(x),4) for x in fl.split(" ")[2:-1] ]
 			elif "ts:" in fl:
 			    ts += [ float(x) for x in fl.split(" ")[2:-1] ]
 			elif "ScanCOunt" in fl:
@@ -128,8 +140,8 @@ for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_p
                             lats += [ float(x) for x in fl.split(" ")[2:-1] ]
                         elif "wallTimeScanCB" in fl:
                             wallts += [ float(x) for x in fl.split(" ")[2:-1] ]
-        except:
-		print("ERROR READING FOR ", fname, run)
+        except Exception as e:
+		print("ERROR READING FOR ", fname, run, e)
 	# plot times,ts and scan_count.
         print("Starting node ", fname, "Lengths of all arrs: times: %i, ts: %i, tputs: %i"%(len(times), len(ts), len(tputs) ) )
         if len(drops_ts) > 0:
@@ -158,6 +170,16 @@ for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_p
 	if ltimes>0:
         	print("For node %s, ci best case: %f, 10p: %f, 25p: %f, median: %f, mean %f, 75ile %f, 90ile %f, 95ile %f, worst case: %f" % ( fname, sorted_times[0], sorted_times[ltimes/10], sorted_times[(25*ltimes)/100], sorted_times[ltimes/2], sum(sorted_times)/ltimes, sorted_times[(75*ltimes)/100], sorted_times[(90*ltimes)/100], sorted_times[(95*ltimes)/100], sorted_times[-1] ) )
 
+        if ltimes>0:
+            filtered_times = filter(lambda x: x[1] < end_t, zip(times,ts) )
+            sorted_ftimes = sorted([x[0] for x in filtered_times])
+            lft = len(filtered_times)
+            if lft>0:
+                print("For node %s, [len: %i] ci best case: %f, 10p: %f, 25p: %f, median: %f, mean %f, 75ile %f, 90ile %f, 95ile %f, worst case: %f" % ( fname, lft, sorted_ftimes[0], sorted_ftimes[lft/10], sorted_ftimes[lft/4], sorted_ftimes[lft/2], sum(sorted_ftimes)/lft, sorted_ftimes[(3*lft)/4], sorted_ftimes[(9*lft)/10], sorted_ftimes[(95*lft)/100], sorted_ftimes[-1] ) )
+            if len(drops_ts) > 0:
+                filt_Drops_ts = filter(lambda x: x < end_t and x > start_t, drops_ts)
+                print("#SCAN Drops until end_t: ", len(filt_Drops_ts), len(drops_ts))
+        
         if "oper" in fname:
             for i in range(len(times)):
                 if (times[i] > 0.01) or (ts[i] > 114586.8 and ts[i] < 114588):
@@ -200,7 +222,12 @@ for fname in ["navigator_cmd", "mapper_scanCB", "mapper_mapUpdate", "navigator_p
         if ("_plan" in fname and (len(ts) > 0) ):
 		per_run_navp_ts.append(get_rel_ts_arr(ts))
 		per_run_navp_time.append(times)
-	if len(scan_count) > 0:
+
+        if ("_cmd" in fname  and (len(ts) > 0) ):
+                print(ts[9803:9974])
+                per_run_navc_ts.append(get_rel_ts_arr(ts))
+
+        if len(scan_count) > 0:
             msc = max(scan_count)
             # scan_count = [ (x*0.1/msc) for x in scan_count]
             print("Scan ct 1st: %i, last: %i"%(scan_count[0], scan_count[-1]) )
@@ -245,9 +272,15 @@ print("-")
 print("\n \n PER RUN NAVP CI : ", per_run_navp_time, '\n')
 print("-")
 print("-")
-print("\n \n PER RUN NAVP TS: ", per_run_navp_ts)
 print("-")
 print("-")
 print("PER RUN DROPS RATIO: , avg ratio : %f, median ratio : %f", per_run_drops_ratio, sum(per_run_drops_ratio)/len(per_run_drops_ratio), np.median(per_run_drops_ratio) )
 '''
+#print("\n \n PER RUN NAVP TS: ", per_run_navp_ts)
+#print("\n \n PER RUN NAVC TS: ", per_run_navc_ts)
+runs_final_data["Odom_NC_TS"] = per_run_navc_ts
+
+with open(data_fname+'.txt','w') as ffff:
+    json.dump(runs_final_data, ffff)
+
 print("\n \n PER RUN SCAN LATENCY AT MAPCB : ", len(per_run_scan_lat), per_run_scan_lat)

@@ -11,7 +11,7 @@
 #include <numeric>
 
 #define PI 3.14159265
-#define FREQUENCY 5.0
+#define FREQUENCY 5
 
 using namespace ros;
 using namespace tf;
@@ -54,6 +54,27 @@ void write_arr_to_file(std::vector<double>& tput, std::string s)
                 ROS_ERROR("Nav2d Navigator %s, Median, 95ile TPUT %f %f", s.c_str(), tput[sz/2], tput[(95*sz)/100]);
                 tput.clear();
         }
+}
+
+void write_rt_arr_to_file(std::vector<float>& arr, std::string s)
+{
+        int sz = arr.size();
+        if (sz > 0)
+        {
+                std::string ename;
+                ros::NodeHandle nh;
+                nh.param<std::string>("/expt_name", ename, "");
+
+                std::ofstream of;
+                of.open("/home/ubuntu/robot_nav2d_" + ename + "_nav_rt_stats.txt", std::ios_base::app);
+
+                of << s << ": ";
+                for (int i = 0; i < arr.size(); i++)
+                        of << std::fixed<<std::setprecision(2)<< arr[i] << " ";
+                of << "\n";
+                arr.clear();
+        }
+
 }
 
 void write_arrs_to_file(std::vector<double>& times, std::vector<double>& ts, std::string s)
@@ -160,7 +181,13 @@ RobotNavigator::RobotNavigator()
 	total_nav_plan_ct = 0;
 	total_nc_ct = 0;	
 
+	current_mapper_tf_allScans_rt_ts = 0.0;
+
 	mScanUsedTSTFSubscriber = navigatorNode.subscribe("/robot_0/mapper_scan_ts_used_TF", 1, &RobotNavigator::updateMapperScanTSUsedTF, this, ros::TransportHints().tcpNoDelay());
+
+	mRecvMapPublisher = navigatorNode.advertise<nav_msgs::OccupancyGrid>("/robot_0/nav_recv_map", 1, true);
+        mRecvMapOPublisher = navigatorNode.advertise<nav_msgs::OccupancyGrid>("/robot_0/nav_recv_mapO", 1, true);
+        mRecvMappingPublisher = navigatorNode.advertise<nav_msgs::OccupancyGrid>("/robot_0/nav_recv_mapping", 1, true);
 }
 
 RobotNavigator::~RobotNavigator()
@@ -177,7 +204,12 @@ RobotNavigator::~RobotNavigator()
 void RobotNavigator::updateMapperScanTSUsedTF(const std_msgs::Header& hdr)
 {
         current_mapper_tf_scan_ts = hdr.stamp.toSec();
-        ROS_WARN("In ROBOTNavigator::updateMapperScanTSUsedTF : Mapper's TF TS is now %f", current_mapper_tf_scan_ts);
+	std::stringstream ss;
+        ss << hdr.frame_id;
+        float a;
+        ss >> a >> current_mapper_tf_allScans_rt_ts;
+        // current_mapper_tf_allScans_ts = a;        
+	// ROS_WARN("In ROBOTNavigator::updateMapperScanTSUsedTF : Mapper's TF TS is now %f", current_mapper_tf_scan_ts);
 }
 
 bool RobotNavigator::getMap()
@@ -197,6 +229,7 @@ bool RobotNavigator::getMap()
 		return false;
 	}
 	mCurrentMap.update(srv.response.map);
+	mRecvMapOPublisher.publish(mCurrentMap.getMap());
 	
 	if(mCurrentPlan) delete[] mCurrentPlan;
 	mCurrentPlan = new double[mCurrentMap.getSize()];
@@ -256,6 +289,8 @@ bool RobotNavigator::preparePlan()
 	
 	// Where am I?
 	if(!setCurrentPosition()) return false;
+
+	np_odom_st_lat.push_back( (ros::Time::now() - current_np_st_ts).toSec() );
 	
 	// Clear robot footprint in map
 	unsigned int x = 0, y = 0;
@@ -384,6 +419,7 @@ bool RobotNavigator::createPlan()
 	// For measuring RT: 
         current_plan_last_scan_mapCB_mapUpd_used_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
 	current_mapCB_tf_navPlan_scan_ts = latest_mapper_tf_scan_used_ts;
+	current_mapCB_tf_navPlan_allScans_ts = latest_mapCB_tf_allScans_ts;
 	return true;
 }
 
@@ -498,6 +534,7 @@ bool RobotNavigator::generateCommand()
 {
 	double using_curr_plan_mapUpd_scan_ts = current_plan_last_scan_mapCB_mapUpd_used_ts;
         double using_curr_plan_mapCB_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts;
+	double using_curr_plan_mapCB_tf_allScan_ts = current_mapCB_tf_navPlan_allScans_ts;
 
 	// Do nothing when paused
 	if(mIsPaused)
@@ -571,6 +608,9 @@ bool RobotNavigator::generateCommand()
         msg.LastScanTSScanMapCBNavCmd = latest_mapper_tf_scan_used_ts;// dont need to store 'using' here since NavCmd runs in the order : setCurrentPosition, stuff, generateCommand.
         msg.LastScanTSScanMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_scan_ts;
 
+	msg.LastScanTSScanTFMapCBNavCmd = latest_mapCB_tf_allScans_ts;
+	msg.LastScanTSScanTFMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_allScan_ts;
+
 	mCommandPublisher.publish(msg);
 
 	// For default Mode, measuring genCmd tput here:
@@ -584,6 +624,7 @@ bool RobotNavigator::generateCommand()
 	{
 		write_arr_to_file(tput_navcmd, "nav2d_navigator_cmd");
 		write_arrs_to_file(explore_cb_cmd_times, explore_cb_cmd_ts, "nav2d_navigator_cmd");
+		write_rt_arr_to_file(nc_odom_st_lat, "Lat_Odom_NC");
 	}
 
 	return true;
@@ -674,6 +715,7 @@ void RobotNavigator::receiveGetMapGoal(const nav2d_navigator::GetFirstMapGoal::C
 	if(getMap() && setCurrentPosition())
 	{
 		ROS_ERROR("MAPPING Successful!!!!");
+		mRecvMappingPublisher.publish(mCurrentMap.getMap());
 		mGetMapActionServer->setSucceeded();
 	}else
 	{
@@ -984,6 +1026,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 					}
 					stop();
 					clock_gettime(CLOCK_MONOTONIC, &explore_end);
+					mRecvMapPublisher.publish(mCurrentMap.getMap());
                                         ROS_ERROR("Exploration has finished. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
 					return;
 				case EXPL_WAITING:
@@ -1031,6 +1074,18 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 					clock_gettime(CLOCK_MONOTONIC, &explore_end);
 					explore_end_clk = clock();
 					double explore_end_ts = get_time_now();
+					
+					// mGoalPoint is set by findExplTarget
+					// copy mCurrentMap and set goalPoint [and ngbrs] index to 100 so it looks black?
+					nav_msgs::OccupancyGrid mMap = mCurrentMap.getMap();
+					signed char curr_Goal_value = mCurrentMap.getMap().data[mGoalPoint];
+					mMap.data[mGoalPoint] = 100;
+					std::vector<unsigned int> gneighbors = mCurrentMap.getNeighbors(mGoalPoint);
+					for (auto& ni : gneighbors)
+						mMap.data[ni] = 100;
+
+					mRecvMapPublisher.publish(mMap);
+					
 					ROS_ERROR("Exploration has failed. Total_Time_Taken_Clk: %f, Time of finish : %f #", (double)(explore_end_clk - explore_start_clk)/CLOCKS_PER_SEC, explore_end_ts);
                                         ROS_ERROR("Exploration has failed. Total_Time_Taken: %f", (double)get_time_diff(explore_start, explore_end) );
 					return;
@@ -1053,6 +1108,9 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 
 			struct timespec cb_start2, cb_end2;
                 	clock_gettime(CLOCK_THREAD_CPUTIME_ID, &cb_start2);
+			
+			nc_odom_st_lat.push_back( (ros::Time::now() - current_nc_st_ts).toSec() );			
+
 			// Create a new command and send it to Operator
 			generateCommand();
 
@@ -1072,6 +1130,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		{
 			write_arr_to_file(tput_nav_plan, "nav2d_navigator_plan");
 			write_arrs_to_file(explore_cb_plan_times, explore_cb_plan_ts, "nav2d_navigator_plan");
+			write_rt_arr_to_file(np_odom_st_lat, "Lat_Odom_NP");
 		}
 
 		// Sleep remaining time
@@ -1097,7 +1156,10 @@ bool RobotNavigator::setCurrentPosition()
                 spinOnce();
 		mTfListener->lookupTransform(mMapFrame, mRobotFrame, Time(0), transform);
 		// CHECK THE current TF TS value.
+		latest_mapCB_tf_allScans_ts = current_mapper_tf_allScans_rt_ts; // when np runs next, it'll use this latest TS of scans
 		latest_mapper_tf_scan_used_ts = current_mapper_tf_scan_ts; // whenever this is called in receiveExplore, the output is used by genCmd, since ALL in order.
+		current_np_st_ts = transform.stamp_;
+		current_nc_st_ts = transform.stamp_;
 
 	}catch(TransformException ex)
 	{

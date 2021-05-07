@@ -10,7 +10,7 @@ efails = {-1}
 smallest_map = (sys.argv[4] == "smallest")
 
 run_txt = "_r" if smallest_map else "_run"
-
+run_txt = "_run"
 # check NEG lat at shim
 if "Default" not in ename:
 	for r in runs:
@@ -86,9 +86,11 @@ def are_goals_equal(g1, g2):
         return ( abs(g1[1] - g2[1]) + abs(g1[0] - g2[0]) ) < 4
 
 # check nan transform & THRASHing in goals at navPlan
+start_rts = {}
 thrash_set = {}
 for r in runs:
         start_rt = 0.0
+        start_mt = 0.0
         start_st = 0.0
         end_rt = 0.0
         end_st = 0.0
@@ -104,14 +106,15 @@ for r in runs:
 		        if "StartExpl" in l:
                                 start_rt = float( l.split(' ')[1][1:-1] )
                                 start_st = float( l.split(' ')[2][:-2] )
+                                start_mt = float( l.split(' ')[11][:-1] )
                         if ("Exploration failed" in l) or ("Exploration has fail" in l) or ("Exploration has fin" in l):
                                 end_rt = float( l.split(' ')[1][1:-1] )
                                 end_st = float( l.split(' ')[2][:-2] )
                         if ("| STartPOint :" in l):
                                 goal = (int(l.split(' ')[-8]), int(l.split(' ')[-7]))
                                 if (are_goals_equal(goal, goali1)):
-                                        if count_goali1%80 == 5:
-                                                print "RUN", r, "same goal", goal, goali1, "ct: ", count_goali1
+                                        #if count_goali1%80 == 5:
+                                                #print "RUN", r, "same goal", goal, goali1, "ct: ", count_goali1
                                         count_goali1 += 1
                                 elif ( not are_goals_equal(goal, goali1) and are_goals_equal(goal, goali) ):
                                     print("################### Ename: %s, run: %i, HAS thrash!!"%(ename, r) , goal, goali1, goali, count_goali1)
@@ -130,6 +133,7 @@ for r in runs:
                 if (thrashing > 1):
                     thrash_set[r] = thrashing
                     print("Ename: %s, run: %i, HAS THRASHing ct: %i !"% (ename, r, thrashing) )
+        start_rts[r] = (start_mt)
         ratio=(end_st-start_st)/(end_rt-start_rt)
         if (end_rt == 0.0):
                 print("Ename %s, run %i, did NOT finish!!!"% (ename, r) )
@@ -158,6 +162,41 @@ for r in runs:
 		if (efail):
 			efails.add(r)
 
+# check for WEIRD prints in PPMap logs.
+for r in runs:
+    with open("nav2d_PPMap_"  + ename + run_txt + str(r) + ".out", 'r') as f:
+        for l in f.readlines():
+            if "WEIRD" in l:
+                print("Ename: %s, run: %i, HAS WEIRD PP error: %s"%(ename, r, l) )
+
+# check for 'ERROR' tid=0 errors | yolo asan error:
+good_runs_bad_yolo_stats = {}
+for r in runs:
+	yolo_asan_err = False
+	try:
+		with open("yolo_logs_"+  ename + run_txt + str(r) + ".err", 'r') as f:
+			for l in f.readlines():
+				if "SIGSEGV" in l:
+					yolo_asan_err = yolo_asan_err or True
+					print( ename + run_txt + str(r), "HAS ASAN error line: ", l)
+		if yolo_asan_err:
+			bad_runs.add(r)
+	        bad_yolo_ct = 0
+                with open("yolo_logs_"+  ename + run_txt + str(r) + ".out", 'r') as f:
+                    bad_yolos = filter( lambda x: "BAD YOLO" in x, f.readlines())
+                    bad_yolo_ct = len(bad_yolos)
+                    bad_yolo_after_init = filter(lambda x: float(x.split(' ')[3]) > (start_rts[r]+10.0) , bad_yolos)
+                    
+                # if >3 reject, else if >1 in >10s : reject.
+                if (bad_yolo_ct > 3) or (len(bad_yolo_after_init) > 1):
+                    print("Ename: %s, run: %i, HAS too many bad yolos %i after init: %i [start: %f]"%(ename, r, bad_yolo_ct, len(bad_yolo_after_init), start_rts[r]))
+                    bad_runs.add(r)
+                elif r not in bad_runs:
+                    good_runs_bad_yolo_stats[r] = (bad_yolo_ct, len(bad_yolo_after_init))
+        except:
+		print("Weird error in reading yolo logs.", sys.exc_info()[0])
+        
+print("FOR Good runs, bad yolo stats: ", good_runs_bad_yolo_stats)
 print("FINAL Set of bad runs: ", bad_runs, "#BadRuns: ", len(bad_runs) )
 print("#E Fails: ", len(efails), efails)
 print("THRASHing: ", thrash_set)

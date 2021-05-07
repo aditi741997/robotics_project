@@ -507,14 +507,25 @@ namespace karto
       scan_timestamp = x;
     }
 
+    inline void setScanSTTimeStamp(int x)
+    {
+	    scan_st_timestamp = x;
+    }
+
     inline double getScanTimeStamp()
     {
       return scan_timestamp;
     }
 
+    inline int getScanSTTimeStamp()
+    {
+	    return scan_st_timestamp;
+    }
+
   private:
     // For measuring RT:
     double scan_timestamp;
+    int scan_st_timestamp;
 
     /**
      * Odometric pose of object

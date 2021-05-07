@@ -9,6 +9,8 @@
 #include <map>
 #include <ctime>
 #include <chrono>
+#include <cmath>
+#include<iomanip>
 
 #include <fstream>
 #include <sstream>
@@ -75,6 +77,27 @@ void write_arr_to_file(std::vector<double>& tput, std::string s)
         	ROS_ERROR("Nav2d Navigator %s, Median, 95ile TPUT %f %f", s.c_str(), tput[sz/2], tput[(95*sz)/100]);
         	tput.clear();
 	}
+}
+
+void write_rt_arr_to_file(std::vector<float>& arr, std::string s)
+{
+	int sz = arr.size();
+	if (sz > 0)
+	{
+		std::string ename;
+		ros::NodeHandle nh;
+		nh.param<std::string>("/expt_name", ename, "");
+
+		std::ofstream of;
+		of.open("/home/ubuntu/robot_nav2d_" + ename + "_nav_rt_stats.txt", std::ios_base::app);
+
+		of << s << ": ";
+		for (int i = 0; i < arr.size(); i++)
+			of << std::fixed<<std::setprecision(2)<< arr[i] << " ";
+		of << "\n";
+		arr.clear();
+	}
+	
 }
 
 RobotNavigator::RobotNavigator(ros::Publisher& nc_pub)
@@ -422,6 +445,8 @@ bool RobotNavigator::preparePlan()
 	// Where am I?
 	if(!setCurrentPosition(1) || (get_pos_tf_error_ct>3)) return false;
 
+	np_odom_st_lat.push_back( (ros::Time::now() - current_np_st_ts).toSec() );
+
 	// Clear robot footprint in map
 	unsigned int x = 0, y = 0;
 	if(mCurrentMap.getCoordinates(x, y, mStartPoint))
@@ -576,7 +601,8 @@ bool RobotNavigator::createPlan()
 	current_plan_last_scan_mapCB_mapUpd_used_ts = mCurrentMap.last_scan_mapCB_mapUpd_used_ts;
 	// current_... denotes the TS for the current copy of navPlan
 	// latest_... denotes the TS for the navPlan being made, i.e. latest_ >= current_.
-	current_mapCB_tf_navPlan_scan_ts = latest_mapCB_tf_ts_rt_navp; // latest_mapCB_tf_navPlan_scan_ts;
+	current_mapCB_tf_navPlan_allScans_ts = latest_mapCB_tf_navPlan_allScans_ts;
+	current_mapCB_tf_navPlan_scan_ts = latest_mapCB_tf_navPlan_scan_ts;
 	return true;
 }
 
@@ -692,7 +718,8 @@ bool RobotNavigator::generateCommand()
 	// These 2 values are set by the planner node, 
 	// since it can run in ||al with the NavCmd node, we shoudl save these at 
 	double using_curr_plan_mapUpd_scan_ts = current_plan_last_scan_mapCB_mapUpd_used_ts;
-	double using_curr_plan_mapCB_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts; // this TS now represents all scans processed latest TS.
+	double using_curr_plan_mapCB_tf_scan_ts = current_mapCB_tf_navPlan_scan_ts;// this represents ts for scans fully processed only. 
+	double using_curr_plan_mapCB_tf_allScan_ts = current_mapCB_tf_navPlan_allScans_ts;// this TS now represents all scans processed latest TS.
 
 	// ROS_WARN("IN RobotNavigator::generateCommand - WIll try to publish a command for the Operator to follow.");
 	// Do nothing when paused
@@ -790,8 +817,11 @@ bool RobotNavigator::generateCommand()
 	msg.LastScanTSScanMapCBMapUpdNavPlanNavCmd = using_curr_plan_mapUpd_scan_ts;
 
 	// Chains 2,3 i.e. without mapUpd, use TF with a different TS.
-	msg.LastScanTSScanMapCBNavCmd = latest_mapCB_tf_ts_rt_navc; // current_mapCB_tf_navCmd_scan_ts;// dont need to store 'using' here since NavCmd runs in the order : setCurrentPosition, stuff, generateCommand.
+	msg.LastScanTSScanMapCBNavCmd = current_mapCB_tf_navCmd_scan_ts; // dont need to store 'using' here since NavCmd runs in the order : setCurrentPosition, stuff, generateCommand.
+	msg.LastScanTSScanTFMapCBNavCmd = current_mapCB_tf_navCmd_allScans_ts; // latest_mapCB_allS_tf_ts_rt_navc;
+
 	msg.LastScanTSScanMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_scan_ts;
+	msg.LastScanTSScanTFMapCBNavPlanNavCmd = using_curr_plan_mapCB_tf_allScan_ts;
 	mCommandPublisher.publish(msg);
 	return true;
 }
@@ -1200,8 +1230,10 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 		{
 			// All navP code here.
 			// Where are we now : Uses the tf output from Mapper Node.
-			latest_mapCB_tf_ts_st_navp = current_mapper_tf_allScans_ts;
-			latest_mapCB_tf_ts_rt_navp = current_mapper_tf_allScans_rt_ts;
+			// these were for implementing waitfor in navP node: Commenting now
+			// latest_mapCB_tf_ts_st_navp = current_mapper_tf_allScans_ts;
+			// latest_mapCB_tf_ts_rt_navp = current_mapper_tf_scan_ts;
+			// latest_mapCB_allS_tf_ts_rt_navp = current_mapper_tf_allScans_rt_ts;
 			mHasNewMap = false;
 			if(!setCurrentPosition(1) || (get_pos_tf_error_ct > 3) )
 			{
@@ -1323,14 +1355,10 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 						clock_gettime(CLOCK_MONOTONIC, &explore_end);
 						double explore_end_ts = get_time_now();
 						// mGoalPoint is set by findExplTarget
-						// copy mCurrentMap and set goalPoint [and ngbrs] index to 100 so it looks black?
+						// copy mCurrentMap and set goalPoint index to 100 so it looks black?
 						nav_msgs::OccupancyGrid mMap = mCurrentMap.getMap();
 						signed char curr_Goal_value = mCurrentMap.getMap().data[mGoalPoint];
 						mMap.data[mGoalPoint] = 100;
-						std::vector<unsigned int> gneighbors = mCurrentMap.getNeighbors(mGoalPoint);
-						for (auto& ni : gneighbors)
-							mMap.data[ni] = 100;
-
 						mRecvMapPublisher.publish(mMap);
 						if (mCurrentMap.getMap().data[mGoalPoint] != curr_Goal_value)
 							ROS_ERROR("DAMNNNN, DIDNT COPY PROPERLY, curr goal val : %i, currMap data: %i, mMap.data : %i", curr_Goal_value, mCurrentMap.getMap().data[mGoalPoint], mMap.data[mGoalPoint]);
@@ -1408,6 +1436,7 @@ void RobotNavigator::receiveExploreGoal(const nav2d_navigator::ExploreGoal::Cons
 			{
 				write_arrs_to_file(explore_cb_plan_times, explore_cb_plan_ts, "nav2d_navigator_plan");
 				write_arr_to_file(tput_nav_plan, "nav2d_navigator_plan");
+				write_rt_arr_to_file(np_odom_st_lat, "Lat_Odom_NP");
 			}
 		}
 		/*
@@ -1464,7 +1493,8 @@ void RobotNavigator::navGenerateCmdLoop()
 		// if ( (current_mapper_tf_allScans_ts > latest_mapCB_tf_ts_st_navc) && ( (current_mapper_tf_allScans_ts > ( (ros::Time::now().toSec() * 10) - 100) ) || ( ( get_time_now() - last_nav_cmd_out) > 0.2) ) )
 		{
 			latest_mapCB_tf_ts_st_navc = current_mapper_tf_allScans_ts;
-			latest_mapCB_tf_ts_rt_navc = current_mapper_tf_allScans_rt_ts;
+			latest_mapCB_tf_ts_rt_navc = current_mapper_tf_scan_ts;
+			latest_mapCB_allS_tf_ts_rt_navc = current_mapper_tf_allScans_rt_ts;
 			// Need to get latest position. : Uses mapcb'S TF output here.
 			if (!setCurrentPosition(0) || (get_pos_tf_error_ct > 3))
 			{
@@ -1492,6 +1522,8 @@ void RobotNavigator::navGenerateCmdLoop()
 					mExploreActionServer->publishFeedback(fb);
 				}
 
+				nc_odom_st_lat.push_back( (ros::Time::now() - current_nc_st_ts).toSec() );
+				
 				// Create a new command and send it to Operator
 				generateCommand();
 				// ROS_ERROR("Generated command!");
@@ -1503,7 +1535,8 @@ void RobotNavigator::navGenerateCmdLoop()
 
 				explore_cb_cmd_times.push_back(cmd_t);
 				explore_cb_cmd_ts.push_back(exec_rt_end);
-			
+		
+
 				std_msgs::Header nc_ee;
 				nc_ee.frame_id = std::to_string(cmd_t) + " navc " + std::to_string(latest_mapCB_tf_ts_st_navc);
 				navc_exec_end_pub.publish(nc_ee);
@@ -1548,6 +1581,7 @@ void RobotNavigator::navGenerateCmdLoop()
 			{
 				write_arrs_to_file(explore_cb_cmd_times, explore_cb_cmd_ts, "nav2d_navigator_cmd");
 				write_arr_to_file(tput_nav_cmd, "nav2d_navigator_cmd");
+				write_rt_arr_to_file(nc_odom_st_lat, "Lat_Odom_NC");
 			}
 
 		}
@@ -1587,10 +1621,20 @@ bool RobotNavigator::setCurrentPosition(int x)
 		// Spinning here to get the latest tf's TS.
 		spinOnce();
 		mTfListener->lookupTransform(mMapFrame, mRobotFrame, Time(0), transform);
+		ros::Time t = transform.stamp_;
+		
 		if (x == 0)
+		{
 			current_mapCB_tf_navCmd_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavCmd.
+			current_mapCB_tf_navCmd_allScans_ts = current_mapper_tf_allScans_rt_ts;
+			current_nc_st_ts = transform.stamp_;
+		}
 		else if (x == 1)
+		{
 			latest_mapCB_tf_navPlan_scan_ts = current_mapper_tf_scan_ts; // THis is the TS of the scan used by the mapper_TF used by the NavPlan.
+			latest_mapCB_tf_navPlan_allScans_ts = current_mapper_tf_allScans_rt_ts;
+			current_np_st_ts = transform.stamp_;
+		}
 
 		// ROS_WARN("IN ROBOTNavigator:: setCurrentPosition, TS of TF bw /map and /base_footp : %f, x: %i", current_mapper_tf_scan_ts, x);
 	}catch(TransformException ex)

@@ -55,7 +55,10 @@ public:
 	double fixed_period = 0.0;
 	double max_period = 0.0; // Upper bounding node's rate
 	double min_period = 0.0; // Lower bounding node's rate
+	std::string node_type; // streaming vs normal node
+	float stream_minper = 0.0;
 
+	std::vector<int> tput_slower_than; // this node's tput should be slower than which nodes?
 	std::vector<int> wait_for_outputs; // set of inputs the node needs to wait for / have latest value of.
 };
 
@@ -118,7 +121,9 @@ public:
 
 	DAG();
 	DAG(std::string fname);
-	
+
+	std::string name_;
+
 	// Each chain could be a vector of ids. : can find sum ci
 	// Sorted by the criticality : first chain is the most critical.
 	// ci/wi, chain, criticality_no., id	
@@ -167,7 +172,7 @@ public:
 
 	// Useful for re solving the OPT with varying ci:
 	void clear_old_data(int frac_var_count);
-	void update_cis(std::map<std::string, boost::circular_buffer<double> >& node_ci_arr);
+	void update_cis(std::map<std::string, boost::circular_buffer<double> > node_ci_arr, std::map<std::string, boost::circular_buffer<double> > node_ci2_arr, std::map<std::string, boost::circular_buffer<int> > mode_ct);
 	void scale_nc_constraints(double f);
 
 	// Helper functions:
@@ -178,7 +183,15 @@ public:
 	std::map<std::string, Monomial> convert_period_to_monos(std::map<int, std::vector<int>>& period_map, int total_vars);
 	void multiply_monos_with_period(std::map<std::string, Monomial>& period_mono_set);
 	Monomial multiply_monos(Monomial m1, Monomial m2);
-	void print_vec(std::vector<int>& v, std::string s);
+	
+	template <class T>
+	void print_vec(std::vector<T>& v, std::string s) { 
+		std::cout << s;
+		for (int i = 0; i < v.size(); i++)
+			std::cout << " " << v[i];
+		std::cout << "\n";
+	};
+	
 	void print_dvec(std::vector<double>& v, std::string s);
 	void print_global_vars_desc();
 	void print_mono_map(std::map<std::string, Monomial>& s);
@@ -186,4 +199,6 @@ public:
 	
 	void add_constraints_for_max_monos(int total_vars, Variable::t all_lfrac_vars);
 	void add_constraints_for_min_monos(int total_vars, Variable::t all_lfrac_vars);
+
+	double get_subchain_min_per(std::vector<int>& sc_ids);
 };

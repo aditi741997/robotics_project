@@ -2,7 +2,8 @@ import sys
 import matplotlib.pyplot as plt
 import numpy as np
 import random
-
+import copy
+import json
 rt_fname_pre = sys.argv[1]
 
 start_t = float(sys.argv[2])
@@ -91,22 +92,53 @@ end_run_ind = int(sys.argv[6])
 aggregate_chain_lats = {}
 aggregate_chain_rts = {}
 
-for run in range(start_run_ind,end_run_ind+1):
-        for chain in ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]:
+per_run_chain_lats = {}
+per_run_chain_tputs = {}
+per_run_chain_rts = {}
+per_run_chain_ts = {}
+
+nav_chains = ("nav" in sys.argv[7])
+yolo_chains = ("yolo" in sys.argv[7])
+
+arr_chains = ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"] if (not nav_chains and not yolo_chains) else ["Odom_NC", "Odom_NP"] if nav_chains else ["PPCam_Yolo"]
+
+fname_append = sys.argv[7] #"_nav" if nav_chains else ""
+
+high_lat_thresh = float(sys.argv[8])
+
+data_fname = sys.argv[9]
+
+runs = range(start_run_ind,end_run_ind+1)
+
+for br in [3,10,13,17,21]:
+	if br in runs:
+		runs.remove(br)
+print(runs, len(runs))
+runs_final_data = {}
+
+for run in runs: #range(start_run_ind,end_run_ind+1):
+        #for chain in ["Scan_LC_LP", "Scan_MapCB_MapU_NavP_NavC_LP", "Scan_MapCB_NavCmd_LP", "Scan_MapCB_NavPlan_NavCmd_LP"]:
+	for chain in arr_chains:
                 print "Starting chain", chain
                 if chain not in aggregate_chain_lats:
                     aggregate_chain_lats[chain] = []
 		    aggregate_chain_rts[chain] = []
+                    per_run_chain_lats[chain] = []
+                    per_run_chain_tputs[chain] = []
+                    per_run_chain_rts[chain] = []
+                    per_run_chain_ts[chain] = []
                 rts = []
                 lats = []
                 tputs = []
                 ts = []
-                with open(rt_fname_pre + "_run" + str(run) + "_rt_stats.txt", 'r') as f:
+                lat_txt = "Lat_" if (nav_chains or yolo_chains) else "Latency"
+                with open(rt_fname_pre + "_run" + str(run) + fname_append + "_rt_stats.txt", 'r') as f:
                         fl = f.readlines()
                         for l in fl:
                                 if chain in l:
-                                        if "Latency" in l:
-                                                lats += [ float(x) for x in l.split(' ')[1:-1] ]
+                                        #if "Latency" in l:
+                                        if lat_txt in l:
+					        lats += [ float(x) for x in l.split(' ')[1:-1] ]
                                         elif "Tput" in l:
                                                 tputs += [ float(x) for x in l.split(' ')[1:-1] ]
                                         elif "RT_" in l:
@@ -117,10 +149,19 @@ for run in range(start_run_ind,end_run_ind+1):
                                         #print "Chain not in Line", l
                 # len(TS) should be = len(lat).
                 # len(TS) should be len(tput)+1.
-                aggregate_chain_lats[chain] += lats
                 #print("\n \n ARR Lat FOR chain %s : %s"%( chain, str(lats) ) )
                 #if "Scan_LC" in chain:
                         #print("\n \n ARR RT FOR chain %s : %s"%( chain, str(rts) ) )
+                print(chain, len(lats))
+                per_run_chain_lats[chain].append(copy.deepcopy(lats))
+                per_run_chain_tputs[chain].append(copy.deepcopy(tputs))
+                per_run_chain_rts[chain].append(copy.deepcopy(rts))
+                per_run_chain_ts[chain].append(copy.deepcopy(ts))
+                
+                high_lats = filter(lambda x: x[0] > high_lat_thresh, zip(lats, range(len(lats))) )
+                if len(high_lats) > 0:
+                    print(high_lats, " for ", run, fname_append)
+
                 if len(ts) > 1:
                         '''
                         plot_smt(ts, lats, 'bo:', " Latency", chain, yls[chain])
@@ -140,14 +181,42 @@ for run in range(start_run_ind,end_run_ind+1):
                                 print("FOR CRITICAL CHAIN, BAD Tputs: ", bad_tputs)
                         '''
                         '''
-		random.shuffle(rts)
-		aggregate_chain_rts[chain] += rts[:100]
+		newrts = copy.deepcopy(rts)
+                random.shuffle(newrts)
+		aggregate_chain_rts[chain] += newrts[:100]
+                newlats = copy.deepcopy(lats)
+                random.shuffle(newlats)
+		aggregate_chain_lats[chain] += newlats[:200]
 
-per_chain_count = {"Scan_LC_LP": 1000}
+
+#per_chain_count = {"Scan_LC_LP": 1000, "Scan_MapCB_MapU_NavP_NavC_LP": 1000, "Scan_MapCB_NavCmd_LP": 10, "Scan_MapCB_NavPlan_NavCmd_LP": 10}
+per_chain_count = {}
+for ch in arr_chains:
+    per_chain_count[ch] = 1
+
+for k in per_run_chain_lats:
+    print(k, "LAT ORDERED WRT TIME:", per_run_chain_lats[k])
+    print('---')
+    if "Odom_NC" in k:
+        runs_final_data["Odom_NC_Lat"] = per_run_chain_lats[k]
+
+print("fileNAME : ", data_fname)
+with open(data_fname+'.txt','w') as ffff:
+    json.dump(runs_final_data, ffff)
+
+if yolo_chains:
+    for k in per_run_chain_lats:
+        print(k, "RT WRT TIME:", per_run_chain_rts[k])
+        print("----")
+        print(k, "Tput WRT TIME:", per_run_chain_tputs[k])
+        print("----")
+        print(k, "TS:", per_run_chain_ts[k])
+        print("----")
+
 for ch in per_chain_count:
     random.shuffle(aggregate_chain_lats[ch])
     lch = len(aggregate_chain_lats[ch])
-    print(ch, aggregate_chain_rts[ch])
+    print("For runs: ", runs, "RANDOM SUBSET: ", ch, aggregate_chain_lats[ch])
     #print(aggregate_chain_lats[ch][:lch/5], ch)
     #print("AGGREGATE LAT for chain ", ch, " median: %f, 75ile: %f, 95ile: %f"%(np.median(aggregate_chain_lats[ch]), np.percentile(aggregate_chain_lats[ch], 75), np.percentile(aggregate_chain_lats[ch], 95) ) )
     print('-')

@@ -319,7 +319,7 @@ void ShimFreqNode::publishLatestData()
 	double time_now = get_time_now();
 	
 	//publish thread id info.
-	if (pub_count < 11)
+	if (pub_count < 91)
 	{
 		ROS_INFO("SHQ:: PUBLISHING s TID: %i", ::gettid());
 		std_msgs::Header hdr;
