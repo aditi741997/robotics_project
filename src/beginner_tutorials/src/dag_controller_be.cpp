@@ -401,6 +401,16 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
                 std::vector<double> sc_fracs ( core_exec_order.size() ) ;
 		std::vector<double> sc_trigger_fracs ( core_exec_order.size() ) ; // To enforce a lower bound on period, a node can be sent triggers at a frequency lower than what was assigned by the solver. It still gets resources equal to solver's O/P, but they can be used by other nodes as well.
 
+		std::cout << "core_exec_order = [";
+		for (const auto& core_list : core_exec_order) {
+		  std::cout << "  [";
+		  for (const auto& core : core_list) {
+		    std::cout << core << ", ";
+		  }
+		  std::cout << "],\n";
+		}
+		std::cout << "]" << std::endl;
+
 		while (!shutdown_scheduler)
 		{
 			set_high_priority("MAIN sched Thread", 4, 0);
