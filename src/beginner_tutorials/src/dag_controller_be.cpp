@@ -382,13 +382,13 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			per_core_sc_last_trigger_ct[ core_ids[0] ][ a[0] ] = -1;
 		}
 
-		// static bool swap_order = std::getenv("ILLIXR_SWAP_ORDER") && (strcmp(std::getenv("ILLIXR_SWAP_ORDER"), "y") == 0);
-		// if (swap_order) {
-		// 	std::cout << "Swapping (added on 2021-05-01)" << std::endl;
-		// 	auto tmp = core_exec_order[1];
-		// 	core_exec_order[1] = core_exec_order[2];
-		// 	core_exec_order[2] = tmp;
-		// }
+		static bool swap_order = std::getenv("ILLIXR_SWAP_ORDER") && ('0' <= std::getenv("ILLIXR_SWAP_ORDER")[0] < '2');
+		if (swap_order) {
+			std::cout << "Swapping (added on 2021-05-01)" << std::endl;
+			auto tmp = core_exec_order[1];
+			core_exec_order[1] = core_exec_order[2];
+			core_exec_order[2] = tmp;
+		}
 
 		changeAffinityThread("handle_Sched_main for core="+std::to_string(core_ids[0]), 0, core_ids );
 	
