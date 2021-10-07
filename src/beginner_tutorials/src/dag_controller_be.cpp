@@ -483,6 +483,8 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 						
 			cc_completion_log << trig_cc << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
 						// clear node_finished bool.
+						DEBUG(int(get_monotime_now() * 1000) % 10000);
+						DEBUG(ct);
 		                                node_finished[ lastnode_id ] = false;
 					}
 					else 
@@ -1104,7 +1106,6 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 	bool DAGControllerBE::checkTriggerExec(std::vector<int>& sci, int core_id, double frac)
 	{
 		int id = sci[0];
-		// DEBUG(sci[0]);
 		// DEBUG(frac);
 		// DEBUG(core_id);
 		int ind_p = round(1.0/frac);
@@ -1151,8 +1152,11 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			
 				frontend->trigger_node(name, true);
 				// For Illixr Dag, need to trigger TW along with Imu, cuz Imu is at fixed freq for now. 
-				if ( (name.find(IMU_PLUGIN_NAME) != std::string::npos) && (dag_name.find("ill") != std::string::npos) )
+				if ( (name.find(IMU_PLUGIN_NAME) != std::string::npos) && (dag_name.find("ill") != std::string::npos) ) {
+					DEBUG(int(get_monotime_now() * 1000) % 10000);
+					DEBUG(sci[0]);
 					frontend->trigger_node(TW_PLUGIN_NAME, true);
+				}
 
 				if (last_trig_ts[name] > 0)
 					trigger_log << name << ", " << std::chrono::duration_cast<std::chrono::milliseconds>(std::chrono::steady_clock::now().time_since_epoch() ).count() << "\n";
