@@ -371,7 +371,7 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			{
 				std::string nname = node_dag_mc.id_name_map[ a[na] ];
 				changeAffinityThread("thr for node "+nname , node_tid[ nname ], core_ids);
-				core_node_exec_order_id[ a[na] ] = i; // node na is in ith subchain of this core.
+				// core_node_exec_order_id[ a[na] ] = i; // node na is in ith subchain of this core.
 
 				if (node_extra_tids.find(nname) != node_extra_tids.end())
 					for (auto nei: node_extra_tids[nname])
@@ -388,6 +388,14 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 			auto tmp = core_exec_order[1];
 			core_exec_order[1] = core_exec_order[2];
 			core_exec_order[2] = tmp;
+		}
+
+		for (int i = 0; i < core_exec_order.size(); i++)
+		{
+			for (int na = 0; na < core_exec_order[i].size(); na++)
+			{
+				core_node_exec_order_id[ core_exec_order[i][na] ] = i; // node na is in ith subchain of this core.
+			}
 		}
 
 		changeAffinityThread("handle_Sched_main for core="+std::to_string(core_ids[0]), 0, core_ids );
@@ -410,6 +418,12 @@ DAGControllerBE::DAGControllerBE(std::string dag_file, DAGControllerFE* fe, bool
 		  std::cout << "],\n";
 		}
 		std::cout << "]" << std::endl;
+
+		std::cout << "core_node_exec_order_id = {";
+		for (const auto& pair : core_node_exec_order_id) {
+			std::cout << "  " << pair.first << ": " << pair.second << ",\n";
+		}
+		std::cout << "}" << std::endl;
 
 		while (!shutdown_scheduler)
 		{
